@@ -1,0 +1,14 @@
+[package]
+
+name = "rhex"
+version = "0.0.1"
+authors = ["Dawid Ciężarkiewicz <dpc@ucore.info>"]
+
+[dependencies.ncurses]
+git = "https://github.com/jeaye/ncurses-rs.git"
+
+[dependencies]
+num = "*"
+rand = "*"
+hex2d = "*"
+hex2d-dpcext = "*"
