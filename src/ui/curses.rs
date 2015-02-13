@@ -183,12 +183,12 @@ pub mod window {
                         }
 
                         let (t1, t2) = match (
-                            gstate.tile_type_at(c1),
-                            gstate.tile_type_at(c2)
+                            gstate.tile_map(c1, |t| t.type_),
+                            gstate.tile_map(c2, |t| t.type_)
                             ) {
-                            (Some(t1), Some(t2)) => (*t1, *t2),
-                            (Some(t1), None) => (*t1, *t1),
-                            (None, Some(t2)) => (*t2, *t2),
+                            (Some(t1), Some(t2)) => (t1, t2),
+                            (Some(t1), None) => (t1, t1),
+                            (None, Some(t2)) => (t2, t2),
                             (None, None) => (tile::Wall, tile::Wall),
                         };
 

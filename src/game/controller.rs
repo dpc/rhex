@@ -55,7 +55,7 @@ impl Controller {
                     actor::Behavior::Player => {
                         try!(pl_req.send((actor.clone(), self.state.clone())));
                     },
-                    actor::Behavior::Ai|actor::Behavior::Pony => {
+                    actor::Behavior::Grue|actor::Behavior::Pony => {
                         try!(ai_req.send((actor.clone(), self.state.clone())));
                     },
                 }
@@ -66,7 +66,7 @@ impl Controller {
                     actor::Behavior::Player => {
                         try!(pl_rep.recv())
                     },
-                    actor::Behavior::Ai|actor::Behavior::Pony => {
+                    actor::Behavior::Grue|actor::Behavior::Pony => {
                         try!(ai_rep.recv())
                     },
                 };

@@ -14,6 +14,7 @@ pub mod controller;
 pub use self::controller::Controller;
 
 pub type Map = HashMap<Coordinate, tile::Tile>;
+pub type Actors = HashMap<Coordinate, Arc<actor::State>>;
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub enum Action {
@@ -24,7 +25,7 @@ pub enum Action {
 
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub struct State {
-    pub actors: Arc<HashMap<Coordinate, Arc<actor::State>>>,
+    pub actors: Arc<Actors>,
     pub map : Arc<Map>,
     pub light_map: Arc<HashMap<Coordinate, u32>>,
     pub turn : u64,
@@ -34,10 +35,10 @@ impl State {
     pub fn new() -> State {
 
         let cp = Coordinate::new(0, 0);
-        let map = generate::DungeonGenerator.generate_map(cp, 400);
+        let (map, actors) = generate::DungeonGenerator.generate_map(cp, 400);
 
         let mut state = State {
-            actors: Arc::new(HashMap::new()),
+            actors: Arc::new(actors),
             map: Arc::new(map),
             turn: 0,
             light_map: Arc::new(HashMap::new()),
@@ -135,23 +136,11 @@ impl State {
     }
 
     pub fn spawn_monster(&self) -> State {
-        self.spawn(Coordinate::new(0, 1), actor::Behavior::Ai, 0)
+        self.spawn(Coordinate::new(0, 1), actor::Behavior::Grue, 0)
     }
 
     pub fn spawn_pony(&self, pos : Coordinate) -> State {
         self.spawn(pos, actor::Behavior::Pony, 7)
-    }
-
-    pub fn tile_at(&self, pos : Coordinate) -> Option<&tile::Tile> {
-        self.map.get(&pos)
-    }
-
-    pub fn tile_map_or<R, F : Fn(&tile::Tile) -> R>(&self, pos : Coordinate, def: R, f : F) -> R {
-        self.map.get(&pos).map_or(def, |a| f(a))
-    }
-
-    pub fn tile_type_at(&self, pos : Coordinate) -> Option<&tile::Type> {
-        self.map.get(&pos).map(|t| &t.type_)
     }
 
     pub fn act(&self, actor : &actor::State, action : Action) -> State {
@@ -185,12 +174,24 @@ impl State {
         }
     }
 
-    pub fn occupied(&self, pos : Coordinate) -> bool {
-        self.actors.contains_key(&pos)
-    }
-
     pub fn actor_map_or<R, F : Fn(&actor::State) -> R>(&self, pos : Coordinate, def: R, cond : &F) -> R {
         self.actors.get(&pos).map_or(def, |a| cond(a))
+    }
+
+    pub fn tile_at(&self, pos : Coordinate) -> Option<&tile::Tile> {
+        self.map.get(&pos)
+    }
+
+    pub fn tile_map<R, F : Fn(&tile::Tile) -> R>(&self, pos : Coordinate, f : F) -> Option<R> {
+        self.map.get(&pos).map(|a| f(a))
+    }
+
+    pub fn tile_map_or<R, F : Fn(&tile::Tile) -> R>(&self, pos : Coordinate, def: R, f : F) -> R {
+        self.map.get(&pos).map_or(def, |a| f(a))
+    }
+
+    pub fn occupied(&self, pos : Coordinate) -> bool {
+        self.actors.contains_key(&pos)
     }
 
     pub fn passable(&self, pos : Coordinate) -> bool {

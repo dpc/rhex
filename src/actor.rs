@@ -9,7 +9,7 @@ type Visibility = HashSet<Coordinate>;
 pub enum Behavior {
     Player,
     Pony,
-    Ai,
+    Grue,
 }
 
 #[derive(Clone, Eq, PartialEq, Debug)]
@@ -71,6 +71,19 @@ impl State {
         state
     }
 
+    pub fn new_nolosyet(behavior : Behavior, pos : Coordinate, dir : Direction) -> State {
+        State {
+            behavior : behavior,
+            pos: pos, dir: dir,
+            visible: HashSet::new(),
+            known: HashSet::new(),
+            known_areas: HashSet::new(),
+            discovered: HashSet::new(),
+            discovered_areas: HashSet::new(),
+            light: 0,
+        }
+    }
+
     pub fn add_light(&self, light : u32) -> State {
         State {
             behavior: self.behavior,
@@ -100,32 +113,28 @@ impl State {
             game::Action::Move(a) => (self.pos + (self.dir + a), self.dir),
         };
 
-        if let Some(tile) = gstate.tile_type_at(pos) {
-            if self.pos == pos || (tile.is_passable() && !gstate.actors.contains_key(&pos)) {
-                let visible = calculate_los(pos, dir, gstate);
+        let tile_type =  gstate.tile_map_or(pos, game::tile::Wall, |t| t.type_);
+        if self.pos == pos || (tile_type.is_passable() && !gstate.actors.contains_key(&pos)) {
+            let visible = calculate_los(pos, dir, gstate);
 
-                let mut state = State {
-                    behavior: self.behavior,
-                    pos: pos,
-                    dir: dir,
-                    visible: visible,
-                    known: self.known.clone(),
-                    known_areas: self.known_areas.clone(),
-                    discovered: HashSet::new(),
-                    discovered_areas: HashSet::new(),
-                    light: self.light,
-                };
+            let mut state = State {
+                behavior: self.behavior,
+                pos: pos,
+                dir: dir,
+                visible: visible,
+                known: self.known.clone(),
+                known_areas: self.known_areas.clone(),
+                discovered: HashSet::new(),
+                discovered_areas: HashSet::new(),
+                light: self.light,
+            };
 
-                state.postprocess_visibile(gstate);
+            state.postprocess_visibile(gstate);
 
-                state
-            } else {
-                self.clone()
-            }
+            state
         } else {
             self.clone()
         }
-
     }
 
     pub fn postprocess_visibile(&mut self, gstate : &game::State) {

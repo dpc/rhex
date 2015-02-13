@@ -33,6 +33,27 @@ fn closest_reachable<F>(gstate : &game::State, start : Coordinate, max_distance 
 }
 
 
+fn grue(astate : &actor::State, gstate : &game::State) -> game::Action {
+
+    for &visible_pos in astate.visible.iter() {
+        if gstate.actor_map_or(visible_pos, false, &|a| a.is_player()) {
+            return go_to(astate, visible_pos);
+        }
+    }
+
+    roam()
+}
+
+fn go_to(astate : &actor::State, pos : Coordinate) -> game::Action {
+    let ndir = astate.pos.direction_to_cw(pos).expect("bfs gave me trash");
+
+    if ndir == astate.dir {
+        return game::Action::Move(hex2d::Angle::Forward)
+    } else {
+        return game::Action::Turn(ndir - astate.dir)
+    }
+}
+
 fn pony_follow(astate : &actor::State, gstate : &game::State) -> game::Action {
 
         let start = astate.pos;
@@ -56,13 +77,7 @@ fn pony_follow(astate : &actor::State, gstate : &game::State) -> game::Action {
         };
 
         if let Some((_, neigh)) = player_pos {
-            let ndir = astate.pos.direction_to_cw(neigh).expect("bfs gave me trash");
-
-            if ndir == astate.dir {
-                return game::Action::Move(hex2d::Angle::Forward)
-            } else {
-                return game::Action::Turn(ndir - astate.dir)
-            }
+            go_to(astate, neigh)
         } else {
             roam()
         }
@@ -78,7 +93,7 @@ pub fn run(
         let (astate, gstate) = req.recv().unwrap();
 
         let action = match astate.behavior {
-            actor::Behavior::Ai => roam(),
+            actor::Behavior::Grue => grue(&astate, &gstate),
             actor::Behavior::Pony => pony_follow(&astate, &gstate),
             _ => panic!(),
         };

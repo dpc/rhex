@@ -3,12 +3,14 @@ use rand;
 use rand::Rng;
 use std::collections::ring_buf::RingBuf;
 use std::collections::HashMap;
+use std::sync::Arc;
 
 use hex2d as h2d;
-use hex2d::ToCoordinate;
+use hex2d::{ToCoordinate, Direction};
 use game::tile;
-use game::Map;
+use game::{Map, Actors};
 use game::area;
+use actor;
 
 pub struct DungeonGenerator;
 
@@ -78,7 +80,7 @@ impl DungeonGenerator {
     }
 
     /// Generate room in front of the iterator `(pos, dir)`
-    fn generate_room(&self, map : &mut Map,
+    fn generate_room(&self, map : &mut Map, actors : &mut Actors,
                         endpoints : &mut EndpointQueue,
                         pos : h2d::Coordinate, dir : h2d::Direction,
                         r : u32) -> u32 {
@@ -87,7 +89,7 @@ impl DungeonGenerator {
 
         let pos = pos + dir.to_coordinate().scale(r as i32);
 
-        let ret = self.generate_room_inplace(map, pos, r);
+        let ret = self.generate_room_inplace(map, actors, pos, r);
 
         if ret > 0 {
             match rand::thread_rng().gen_range(0, 8) {
@@ -102,7 +104,8 @@ impl DungeonGenerator {
     }
 
     /* generate_map at position `pos`; does not push back the iterator! */
-    fn generate_room_inplace(&self, map : &mut Map, pos : h2d::Coordinate, r : u32) -> u32 {
+    fn generate_room_inplace(&self, map : &mut Map, actors : &mut Actors,
+                             pos : h2d::Coordinate, r : u32) -> u32 {
 
         let mut blocked = false;
         pos.for_each_in_range((r - 1) as i32, |c| {
@@ -113,6 +116,15 @@ impl DungeonGenerator {
 
         if blocked {
             return 0;
+        }
+
+        match rand::thread_rng().gen_range(0, 3) {
+            0 => {
+                actors.insert(pos, Arc::new(
+                        actor::State::new_nolosyet(actor::Behavior::Grue, pos, Direction::XY)
+                        ));
+            },
+            _ => {},
         }
 
         let mut tile_count = 0;
@@ -148,15 +160,15 @@ impl DungeonGenerator {
         tile_count
     }
 
-    pub fn generate_map(&self, start : h2d::Coordinate, size : u32) -> Map {
+    pub fn generate_map(&self, start : h2d::Coordinate, size : u32) -> (Map, Actors) {
         let mut map = HashMap::new();
         let mut endpoints = RingBuf::new();
-
+        let mut actors = HashMap::new();
         let start_dir = h2d::Direction::XY;
         let first_room_r = rand::thread_rng().gen_range(0, 2) + 2;
 
         let mut tile_count = self.generate_room_inplace(
-            &mut map, start, first_room_r
+            &mut map, &mut actors, start, first_room_r
             );
 
         endpoints.push_back((start, start_dir));
@@ -184,13 +196,13 @@ impl DungeonGenerator {
                 1 => {
                     let size = rand::thread_rng().gen_range(0, 3) +
                     rand::thread_rng().gen_range(0, 2) + 2;
-                    self.generate_room(&mut map, &mut endpoints, pos, dir, size)
+                    self.generate_room(&mut map, &mut actors, &mut endpoints, pos, dir, size)
                 },
                 _ => self.generate_continue_coridor(&mut map, &mut endpoints, pos, dir),
             }
 
         }
 
-        return map;
+        return (map, actors);
     }
 }
