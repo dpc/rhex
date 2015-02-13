@@ -32,37 +32,34 @@ pub mod color {
     use std::collections::hash_map::Entry;
     use ncurses as nc;
 
-    pub const COLOR_GRAY : [u8; 26] = [
+    pub const GRAY : [u8; 26] = [
         16, 232, 233, 234, 235, 236, 237, 238, 239, 240, 241, 242, 243,
         244, 245, 246, 247, 248, 249, 250, 251, 252, 253, 254, 255, 15
     ];
-    pub const COLOR_BLACK : u8 = COLOR_GRAY[0];
-    pub const COLOR_WHITE : u8 = COLOR_GRAY[25];
+    pub const BLACK : u8 = GRAY[0];
+    pub const WHITE : u8 = GRAY[25];
 
-    pub const BACKGROUND_BG : u8 = COLOR_GRAY[2];
-    pub const MAP_BACKGROUND_BG : u8 = COLOR_GRAY[2];
+    pub const BACKGROUND_BG : u8 = GRAY[2];
+    pub const MAP_BACKGROUND_BG : u8 = GRAY[2];
 
-    pub const VISIBLE_CHAR_FG : u8 = COLOR_GRAY[1];
-    pub const VISIBLE_BG : u8 = COLOR_GRAY[23];
-    pub const VISIBLE_FG : u8 = COLOR_WHITE;
-    pub const SHADED_FG : u8 = COLOR_GRAY[1];
-    pub const SHADED_BG : u8 = COLOR_GRAY[6];
+    pub const VISIBLE_FG : u8 = WHITE;
 
-    pub const VISIBLE_WALL_FG : u8 = COLOR_BLACK;
-    pub const VISIBLE_WALL_BG : u8 = COLOR_GRAY[14];
-    pub const SHADED_WALL_FG : u8 = COLOR_GRAY[2];
-    pub const SHADED_WALL_BG : u8 = COLOR_GRAY[4];
-
-    pub const DOT_FG : u8 = COLOR_GRAY[15];
-    pub const SHADED_DOT_FG : u8 = COLOR_GRAY[5];
+    // in light, shaded (barely visible), out of sight
+    pub const EMPTY_FG : [u8; 3] = [GRAY[17], GRAY[12] , GRAY[5]];
+    pub const EMPTY_BG : [u8; 3] = [GRAY[23], GRAY[20] , GRAY[6]];
+    pub const WALL_FG : [u8; 3] = [BLACK, GRAY[1] , GRAY[2]];
+    pub const WALL_BG : [u8; 3] = [GRAY[14], GRAY[8] , GRAY[4]];
+    pub const CHAR_FG : [u8; 3] = [GRAY[1], GRAY[8] , GRAY[4]];
+    pub const CHAR_BG : [u8; 3] = EMPTY_BG;
+    pub const TREE_FG : [u8; 3] = CHAR_FG;
+    pub const TREE_BG : [u8; 3] = EMPTY_BG;
 
     pub const LIGHTSOURCE : u8 = 227;
-    pub const TREE_FG : u8 = 28;
-    pub const LOG_1_FG : u8 = COLOR_GRAY[25];
-    pub const LOG_2_FG : u8 = COLOR_GRAY[21];
-    pub const LOG_3_FG : u8 = COLOR_GRAY[17];
-    pub const LOG_4_FG : u8 = COLOR_GRAY[13];
-    pub const LOG_5_FG : u8 = COLOR_GRAY[9];
+    pub const LOG_1_FG : u8 = GRAY[25];
+    pub const LOG_2_FG : u8 = GRAY[21];
+    pub const LOG_3_FG : u8 = GRAY[17];
+    pub const LOG_4_FG : u8 = GRAY[13];
+    pub const LOG_5_FG : u8 = GRAY[9];
 
     pub struct Allocator {
         map : HashMap<(u8, u8), i16>,
@@ -162,7 +159,7 @@ pub mod window {
 
                     let is_proper_coord = off == (0, 0);
 
-                    let (visible, tt, t) = if is_proper_coord {
+                    let (visible, tt, t, light) = if is_proper_coord {
 
                         if !astate.knows(c) {
                             continue;
@@ -175,7 +172,7 @@ pub mod window {
                             None => tile::Wall,
                         };
 
-                        (astate.sees(c), Some(tt), t)
+                        (astate.sees(c), Some(tt), t, gstate.light(c))
                     } else {
                         // Paint a glue characters between two real characters
                         let c1 = c;
@@ -203,52 +200,49 @@ pub mod window {
 
                         let visible = astate.sees(c1) && astate.sees(c2);
 
-                        (visible, tt, None)
+                        (visible, tt, None, (gstate.light(c1) + gstate.light(c2)) / 2)
                     };
 
-
-                    if visible {
-                        nc::attron(nc::A_BOLD());
-                    }
-
-                    let (mut fg, mut bg, shaded_fg, shaded_bg, glyph) =
+                    let (fg, bg, glyph) =
                         if is_proper_coord && astate.sees(c) && gstate.actors.contains_key(&c) {
-                            (
-                                if gstate.actor_map_or(c, false, &|a| a.light > 0) {
-                                    color::LIGHTSOURCE
-                                } else {
-                                    color::VISIBLE_CHAR_FG
-                                },
-                                color::VISIBLE_BG, color::VISIBLE_FG, color::SHADED_BG, "@")
+                            (color::CHAR_FG, color::CHAR_BG, "@")
                         } else {
                             match tt {
                                 Some(tile::Empty) => {
-                                    (color::DOT_FG, color::VISIBLE_BG, color::SHADED_DOT_FG, color::SHADED_BG, ".")
+                                    (color::EMPTY_FG, color::EMPTY_BG, ".")
                                 },
                                 Some(tile::Wall) => {
-                                    (color::VISIBLE_WALL_FG, color::VISIBLE_WALL_BG, color::SHADED_WALL_FG, color::SHADED_WALL_BG, "#")
+                                    (color::WALL_FG, color::WALL_BG, "#")
                                 },
                                 Some(tile::Tree) => {
-                                    (color::TREE_FG, color::VISIBLE_BG, color::SHADED_FG, color::SHADED_BG, "T")
+                                    (color::TREE_FG, color::TREE_BG, "T")
                                 },
                                 None => {
-                                    (color::DOT_FG, color::VISIBLE_BG, color::SHADED_FG, color::SHADED_BG, " ")
+                                    (color::EMPTY_FG, color::EMPTY_BG, " ")
                                 },
                             }
                         };
 
+
+                    let (mut fg, bg) = if !visible {
+                         (fg[2], bg[2])
+                    } else if light < 3 {
+                         (fg[1], bg[1])
+                    } else {
+                         (fg[0], bg[0])
+                    };
+
                     if let Some(t) = t {
-                        if t.light > 0 {
+                        if visible && t.light > 0 {
                             fg = color::LIGHTSOURCE;
                         }
                     }
 
-                    if !visible {
-                        bg = shaded_bg;
-                        fg = shaded_fg;
-                    }
-
                     let cpair = nc::COLOR_PAIR(calloc.get(fg, bg));
+
+                    if visible {
+                        nc::attron(nc::A_BOLD());
+                    }
 
                     nc::wattron(self.window, cpair);
                     nc::mvwaddstr(self.window, vy, vx, glyph);

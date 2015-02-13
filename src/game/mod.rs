@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::collections::HashSet;
+use std::collections::hash_map::Entry;
 use std::sync::{Arc};
 
 use hex2d::{Coordinate, Direction, Angle};
@@ -26,7 +26,7 @@ pub enum Action {
 pub struct State {
     pub actors: Arc<HashMap<Coordinate, Arc<actor::State>>>,
     pub map : Arc<Map>,
-    pub light_map: Arc<HashSet<Coordinate>>,
+    pub light_map: Arc<HashMap<Coordinate, u32>>,
     pub turn : u64,
 }
 
@@ -40,7 +40,7 @@ impl State {
             actors: Arc::new(HashMap::new()),
             map: Arc::new(map),
             turn: 0,
-            light_map: Arc::new(HashSet::new()),
+            light_map: Arc::new(HashMap::new()),
         };
 
         state.recalculate_light_map();
@@ -49,7 +49,7 @@ impl State {
     }
 
     pub fn recalculate_light_map(&mut self) {
-        let mut light_map = HashSet::new();
+        let mut light_map : HashMap<Coordinate, u32> = HashMap::new();
 
         for (pos, tile) in self.map.iter() {
             let light = tile.light;
@@ -62,7 +62,19 @@ impl State {
                             self.tile_at(coord).map_or(light, |tile| tile.opaqueness())
                         }
                     },
-                    &mut |coord| { let _ = light_map.insert(coord); },
+                    &mut |coord, light| {
+                        match light_map.entry(coord) {
+                            Entry::Occupied(mut entry) => {
+                                let val = entry.get_mut();
+                                if light as u32 > *val {
+                                    *val = light as u32;
+                                }
+                            },
+                            Entry::Vacant(entry) => {
+                                entry.insert(light as u32);
+                            },
+                        }
+                    },
                     light, *pos, Direction::all()
                     );
             }
@@ -78,7 +90,19 @@ impl State {
                             self.tile_at(coord).map_or(astate.light as i32, |tile| tile.opaqueness())
                         }
                     },
-                    &mut |coord| { let _ = light_map.insert(coord); },
+                    &mut |coord, light| {
+                        match light_map.entry(coord) {
+                            Entry::Occupied(mut entry) => {
+                                let val = entry.get_mut();
+                                if light as u32 > *val {
+                                    *val = light as u32;
+                                }
+                            },
+                            Entry::Vacant(entry) => {
+                                entry.insert(light as u32);
+                            },
+                        }
+                    },
                     astate.light as i32, *pos, Direction::all()
                     );
             }
@@ -143,7 +167,7 @@ impl State {
             actors: Arc::new(actors),
             map: self.map.clone(),
             turn: self.turn,
-            light_map: Arc::new(HashSet::new()),
+            light_map: Arc::new(HashMap::new()),
         };
 
         ret.recalculate_light_map();
@@ -171,6 +195,10 @@ impl State {
 
     pub fn passable(&self, pos : Coordinate) -> bool {
         !self.occupied(pos) && self.tile_map_or(pos, false, |t| t.is_passable())
+    }
+
+    pub fn light(&self, pos : Coordinate) -> u32 {
+        self.light_map.get(&pos).map_or(0, |l| *l)
     }
 }
 

@@ -39,8 +39,8 @@ fn calculate_los(pos : Coordinate, dir : Direction, gstate : &game::State) -> Vi
     let mut visibility = HashSet::new();
     algo::los::los(
         &|coord| gstate.tile_at(coord).map_or(10000, |tile| tile.opaqueness()),
-        &mut |coord| {
-            if pos.distance(coord) < 2 || gstate.light_map.contains(&coord) {
+        &mut |coord, _ | {
+            if pos.distance(coord) < 2 || gstate.light_map.contains_key(&coord) {
                 let _ = visibility.insert(coord);
             }
         },
