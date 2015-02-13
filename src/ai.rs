@@ -43,8 +43,11 @@ fn pony_follow(astate : &actor::State, gstate : &game::State) -> game::Action {
             );
 
         let player_pos = if let Some((dst, _)) = player_pos {
-            if dst.distance(start) < 3 {
+            let distance = dst.distance(start);
+            if distance < 3 {
                 closest_reachable(gstate, start, 10, |pos| pos.distance(dst) == 3 && gstate.passable(pos))
+            } else if distance < 5 {
+                None
             } else {
                 player_pos
             }
