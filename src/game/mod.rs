@@ -115,10 +115,6 @@ impl State {
 
     pub fn spawn(&self, pos : Coordinate, behavior : actor::Behavior, light : u32) -> State {
 
-        if self.actors.contains_key(&pos) {
-            return self.clone();
-        }
-
         let mut actors = self.actors.clone().make_unique().clone();
 
         actors.insert(pos, Arc::new(actor::State::new(behavior, pos, Direction::XY, self).add_light(light))
