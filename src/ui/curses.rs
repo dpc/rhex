@@ -1,6 +1,4 @@
 use std::cell::RefCell;
-use std::old_io::timer::sleep;
-use std::time::duration::Duration;
 use std;
 use std::ffi::AsOsStr;
 
@@ -290,7 +288,7 @@ pub mod window {
     impl Log {
         pub fn new(w : i32, h : i32, x : i32, y : i32) -> Log {
             Log {
-                window : nc::newwin(h, w, y, x),
+                window : nc::subwin(nc::stdscr, h, w, y, x),
                 log : RingBuf::new(),
             }
         }
@@ -399,7 +397,7 @@ pub mod window {
     impl Stats {
         pub fn new(w : i32, h : i32, x : i32, y : i32) -> Stats {
             Stats {
-                window : nc::newwin(h, w, y, x),
+                window : nc::subwin(nc::stdscr, h, w, y, x),
             }
         }
     }
@@ -461,9 +459,9 @@ impl CursesUI {
 
         nc::initscr();
         nc::start_color();
-        nc::raw();
         nc::keypad(nc::stdscr, true);
         nc::noecho();
+        nc::raw();
         nc::timeout(0);
         nc::flushinp();
         nc::curs_set(nc::CURSOR_VISIBILITY::CURSOR_INVISIBLE);
@@ -478,12 +476,6 @@ impl CursesUI {
         let mid_y = max_y * 4 / 5;
 
         let mut windows : Vec<Box<window::Window>> = Vec::new();
-
-        nc::refresh();
-        // Workaround: For whatever reason ncurses sometimes does not display
-        // anything at first and waits on getch() if this getch() is not delayed
-        // enough. Seems like some weird i/o buffering interaction
-        sleep(Duration::milliseconds(100));
 
         windows.push(Box::new(window::Map::new(
                 mid_x, max_y, 0, 0
@@ -518,7 +510,6 @@ impl ui::UiFrontend for CursesUI {
             w.draw(&self.calloc, astate, gstate);
         }
         (*self.log_window).draw(&self.calloc, astate, gstate);
-        nc::doupdate();
     }
 
     fn input(&self) -> Option<Action> {
