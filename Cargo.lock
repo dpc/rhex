@@ -1,0 +1,67 @@
+[root]
+name = "rhex"
+version = "0.0.1"
+dependencies = [
+ "hex2d 0.0.7 (registry+https://github.com/rust-lang/crates.io-index)",
+ "hex2d-dpcext 0.0.3 (registry+https://github.com/rust-lang/crates.io-index)",
+ "ncurses 5.71.1 (git+https://github.com/jeaye/ncurses-rs.git)",
+ "num 0.1.12 (registry+https://github.com/rust-lang/crates.io-index)",
+ "rand 0.1.2 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
+name = "hex2d"
+version = "0.0.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+dependencies = [
+ "num 0.1.12 (registry+https://github.com/rust-lang/crates.io-index)",
+ "rand 0.1.2 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
+name = "hex2d-dpcext"
+version = "0.0.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+dependencies = [
+ "hex2d 0.0.7 (registry+https://github.com/rust-lang/crates.io-index)",
+ "num 0.1.12 (registry+https://github.com/rust-lang/crates.io-index)",
+ "rand 0.1.2 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
+name = "libc"
+version = "0.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+
+[[package]]
+name = "log"
+version = "0.2.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+
+[[package]]
+name = "ncurses"
+version = "5.71.1"
+source = "git+https://github.com/jeaye/ncurses-rs.git#89ad3e1b0879d734650d093780cc9751dea589da"
+
+[[package]]
+name = "num"
+version = "0.1.12"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+dependencies = [
+ "rustc-serialize 0.2.12 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
+name = "rand"
+version = "0.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+dependencies = [
+ "libc 0.1.2 (registry+https://github.com/rust-lang/crates.io-index)",
+ "log 0.2.3 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
+name = "rustc-serialize"
+version = "0.2.12"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+

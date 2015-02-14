@@ -21,6 +21,7 @@ pub enum Action {
     Wait,
     Turn(Angle),
     Move(Angle),
+    Spin(Angle),
 }
 
 #[derive(Clone, Eq, PartialEq, Debug)]

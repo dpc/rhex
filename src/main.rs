@@ -3,6 +3,8 @@
 #![feature(io)]
 #![feature(libc)]
 #![feature(alloc)]
+#![feature(env)]
+#![feature(os)]
 
 extern crate ncurses;
 extern crate hex2d;
@@ -16,7 +18,6 @@ use std::thread;
 use hex2d::Coordinate;
 
 mod ai;
-//mod algo;
 mod ui;
 mod game;
 mod actor;

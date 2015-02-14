@@ -1,6 +1,8 @@
 use std::cell::RefCell;
 use std::old_io::timer::sleep;
 use std::time::duration::Duration;
+use std;
+use std::ffi::AsOsStr;
 
 use ncurses as nc;
 
@@ -26,6 +28,9 @@ mod locale {
 //       . . . .
 //        . . .
 static SPACING: IntegerSpacing<i32> = IntegerSpacing::PointyTop(2, 1);
+
+const NORMAL_DOT : &'static str = ".";
+const UNICODE_DOT : &'static str = "·";
 
 pub mod color {
     use std::collections::HashMap;
@@ -54,6 +59,7 @@ pub mod color {
     pub const TREE_FG : [u8; 3] = CHAR_FG;
     pub const TREE_BG : [u8; 3] = EMPTY_BG;
 
+    pub const TARGET : u8 = 52;
     pub const LIGHTSOURCE : u8 = 227;
     pub const LOG_1_FG : u8 = GRAY[25];
     pub const LOG_2_FG : u8 = GRAY[21];
@@ -97,8 +103,10 @@ pub mod window {
     use hex2d::{Coordinate};
     use game::tile;
     use super::color;
+    use std::ffi::AsOsStr;
+    use std;
 
-    use super::SPACING;
+    use super::{SPACING, NORMAL_DOT, UNICODE_DOT};
     use super::color::Allocator;
     use std::collections::ring_buf::RingBuf;
     use std::cell::RefCell;
@@ -116,12 +124,18 @@ pub mod window {
 
     pub struct Map {
         window : nc::WINDOW,
+        dot : &'static str,
     }
 
     impl Map {
         pub fn new(w : i32, h : i32, x : i32, y : i32) -> Map {
+            let term_putty = std::env::var_os("TERM").as_ref()
+                .and_then(|s| s.as_os_str().to_str())
+                .map_or(false, |s| s.starts_with("putty"));
+
             Map {
                 window : nc::subwin(nc::stdscr, h, w, y, x),
+                dot: if term_putty { NORMAL_DOT } else { UNICODE_DOT },
             }
         }
     }
@@ -144,7 +158,7 @@ pub mod window {
             let mid_y = max_y / 2;
 
             let cpair = nc::COLOR_PAIR(calloc.get(color::VISIBLE_FG, color::MAP_BACKGROUND_BG));
-            nc::wbkgd(self.window, ' ' as u32 | cpair as u32);
+            nc::wbkgd(self.window, ' ' as nc::chtype | cpair as nc::chtype);
             nc::werase(self.window);
 
             let (vpx, vpy) = astate.pos.to_pixel_integer(SPACING);
@@ -209,7 +223,7 @@ pub mod window {
                         } else {
                             match tt {
                                 Some(tile::Empty) => {
-                                    (color::EMPTY_FG, color::EMPTY_BG, ".")
+                                    (color::EMPTY_FG, color::EMPTY_BG, self.dot)
                                 },
                                 Some(tile::Wall) => {
                                     (color::WALL_FG, color::WALL_BG, "#")
@@ -238,18 +252,22 @@ pub mod window {
                         }
                     }
 
+                    if c == astate.pos + astate.dir && is_proper_coord {
+                        fg = color::TARGET;
+                    }
+
                     let cpair = nc::COLOR_PAIR(calloc.get(fg, bg));
 
                     if visible {
-                        nc::attron(nc::A_BOLD());
+                        nc::wattron(self.window, nc::A_BOLD() as i32);
                     }
 
-                    nc::wattron(self.window, cpair);
+                    nc::wattron(self.window, cpair as i32);
                     nc::mvwaddstr(self.window, vy, vx, glyph);
-                    nc::wattroff(self.window, cpair);
+                    nc::wattroff(self.window, cpair as i32);
 
                     if visible {
-                        nc::wattroff(self.window, nc::A_BOLD());
+                        nc::wattroff(self.window, nc::A_BOLD() as i32);
                     }
 
                 }
@@ -333,7 +351,7 @@ pub mod window {
 
                 if let Some(color) = self.turn_to_color(i.turn, calloc, gstate) {
                     let cpair = nc::COLOR_PAIR(color);
-                    nc::wattron(self.window, cpair);
+                    nc::wattron(self.window, cpair as i32);
                     nc::waddstr(self.window, i.text.as_slice());
                     nc::waddstr(self.window, "\n");
                 }
@@ -355,7 +373,7 @@ pub mod window {
         {
 
             let cpair = nc::COLOR_PAIR(calloc.borrow_mut().get(color::VISIBLE_FG, color::BACKGROUND_BG));
-            nc::wbkgd(self.window, ' ' as u32 | cpair as u32);
+            nc::wbkgd(self.window, ' ' as nc::chtype | cpair as nc::chtype);
             nc::werase(self.window);
             nc::wmove(self.window, 0, 0);
 
@@ -396,7 +414,7 @@ pub mod window {
         {
             let mut calloc = calloc.borrow_mut();
             let cpair = nc::COLOR_PAIR(calloc.get(color::VISIBLE_FG, color::BACKGROUND_BG));
-            nc::wbkgd(self.window, ' ' as u32 | cpair as u32);
+            nc::wbkgd(self.window, ' ' as nc::chtype | cpair as nc::chtype);
             nc::werase(self.window);
             nc::wmove(self.window, 0, 0);
 
@@ -428,8 +446,17 @@ pub struct CursesUI {
 impl CursesUI {
 
     pub fn new() -> CursesUI {
+
+        let term_ok = std::env::var_os("TERM").as_ref()
+            .and_then(|s| s.as_os_str().to_str())
+            .map_or(false, |s| s.ends_with("-256color"));
+
+        if !term_ok {
+            panic!("Your TERM environment variable must end with -256color, sorry, stranger from the past. It is curable. Google it, fix it, try again.");
+        }
+
         unsafe {
-            let _ = locale::setlocale(locale::LC_ALL, b"".as_ptr() as *const i8);
+            let _ = locale::setlocale(locale::LC_ALL, b"en_US.UTF-8".as_ptr() as *const i8);
         }
 
         nc::initscr();
@@ -501,6 +528,8 @@ impl ui::UiFrontend for CursesUI {
             'l' => Action::Game(game::Action::Turn(Angle::Right)),
             'k'|'K' => Action::Game(game::Action::Move(Angle::Forward)),
             'H'|'J' => Action::Game(game::Action::Move(Angle::Left)),
+            'u' => Action::Game(game::Action::Spin(Angle::Left)),
+            'i' => Action::Game(game::Action::Spin(Angle::Right)),
             'L' => Action::Game(game::Action::Move(Angle::Right)),
             'j' => Action::Game(game::Action::Move(Angle::Back)),
             '.' => Action::Game(game::Action::Wait),

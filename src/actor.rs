@@ -1,5 +1,5 @@
 use std::collections::HashSet;
-use hex2d::{Coordinate,Direction};
+use hex2d::{Coordinate, Direction, Angle};
 use game;
 use hex2dext::algo;
 
@@ -111,6 +111,12 @@ impl State {
             game::Action::Wait => (self.pos, self.dir),
             game::Action::Turn(a) => (self.pos, self.dir + a),
             game::Action::Move(a) => (self.pos + (self.dir + a), self.dir),
+            game::Action::Spin(a) => (self.pos + (self.dir + a),
+                                      match a {
+                                          Angle::Right => self.dir + Angle::Left,
+                                          Angle::Left => self.dir + Angle::Right,
+                                          _ => return self.clone(),
+                                      }),
         };
 
         let tile_type =  gstate.tile_map_or(pos, game::tile::Wall, |t| t.type_);
