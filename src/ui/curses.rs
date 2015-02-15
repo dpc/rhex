@@ -1,4 +1,5 @@
 use std::cell::RefCell;
+use std::collections::ring_buf::RingBuf;
 use std;
 use std::ffi::AsOsStr;
 
@@ -9,8 +10,12 @@ use game;
 use actor;
 use ui;
 
-use hex2d::{Angle, IntegerSpacing};
+use hex2d::{Angle, IntegerSpacing, Coordinate, Direction, ToCoordinate};
 
+use game::tile;
+
+use std::fmt;
+use std::fmt::Writer;
 
 mod locale {
     use libc::{c_int,c_char};
@@ -94,431 +99,42 @@ pub mod color {
     }
 }
 
-pub mod window {
-    use ncurses as nc;
-    use game;
-    use actor;
-    use hex2d::{Coordinate};
-    use game::tile;
-    use super::color;
-    use std::ffi::AsOsStr;
-    use std;
+pub struct Window {
+    pub window : nc::WINDOW,
+}
 
-    use super::{SPACING, NORMAL_DOT, UNICODE_DOT};
-    use super::color::Allocator;
-    use std::collections::ring_buf::RingBuf;
-    use std::cell::RefCell;
-    use std::fmt;
-    use std::fmt::Writer;
 
-    pub trait Window {
-        fn draw(
-            &mut self,
-            calloc : &RefCell<color::Allocator>,
-            astate : &actor::State,
-            gstate : &game::State
-            );
-    }
+pub struct LogEntry {
+    turn : u64,
+    text : String,
+}
 
-    pub struct Map {
-        window : nc::WINDOW,
-        dot : &'static str,
-    }
 
-    impl Map {
-        pub fn new(w : i32, h : i32, x : i32, y : i32) -> Map {
-            let term_putty = std::env::var_os("TERM").as_ref()
-                .and_then(|s| s.as_os_str().to_str())
-                .map_or(false, |s| s.starts_with("putty"));
-
-            Map {
-                window : nc::subwin(nc::stdscr, h, w, y, x),
-                dot: if term_putty { NORMAL_DOT } else { UNICODE_DOT },
-            }
+impl Window {
+    pub fn new(w : i32, h : i32, x : i32, y : i32) -> Window {
+        Window {
+            window : nc::subwin(nc::stdscr, h, w, y, x),
         }
     }
+}
 
-    impl Window for Map {
-        fn draw(
-            &mut self,
-                calloc : &RefCell<color::Allocator>,
-                astate : &actor::State, gstate : &game::State
-                )
-        {
-            let mut calloc = calloc.borrow_mut();
-
-            /* Get the screen bounds. */
-            let mut max_x = 0;
-            let mut max_y = 0;
-            nc::getmaxyx(self.window, &mut max_y, &mut max_x);
-
-            let mid_x = max_x / 2;
-            let mid_y = max_y / 2;
-
-            let cpair = nc::COLOR_PAIR(calloc.get(color::VISIBLE_FG, color::MAP_BACKGROUND_BG));
-            nc::wbkgd(self.window, ' ' as nc::chtype | cpair as nc::chtype);
-            nc::werase(self.window);
-
-            let (vpx, vpy) = astate.pos.to_pixel_integer(SPACING);
-
-            for vy in range(0, max_y) {
-                for vx in range(0, max_x) {
-                    let (rvx, rvy) = (vx - mid_x, vy - mid_y);
-
-                    let (cvx, cvy) = (rvx + vpx, rvy + vpy);
-
-                    let (c, off) = Coordinate::from_pixel_integer(SPACING, (cvx, cvy));
-
-                    let is_proper_coord = off == (0, 0);
-
-                    let (visible, tt, t, light) = if is_proper_coord {
-
-                        if !astate.knows(c) {
-                            continue;
-                        }
-
-                        let t = gstate.map.get(&c);
-
-                        let tt = match t {
-                            Some(t) => t.type_,
-                            None => tile::Wall,
-                        };
-
-                        (astate.sees(c), Some(tt), t, gstate.light(c))
-                    } else {
-                        // Paint a glue characters between two real characters
-                        let c1 = c;
-                        let (c2, _) = Coordinate::from_pixel_integer(SPACING, (cvx + 1, cvy));
-
-                        if !astate.knows(c1) || !astate.knows(c2) {
-                            continue;
-                        }
-
-                        let (t1, t2) = match (
-                            gstate.tile_map(c1, |t| t.type_),
-                            gstate.tile_map(c2, |t| t.type_)
-                            ) {
-                            (Some(t1), Some(t2)) => (t1, t2),
-                            (Some(t1), None) => (t1, t1),
-                            (None, Some(t2)) => (t2, t2),
-                            (None, None) => (tile::Wall, tile::Wall),
-                        };
-
-                        let tt = if !(t1.ascii_expand() && t2.ascii_expand()) {
-                            None
-                        } else {
-                            Some(t1)
-                        };
-
-                        let visible = astate.sees(c1) && astate.sees(c2);
-
-                        (visible, tt, None, (gstate.light(c1) + gstate.light(c2)) / 2)
-                    };
-
-                    let (fg, bg, glyph) =
-                        if is_proper_coord && astate.sees(c) && gstate.actors.contains_key(&c) {
-                            (color::CHAR_FG, color::CHAR_BG, "@")
-                        } else {
-                            match tt {
-                                Some(tile::Empty) => {
-                                    (color::EMPTY_FG, color::EMPTY_BG, self.dot)
-                                },
-                                Some(tile::Wall) => {
-                                    (color::WALL_FG, color::WALL_BG, "#")
-                                },
-                                Some(tile::Tree) => {
-                                    (color::TREE_FG, color::TREE_BG, "T")
-                                },
-                                None => {
-                                    (color::EMPTY_FG, color::EMPTY_BG, " ")
-                                },
-                            }
-                        };
-
-
-                    let (mut fg, bg) = if !visible {
-                         (fg[2], bg[2])
-                    } else if light < 3 {
-                         (fg[1], bg[1])
-                    } else {
-                         (fg[0], bg[0])
-                    };
-
-                    if let Some(t) = t {
-                        if visible && t.light > 0 {
-                            fg = color::LIGHTSOURCE;
-                        }
-                    }
-
-                    if c == astate.pos + astate.dir && is_proper_coord {
-                        fg = color::TARGET;
-                    }
-
-                    let cpair = nc::COLOR_PAIR(calloc.get(fg, bg));
-
-                    if visible {
-                        nc::wattron(self.window, nc::A_BOLD() as i32);
-                    }
-
-                    nc::wattron(self.window, cpair as i32);
-                    nc::mvwaddstr(self.window, vy, vx, glyph);
-                    nc::wattroff(self.window, cpair as i32);
-
-                    if visible {
-                        nc::wattroff(self.window, nc::A_BOLD() as i32);
-                    }
-
-                }
-            }
-
-            nc::wnoutrefresh(self.window);
-        }
+impl Drop for Window {
+    fn drop(&mut self) {
+        nc::delwin(self.window);
     }
-
-    pub struct LogEntry {
-        turn : u64,
-        text : String,
-    }
-
-    pub struct Log {
-        window : nc::WINDOW,
-        log : RingBuf<LogEntry>,
-    }
-
-    impl Log {
-        pub fn new(w : i32, h : i32, x : i32, y : i32) -> Log {
-            Log {
-                window : nc::subwin(nc::stdscr, h, w, y, x),
-                log : RingBuf::new(),
-            }
-        }
-
-        // TODO: Consider the distance to the Item to print something
-        // like "you see x in the distance", "you find yourself in x".
-        fn format_areas<I>(&self, mut i : I) -> Option<String>
-            where I : Iterator, <I as Iterator>::Item : fmt::Display
-        {
-            if let Some(descr) = i.next() {
-                let mut s = String::new();
-                write!(&mut s, "{}", "You see: ").unwrap();
-                write!(&mut s, "{}", descr).unwrap();
-
-                for ref descr in i {
-                    write!(&mut s, ", ").unwrap();
-                    write!(&mut s, "{}", descr).unwrap();
-                }
-
-                write!(&mut s, ".").unwrap();
-                Some(s)
-            } else {
-                None
-            }
-        }
-
-        fn turn_to_color(
-            &self, turn : u64, calloc : &RefCell<color::Allocator>,
-            gstate : &game::State) -> Option<i16>
-        {
-            let mut calloc = calloc.borrow_mut();
-
-            let dturn = gstate.turn - turn;
-
-            let fg = if dturn < 1 {
-                Some(color::LOG_1_FG)
-            } else if dturn < 4 {
-                Some(color::LOG_2_FG)
-            } else if dturn < 16 {
-                Some(color::LOG_3_FG)
-            } else if dturn < 32 {
-                Some(color::LOG_4_FG)
-            } else if dturn < 64 {
-                Some(color::LOG_5_FG)
-            } else {
-                None
-            };
-
-            fg.map(|fg| calloc.get(fg, color::BACKGROUND_BG))
-        }
-
-        fn print_log(&self, calloc : &RefCell<color::Allocator>, gstate : &game::State) {
-            for i in &self.log {
-
-                if nc::getcury(self.window) == nc::getmaxy(self.window) - 1 {
-                    break;
-                }
-
-                if let Some(color) = self.turn_to_color(i.turn, calloc, gstate) {
-                    let cpair = nc::COLOR_PAIR(color);
-                    nc::wattron(self.window, cpair as i32);
-                    nc::waddstr(self.window, i.text.as_slice());
-                    nc::waddstr(self.window, "\n");
-                }
-            }
-        }
-
-        pub fn log(&mut self, s : String, gstate : &game::State) {
-            self.log.push_front(LogEntry{text: s, turn: gstate.turn});
-        }
-    }
-
-    impl Window for Log {
-
-        fn draw(
-            &mut self,
-            calloc : &RefCell<color::Allocator>,
-            astate : &actor::State, gstate : &game::State
-            )
-        {
-
-            let cpair = nc::COLOR_PAIR(calloc.borrow_mut().get(color::VISIBLE_FG, color::BACKGROUND_BG));
-            nc::wbkgd(self.window, ' ' as nc::chtype | cpair as nc::chtype);
-            nc::werase(self.window);
-            nc::wmove(self.window, 0, 0);
-
-            let discoviered_areas = astate.discovered_areas.iter()
-                .filter_map(|coord| gstate.tile_at(*coord))
-                .filter_map(|tile| tile.area.as_ref())
-                ;
-
-            if let Some(s) = self.format_areas(discoviered_areas.map(|area| area.type_)) {
-                self.log(s, gstate);
-            }
-
-            self.print_log(calloc, gstate);
-
-            nc::wnoutrefresh(self.window);
-        }
-    }
-
-    pub struct Stats {
-        window : nc::WINDOW,
-    }
-
-    impl Stats {
-        pub fn new(w : i32, h : i32, x : i32, y : i32) -> Stats {
-            Stats {
-                window : nc::subwin(nc::stdscr, h, w, y, x),
-            }
-        }
-    }
-
-    impl Window for Stats {
-
-        fn draw(
-            &mut self,
-                calloc : &RefCell<color::Allocator>,
-                astate : &actor::State, gstate : &game::State
-                )
-        {
-            let mut calloc = calloc.borrow_mut();
-            let cpair = nc::COLOR_PAIR(calloc.get(color::VISIBLE_FG, color::BACKGROUND_BG));
-            nc::wbkgd(self.window, ' ' as nc::chtype | cpair as nc::chtype);
-            nc::werase(self.window);
-            nc::wmove(self.window, 0, 0);
-
-            let mut max_x = 0;
-            let mut max_y = 0;
-            nc::getmaxyx(self.window, &mut max_y, &mut max_x);
-
-            let mut turn_str = String::new();
-            write!(&mut turn_str, "Turn: {}", gstate.turn).unwrap();
-
-            nc::mvwaddstr(self.window, max_y - 1, 0 , turn_str.as_slice());
-            nc::mvwaddstr(self.window, 2, 0,
-                          &format!("STR: {:2>} HP: {:>4}/{}", astate.stats.str_,
-                                   astate.stats.hp, astate.stats.max_hp));
-            nc::mvwaddstr(self.window, 3, 0,
-                          &format!("DEX: {} MP: {:>4}/{}", astate.stats.dex,
-                                   astate.stats.mp, astate.stats.max_mp));
-            nc::mvwaddstr(self.window, 4, 0,
-                          &format!("INT: {}", astate.stats.int));
-
-            nc::wnoutrefresh(self.window);
-        }
-    }
-
-    impl Drop for Log {
-        fn drop(&mut self) {
-            nc::delwin(self.window);
-        }
-    }
-
-    pub struct Help {
-        window : nc::WINDOW,
-    }
-
-    impl Help {
-        pub fn new(w : i32, h : i32, x : i32, y : i32) -> Help {
-            Help {
-                window : nc::subwin(nc::stdscr, h, w, y, x),
-            }
-        }
-    }
-
-    impl Window for Help {
-        fn draw(
-            &mut self,
-                calloc : &RefCell<color::Allocator>,
-                _ : &actor::State, _ : &game::State
-               )
-        {
-            let window = self.window;
-            let mut calloc = calloc.borrow_mut();
-            let cpair = nc::COLOR_PAIR(calloc.get(color::VISIBLE_FG, color::BACKGROUND_BG));
-            nc::wbkgd(window, ' ' as nc::chtype | cpair as nc::chtype);
-            nc::werase(window);
-            nc::wmove(window, 0, 0);
-
-            nc::waddstr(window, "This game have no point (yet) and is incomplete. Sorry for that.\n\n");
-            nc::waddstr(window, "Just press one of: hjklui, or o. Especially o because it's cool.\n\n");
-            nc::wnoutrefresh(window);
-            nc::wnoutrefresh(window);
-        }
-    }
-
-    pub struct Intro {
-        window : nc::WINDOW,
-    }
-
-    impl Intro {
-        pub fn new(w : i32, h : i32, x : i32, y : i32) -> Intro {
-            Intro {
-                window : nc::subwin(nc::stdscr, h, w, y, x),
-            }
-        }
-    }
-
-    impl Window for Intro {
-
-        fn draw(
-            &mut self,
-                calloc : &RefCell<color::Allocator>,
-                _: &actor::State, _ : &game::State
-               )
-        {
-            let window = self.window;
-            let mut calloc = calloc.borrow_mut();
-            let cpair = nc::COLOR_PAIR(calloc.get(color::VISIBLE_FG, color::BACKGROUND_BG));
-            nc::wbkgd(window, ' ' as nc::chtype | cpair as nc::chtype);
-            nc::werase(window);
-            nc::wmove(window, 0, 0);
-
-            nc::waddstr(window, "Long, long ago in a galaxy far, far away...\n\n");
-            nc::waddstr(window, "You can press '?' in the game for help.\n\n");
-            nc::waddstr(window, "Press anything to start.");
-            nc::wnoutrefresh(window);
-        }
-    }
-
 }
 
 pub struct CursesUI {
     calloc : RefCell<color::Allocator>,
-    windows : Vec<Box<(window::Window + 'static)>>,
-    log_window : Box<window::Log>,
-    intro_window : Box<window::Intro>,
-    help_window : Box<window::Help>,
+    map_window : Window,
+    log_window : Window,
+    stats_window : Window,
+    fs_window : Window, /* full screen */
     mode : Mode,
+    log : RingBuf<LogEntry>,
+    examine_pos : Option<Coordinate>,
+    examine_dir : Option<Direction>,
+    dot : &'static str,
 }
 
 impl CursesUI {
@@ -528,6 +144,10 @@ impl CursesUI {
         let term_ok = std::env::var_os("TERM").as_ref()
             .and_then(|s| s.as_os_str().to_str())
             .map_or(false, |s| s.ends_with("-256color"));
+
+        let term_putty = std::env::var_os("TERM").as_ref()
+            .and_then(|s| s.as_os_str().to_str())
+            .map_or(false, |s| s.starts_with("putty"));
 
         if !term_ok {
             panic!("Your TERM environment variable must end with -256color, sorry, stranger from the past. It is curable. Google it, fix it, try again.");
@@ -555,68 +175,367 @@ impl CursesUI {
         let mid_x = max_x * 3 / 5;
         let mid_y = max_y * 4 / 5;
 
-        let mut windows : Vec<Box<window::Window>> = Vec::new();
-
-        windows.push(Box::new(window::Map::new(
+        let map_window = Window::new(
                 mid_x, max_y, 0, 0
-                )));
-        windows.push(Box::new(window::Stats::new(
+                );
+        let stats_window = Window::new(
                 max_x - mid_x, mid_y, mid_x, 0
-                )));
-        let log_window = Box::new(window::Log::new(
+                );
+        let log_window = Window::new(
                 max_x - mid_x, max_y - mid_y, mid_x, mid_y
-                ));
-        let help_window = Box::new(window::Help::new(
+                );
+        let fs_window = Window::new(
                 max_x, max_y, 0, 0
-                ));
-        let intro_window = Box::new(window::Intro::new(
-                max_x, max_y, 0, 0
-                ));
+                );
 
         CursesUI {
             calloc: RefCell::new(color::Allocator::new()),
-            windows: windows,
+            map_window: map_window,
+            stats_window: stats_window,
             log_window: log_window,
-            help_window: help_window,
-            intro_window: intro_window,
+            fs_window: fs_window,
             mode : Mode::Normal,
+            examine_pos : None,
+            examine_dir : None,
+            dot: if term_putty { NORMAL_DOT } else { UNICODE_DOT },
+            log : RingBuf::new(),
         }
+    }
+
+    pub fn log(&mut self, s : String, gstate : &game::State) {
+        self.log.push_front(LogEntry{text: s, turn: gstate.turn});
     }
 
     pub fn display_intro(&mut self) {
         self.mode = Mode::Intro;
     }
 
+    fn draw_map(
+        &mut self,
+        astate : &actor::State, gstate : &game::State,
+        )
+    {
+        let mut calloc = self.calloc.borrow_mut();
+
+        let window = self.map_window.window;
+
+        /* Get the screen bounds. */
+        let mut max_x = 0;
+        let mut max_y = 0;
+        nc::getmaxyx(window, &mut max_y, &mut max_x);
+
+        let mid_x = max_x / 2;
+        let mid_y = max_y / 2;
+
+        let cpair = nc::COLOR_PAIR(calloc.get(color::VISIBLE_FG, color::MAP_BACKGROUND_BG));
+        nc::wbkgd(window, ' ' as nc::chtype | cpair as nc::chtype);
+        nc::werase(window);
+
+        let center = match self.mode {
+            Mode::Explore => {
+                match self.examine_pos {
+                    None => {
+                        self.examine_pos = Some(astate.pos);
+                        self.examine_dir = Some(astate.dir);
+                        astate.pos
+                    },
+                    Some(pos) => {
+                        pos
+                    },
+                }
+            },
+            _ => {
+                astate.pos
+            }
+        };
+
+        let (vpx, vpy) = center.to_pixel_integer(SPACING);
+
+        for vy in range(0, max_y) {
+            for vx in range(0, max_x) {
+                let (rvx, rvy) = (vx - mid_x, vy - mid_y);
+
+                let (cvx, cvy) = (rvx + vpx, rvy + vpy);
+
+                let (c, off) = Coordinate::from_pixel_integer(SPACING, (cvx, cvy));
+
+                let is_proper_coord = off == (0, 0);
+
+                let (visible, tt, t, light) = if is_proper_coord {
+
+                    if !astate.knows(c) {
+                        continue;
+                    }
+
+                    let t = gstate.map.get(&c);
+
+                    let tt = match t {
+                        Some(t) => t.type_,
+                        None => tile::Wall,
+                    };
+
+                    (astate.sees(c), Some(tt), t, gstate.light(c))
+                } else {
+                    // Paint a glue characters between two real characters
+                    let c1 = c;
+                    let (c2, _) = Coordinate::from_pixel_integer(SPACING, (cvx + 1, cvy));
+
+                    if !astate.knows(c1) || !astate.knows(c2) {
+                        continue;
+                    }
+
+                    let (t1, t2) = match (
+                        gstate.tile_map(c1, |t| t.type_),
+                        gstate.tile_map(c2, |t| t.type_)
+                        ) {
+                        (Some(t1), Some(t2)) => (t1, t2),
+                        (Some(t1), None) => (t1, t1),
+                        (None, Some(t2)) => (t2, t2),
+                        (None, None) => (tile::Wall, tile::Wall),
+                    };
+
+                    let tt = if !(t1.ascii_expand() && t2.ascii_expand()) {
+                        None
+                    } else {
+                        Some(t1)
+                    };
+
+                    let visible = astate.sees(c1) && astate.sees(c2);
+
+                    (visible, tt, None, (gstate.light(c1) + gstate.light(c2)) / 2)
+                };
+
+                let (fg, bg, glyph) =
+                    if is_proper_coord && astate.sees(c) && gstate.actors.contains_key(&c) {
+                        (color::CHAR_FG, color::CHAR_BG, "@")
+                    } else {
+                        match tt {
+                            Some(tile::Empty) => {
+                                (color::EMPTY_FG, color::EMPTY_BG, self.dot)
+                            },
+                            Some(tile::Wall) => {
+                                (color::WALL_FG, color::WALL_BG, "#")
+                            },
+                            Some(tile::Tree) => {
+                                (color::TREE_FG, color::TREE_BG, "T")
+                            },
+                            None => {
+                                (color::EMPTY_FG, color::EMPTY_BG, " ")
+                            },
+                        }
+                    };
+
+
+                let (mut fg, mut bg) = if !visible {
+                    (fg[2], bg[2])
+                } else if light < 3 {
+                    (fg[1], bg[1])
+                } else {
+                    (fg[0], bg[0])
+                };
+
+                if let Some(t) = t {
+                    if visible && t.light > 0 {
+                        fg = color::LIGHTSOURCE;
+                    }
+                }
+
+                if is_proper_coord && visible && gstate.actor_map_or(c, 0, &|a| a.light) > 0u32 {
+                    bg = color::LIGHTSOURCE;
+                }
+
+                if c == astate.pos + astate.dir && is_proper_coord {
+                    fg = color::TARGET;
+                }
+
+                let cpair = nc::COLOR_PAIR(calloc.get(fg, bg));
+
+                if visible {
+                    nc::wattron(window, nc::A_BOLD() as i32);
+                }
+
+                nc::wattron(window, cpair as i32);
+                nc::mvwaddstr(window, vy, vx, glyph);
+                nc::wattroff(window, cpair as i32);
+
+                if visible {
+                    nc::wattroff(window, nc::A_BOLD() as i32);
+                }
+
+            }
+        }
+
+        nc::wnoutrefresh(window);
+    }
+
+    fn draw_stats(&mut self, astate : &actor::State, gstate : &game::State) {
+        let window = self.stats_window.window;
+
+        let mut calloc = self.calloc.borrow_mut();
+        let cpair = nc::COLOR_PAIR(calloc.get(color::VISIBLE_FG, color::BACKGROUND_BG));
+        nc::wbkgd(window, ' ' as nc::chtype | cpair as nc::chtype);
+        nc::werase(window);
+        nc::wmove(window, 0, 0);
+
+        let mut max_x = 0;
+        let mut max_y = 0;
+        nc::getmaxyx(window, &mut max_y, &mut max_x);
+
+        let mut turn_str = String::new();
+        write!(&mut turn_str, "Turn: {}", gstate.turn).unwrap();
+
+        nc::mvwaddstr(window, max_y - 1, 0 , turn_str.as_slice());
+        nc::mvwaddstr(window, 2, 0,
+                      &format!("STR: {:2>} HP: {:>4}/{}", astate.stats.str_,
+                               astate.stats.hp, astate.stats.max_hp));
+        nc::mvwaddstr(window, 3, 0,
+                      &format!("DEX: {} MP: {:>4}/{}", astate.stats.dex,
+                               astate.stats.mp, astate.stats.max_mp));
+        nc::mvwaddstr(window, 4, 0,
+                      &format!("INT: {}", astate.stats.int));
+
+        nc::wnoutrefresh(window);
+    }
+    // TODO: Consider the distance to the Item to print something
+    // like "you see x in the distance", "you find yourself in x".
+    fn format_areas<I>(&self, mut i : I) -> Option<String>
+        where I : Iterator, <I as Iterator>::Item : fmt::Display
+        {
+            if let Some(descr) = i.next() {
+                let mut s = String::new();
+                write!(&mut s, "{}", "You see: ").unwrap();
+                write!(&mut s, "{}", descr).unwrap();
+
+                for ref descr in i {
+                    write!(&mut s, ", ").unwrap();
+                    write!(&mut s, "{}", descr).unwrap();
+                }
+
+                write!(&mut s, ".").unwrap();
+                Some(s)
+            } else {
+                None
+            }
+        }
+
+    fn turn_to_color(
+        &self, turn : u64, calloc : &RefCell<color::Allocator>,
+        gstate : &game::State) -> Option<i16>
+    {
+        let mut calloc = calloc.borrow_mut();
+
+        let dturn = gstate.turn - turn;
+
+        let fg = if dturn < 1 {
+            Some(color::LOG_1_FG)
+        } else if dturn < 4 {
+            Some(color::LOG_2_FG)
+        } else if dturn < 16 {
+            Some(color::LOG_3_FG)
+        } else if dturn < 32 {
+            Some(color::LOG_4_FG)
+        } else if dturn < 64 {
+            Some(color::LOG_5_FG)
+        } else {
+            None
+        };
+
+        fg.map(|fg| calloc.get(fg, color::BACKGROUND_BG))
+    }
+
+    fn draw_log(&mut self, _ : &actor::State, gstate : &game::State) {
+        let window = self.log_window.window;
+
+        let cpair = nc::COLOR_PAIR(self.calloc.borrow_mut().get(color::VISIBLE_FG, color::BACKGROUND_BG));
+        nc::wbkgd(window, ' ' as nc::chtype | cpair as nc::chtype);
+        nc::werase(window);
+        nc::wmove(window, 0, 0);
+
+
+        for i in &self.log {
+
+            if nc::getcury(window) == nc::getmaxy(window) - 1 {
+                break;
+            }
+
+            if let Some(color) = self.turn_to_color(i.turn, &self.calloc, gstate) {
+                let cpair = nc::COLOR_PAIR(color);
+                nc::wattron(window, cpair as i32);
+                nc::waddstr(window, i.text.as_slice());
+                nc::waddstr(window, "\n");
+            }
+        }
+
+        nc::wnoutrefresh(window);
+    }
+
+    fn draw_intro(&mut self)
+    {
+        let window = self.fs_window.window;
+        let mut calloc = self.calloc.borrow_mut();
+        let cpair = nc::COLOR_PAIR(calloc.get(color::VISIBLE_FG, color::BACKGROUND_BG));
+        nc::wbkgd(window, ' ' as nc::chtype | cpair as nc::chtype);
+        nc::werase(window);
+        nc::wmove(window, 0, 0);
+
+        nc::waddstr(window, "Long, long ago in a galaxy far, far away...\n\n");
+        nc::waddstr(window, "You can press '?' in the game for help.\n\n");
+        nc::waddstr(window, "Press anything to start.");
+        nc::wnoutrefresh(window);
+    }
+
+    fn draw_help( &mut self) {
+        let window = self.fs_window.window;
+        let mut calloc = self.calloc.borrow_mut();
+        let cpair = nc::COLOR_PAIR(calloc.get(color::VISIBLE_FG, color::BACKGROUND_BG));
+        nc::wbkgd(window, ' ' as nc::chtype | cpair as nc::chtype);
+        nc::werase(window);
+        nc::wmove(window, 0, 0);
+
+        nc::waddstr(window, "This game have no point (yet) and is incomplete. Sorry for that.\n\n");
+        nc::waddstr(window, "Just press one of: hjklui, or o. Especially o because it's cool.\n\n");
+        nc::wnoutrefresh(window);
+        nc::wnoutrefresh(window);
+    }
+
 }
 
 enum Mode {
     Normal,
+    Explore,
     Help,
     Intro,
 }
 
-use self::window::Window;
-
 impl ui::UiFrontend for CursesUI {
+
+    fn update(&mut self, astate : &actor::State, gstate : &game::State) {
+        let discoviered_areas = astate.discovered_areas.iter()
+            .filter_map(|coord| gstate.tile_at(*coord))
+            .filter_map(|tile| tile.area.as_ref())
+            ;
+
+        if let Some(s) = self.format_areas(discoviered_areas.map(|area| area.type_)) {
+            self.log(s, gstate);
+        }
+    }
 
     fn draw(&mut self, astate : &actor::State, gstate : &game::State) {
         let mut max_x = 0;
         let mut max_y = 0;
         nc::getmaxyx(nc::stdscr, &mut max_y, &mut max_x);
 
-
         match self.mode {
-            Mode::Normal => {
-                for w in &mut self.windows {
-                    w.draw(&self.calloc, astate, gstate);
-                }
-                (*self.log_window).draw(&self.calloc, astate, gstate);
+            Mode::Normal|Mode::Explore => {
+                self.draw_map(astate, gstate);
+                self.draw_log(astate, gstate);
+                self.draw_stats(astate, gstate);
             },
             Mode::Help => {
-                (*self.help_window).draw(&self.calloc, astate, gstate);
+                self.draw_help();
             },
             Mode::Intro => {
-                (*self.intro_window).draw(&self.calloc, astate, gstate);
+                self.draw_intro();
             },
         }
 
@@ -647,6 +566,12 @@ impl ui::UiFrontend for CursesUI {
                         'j' => Action::Game(game::Action::Move(Angle::Back)),
                         '.' => Action::Game(game::Action::Wait),
                         'o' => Action::AutoExplore,
+                        'x' =>  {
+                            self.examine_pos = None;
+                            self.examine_dir = None;
+                            self.mode = Mode::Explore;
+                            return Some(Action::Redraw);
+                        },
                         '?' => {
                             self.mode = Mode::Help;
                             return Some(Action::Redraw);
@@ -661,6 +586,53 @@ impl ui::UiFrontend for CursesUI {
                         return Some(Action::Redraw);
                     }
                 },
+                Mode::Explore => {
+                    if ch == -1 {
+                        return None;
+                    }
+
+                    match ch as u8 as char {
+                        'x' => {
+                            self.examine_pos = None;
+                            self.examine_dir = None;
+                            self.mode = Mode::Normal;
+                        },
+                        'h' => {
+                            self.examine_dir = self.examine_dir.map(|d| d + Angle::Left);
+                        },
+                        'l' => {
+                            self.examine_dir = self.examine_dir.map(|d| d + Angle::Right);
+                        },
+                        'j' => {
+                            self.examine_pos = self.examine_dir.and_then(
+                                |d| self.examine_pos.map(|p| p + (d + Angle::Back))
+                                );
+                        },
+                        'k' => {
+                            self.examine_pos = self.examine_dir.and_then(
+                                |d| self.examine_pos.map(|p| p + d)
+                                );
+                        },
+                        'K' => {
+                            self.examine_pos = self.examine_dir.and_then(
+                                |d| self.examine_pos.map(
+                                    |p| p + (d.to_coordinate().scale(5))
+                                    )
+                                );
+                        },
+                        'J' => {
+                            self.examine_pos = self.examine_dir.and_then(
+                                |d| self.examine_pos.map(
+                                    |p| p + ((d + Angle::Back).to_coordinate().scale(5))
+                                    )
+                                );
+                        },
+                        _ => {
+                            return None;
+                        }
+                    }
+                    return Some(Action::Redraw);
+                }
             }
         }
     }
@@ -668,7 +640,7 @@ impl ui::UiFrontend for CursesUI {
     fn event(&mut self, event : ui::Event, gstate : &game::State) {
         match event {
             ui::Event::Log(logev) => match logev {
-                ui::LogEvent::AutoExploreDone => self.log_window.log("Nothing else to explore.".to_string(), gstate),
+                ui::LogEvent::AutoExploreDone => self.log("Nothing else to explore.".to_string(), gstate),
             }
         }
     }

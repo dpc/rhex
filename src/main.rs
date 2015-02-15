@@ -11,6 +11,7 @@ extern crate hex2d;
 extern crate "hex2d-dpcext" as hex2dext;
 extern crate libc;
 extern crate rand;
+extern crate time;
 
 use std::sync::mpsc;
 use std::thread;

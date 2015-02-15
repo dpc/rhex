@@ -2,6 +2,7 @@ use std::old_io::Timer;
 use std::time::duration::Duration;
 use std::sync::{mpsc, Arc};
 use std::collections::ring_buf::RingBuf;
+use time;
 
 use hex2d;
 
@@ -12,8 +13,9 @@ use hex2dext::algo::bfs;
 pub mod curses;
 
 pub trait UiFrontend {
-    fn input(&mut self) -> Option<Action>;
+    fn update(&mut self, astate : &actor::State, gstate : &game::State);
     fn draw(&mut self, astate : &actor::State, gstate : &game::State);
+    fn input(&mut self) -> Option<Action>;
     fn event(&mut self, event : Event, gstate : &game::State);
 }
 
@@ -35,6 +37,8 @@ pub enum Event {
 /// Generic UI logic
 pub struct Ui<U : UiFrontend> {
     frontend : U,
+    autoexploring : Option<u64>,
+    last_redraw_ns : u64,
 }
 
 pub enum AutoExploreAction {
@@ -46,7 +50,11 @@ pub enum AutoExploreAction {
 impl<U : UiFrontend> Ui<U> {
 
     pub fn new(frontend : U) -> Ui<U> {
-        Ui { frontend: frontend }
+        Ui {
+            frontend: frontend,
+            autoexploring: None,
+            last_redraw_ns: 0,
+        }
     }
 
     pub fn should_stop_autoexploring(&self, astate : &actor::State, _ : &game::State) -> bool {
@@ -84,12 +92,25 @@ impl<U : UiFrontend> Ui<U> {
         }
     }
 
+    pub fn redraw(&mut self, req : &Option<game::controller::Request>) {
+        let now = time::precise_time_ns();
+
+        if self.autoexploring.is_some() && self.last_redraw_ns + 50 * 1000 * 1000 > now {
+            return
+        }
+
+        self.last_redraw_ns = now;
+
+        if let Some((ref astate, ref gstate)) = *req {
+            self.frontend.draw(&astate, &gstate);
+        }
+    }
+
     pub fn run(&mut self,
                req : mpsc::Receiver<(Arc<actor::State>, Arc<game::State>)>,
                rep : mpsc::Sender<(Arc<actor::State>, game::Action)>
                ) {
 
-        let mut autoexploring = None;
         let mut pending_req : Option<(Arc<actor::State>, Arc<game::State>)> = None;
         let mut pending_action = RingBuf::new();
 
@@ -97,23 +118,25 @@ impl<U : UiFrontend> Ui<U> {
 
         loop {
             if let Some((astate, gstate)) = pending_req.clone() {
-                if let Some(start_turn) = autoexploring {
+                if let Some(start_turn) = self.autoexploring {
                     if start_turn != gstate.turn && self.should_stop_autoexploring(&astate, &gstate) {
-                        autoexploring = None;
+                        self.autoexploring = None;
+                        self.redraw(&pending_req);
                     } else {
                         match self.autoexplore_action(&astate, &gstate) {
                             AutoExploreAction::Blocked => {
-                                autoexploring = None;
+                                self.autoexploring = None;
+                                self.redraw(&pending_req);
                             },
                             AutoExploreAction::Action(action) => {
                                 rep.send((astate, action)).unwrap();
                                 pending_req = None;
-                                timer.sleep(Duration::milliseconds(50));
+                                timer.sleep(Duration::milliseconds(10));
                             },
                             AutoExploreAction::Finish => {
                                 self.frontend.event(Event::Log(LogEvent::AutoExploreDone), &gstate);
-                                autoexploring = None;
-                                self.frontend.draw(&astate, &gstate);
+                                self.autoexploring = None;
+                                self.redraw(&pending_req);
                             }
                         }
                     }
@@ -126,7 +149,7 @@ impl<U : UiFrontend> Ui<U> {
                                 pending_req = None;
                             },
                             Action::Redraw => { },
-                            Action::AutoExplore => { autoexploring = Some(gstate.turn); },
+                            Action::AutoExplore => { self.autoexploring = Some(gstate.turn); },
                         }
                     }
                 }
@@ -135,9 +158,10 @@ impl<U : UiFrontend> Ui<U> {
                     Ok(state) => {
                         {
                             let (ref astate, ref gstate) = state;
-                            self.frontend.draw(&astate, &gstate);
+                            self.frontend.update(&astate, &gstate);
                         }
                         pending_req = Some(state);
+                        self.redraw(&pending_req);
                     },
                     Err(err) => match err {
                         mpsc::TryRecvError::Empty => {},
@@ -153,12 +177,13 @@ impl<U : UiFrontend> Ui<U> {
                         pending_action.push_back(action);
                     },
                     Action::Redraw => {
-                        if let Some((astate, gstate)) = pending_req.clone() {
-                            self.frontend.draw(&astate, &gstate);
-                        }
+                        self.redraw(&pending_req);
                     },
                     _ => {
-                        autoexploring = None;
+                        if self.autoexploring.is_some() {
+                            self.autoexploring = None;
+                            self.redraw(&pending_req);
+                        }
                         pending_action.push_back(action);
                     }
                 }
