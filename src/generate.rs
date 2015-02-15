@@ -6,7 +6,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use hex2d as h2d;
-use hex2d::{ToCoordinate, Direction};
+use hex2d::{ToCoordinate, Direction, Position};
 use game::tile;
 use game::{Map, Actors};
 use game::area;
@@ -105,10 +105,10 @@ impl DungeonGenerator {
 
     /* generate_map at position `pos`; does not push back the iterator! */
     fn generate_room_inplace(&self, map : &mut Map, actors : &mut Actors,
-                             pos : h2d::Coordinate, r : u32) -> u32 {
+                             coord : h2d::Coordinate, r : u32) -> u32 {
 
         let mut blocked = false;
-        pos.for_each_in_range((r - 1) as i32, |c| {
+        coord.for_each_in_range((r - 1) as i32, |c| {
            if let Some(_) = map.get(&c) {
                blocked = true;
            }
@@ -120,8 +120,9 @@ impl DungeonGenerator {
 
         match rand::thread_rng().gen_range(0, 3) {
             0 => {
-                actors.insert(pos, Arc::new(
-                        actor::State::new_nolosyet(actor::Behavior::Grue, pos, Direction::XY)
+                let pos = Position::new(coord, Direction::XY);
+                actors.insert(coord, Arc::new(
+                        actor::State::new_nolosyet(actor::Behavior::Grue, pos)
                         ));
             },
             _ => {},
@@ -129,9 +130,9 @@ impl DungeonGenerator {
 
         let mut tile_count = 0;
 
-        let area = area::Area::new(pos, area::Type::Room(r));
+        let area = area::Area::new(coord, area::Type::Room(r));
 
-        pos.for_each_in_range((r - 1) as i32, |c| {
+        coord.for_each_in_range((r - 1) as i32, |c| {
            if !map.contains_key(&c) {
                tile_count += 1;
            }
@@ -139,7 +140,7 @@ impl DungeonGenerator {
         });
 
         // TODO: Guarantee that the room is not completely closed
-        pos.for_each_in_ring(r as i32, h2d::Spin::CW(h2d::Direction::XY), |c| {
+        coord.for_each_in_ring(r as i32, h2d::Spin::CW(h2d::Direction::XY), |c| {
             match rand::thread_rng().gen_range(0, 2) {
                 0 => {
                     if !map.contains_key(&c) {

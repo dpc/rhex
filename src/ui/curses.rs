@@ -10,7 +10,7 @@ use game;
 use actor;
 use ui;
 
-use hex2d::{Angle, IntegerSpacing, Coordinate, Direction, ToCoordinate};
+use hex2d::{Angle, IntegerSpacing, Coordinate, ToCoordinate, Position};
 
 use game::tile;
 
@@ -132,8 +132,7 @@ pub struct CursesUI {
     fs_window : Window, /* full screen */
     mode : Mode,
     log : RingBuf<LogEntry>,
-    examine_pos : Option<Coordinate>,
-    examine_dir : Option<Direction>,
+    examine_pos : Option<Position>,
     dot : &'static str,
 }
 
@@ -196,7 +195,6 @@ impl CursesUI {
             fs_window: fs_window,
             mode : Mode::Normal,
             examine_pos : None,
-            examine_dir : None,
             dot: if term_putty { NORMAL_DOT } else { UNICODE_DOT },
             log : RingBuf::new(),
         }
@@ -236,16 +234,15 @@ impl CursesUI {
                 match self.examine_pos {
                     None => {
                         self.examine_pos = Some(astate.pos);
-                        self.examine_dir = Some(astate.dir);
-                        astate.pos
+                        astate.pos.coord
                     },
                     Some(pos) => {
-                        pos
+                        pos.coord
                     },
                 }
             },
             _ => {
-                astate.pos
+                astate.pos.coord
             }
         };
 
@@ -344,7 +341,7 @@ impl CursesUI {
                     bg = color::LIGHTSOURCE;
                 }
 
-                if c == astate.pos + astate.dir && is_proper_coord {
+                if c == astate.pos.coord + astate.pos.dir && is_proper_coord {
                     fg = color::TARGET;
                 }
 
@@ -568,7 +565,6 @@ impl ui::UiFrontend for CursesUI {
                         'o' => Action::AutoExplore,
                         'x' =>  {
                             self.examine_pos = None;
-                            self.examine_dir = None;
                             self.mode = Mode::Explore;
                             return Some(Action::Redraw);
                         },
@@ -591,41 +587,30 @@ impl ui::UiFrontend for CursesUI {
                         return None;
                     }
 
+                    let pos = self.examine_pos.unwrap();
+
                     match ch as u8 as char {
                         'x' => {
                             self.examine_pos = None;
-                            self.examine_dir = None;
                             self.mode = Mode::Normal;
                         },
                         'h' => {
-                            self.examine_dir = self.examine_dir.map(|d| d + Angle::Left);
+                            self.examine_pos = Some(pos + Angle::Left);
                         },
                         'l' => {
-                            self.examine_dir = self.examine_dir.map(|d| d + Angle::Right);
+                            self.examine_pos = Some(pos + Angle::Right);
                         },
                         'j' => {
-                            self.examine_pos = self.examine_dir.and_then(
-                                |d| self.examine_pos.map(|p| p + (d + Angle::Back))
-                                );
+                            self.examine_pos = Some(pos + (pos.dir + Angle::Back).to_coordinate());
                         },
                         'k' => {
-                            self.examine_pos = self.examine_dir.and_then(
-                                |d| self.examine_pos.map(|p| p + d)
-                                );
+                            self.examine_pos = Some(pos + pos.dir.to_coordinate());
                         },
                         'K' => {
-                            self.examine_pos = self.examine_dir.and_then(
-                                |d| self.examine_pos.map(
-                                    |p| p + (d.to_coordinate().scale(5))
-                                    )
-                                );
+                            self.examine_pos = Some(pos + pos.dir.to_coordinate().scale(5));
                         },
                         'J' => {
-                            self.examine_pos = self.examine_dir.and_then(
-                                |d| self.examine_pos.map(
-                                    |p| p + ((d + Angle::Back).to_coordinate().scale(5))
-                                    )
-                                );
+                            self.examine_pos = Some(pos + (pos.dir + Angle::Back).to_coordinate().scale(5));
                         },
                         _ => {
                             return None;

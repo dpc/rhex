@@ -63,26 +63,26 @@ impl<U : UiFrontend> Ui<U> {
 
     pub fn autoexplore_action(&self, astate : &actor::State, gstate : &game::State) -> AutoExploreAction {
 
-        let start = astate.pos;
+        let start = astate.pos.coord;
 
         let mut bfs = bfs::Traverser::new(
-            |pos| pos == start || gstate.tile_at(pos).map(|t| t.is_passable()) == Some(true),
-            |pos| !astate.knows(pos),
+            |c| c == start || gstate.tile_at(c).map(|t| t.is_passable()) == Some(true),
+            |c| !astate.knows(c),
             start
             );
 
         if let Some(dst) = bfs.find() {
             if let Some(neigh) = bfs.backtrace_last(dst) {
 
-                let ndir = astate.pos.direction_to_cw(neigh).expect("bfs gave me trash");
-                if ndir == astate.dir {
+                let ndir = astate.pos.coord.direction_to_cw(neigh).expect("bfs gave me trash");
+                if ndir == astate.pos.dir {
                     if gstate.occupied(neigh) {
                         AutoExploreAction::Blocked
                     } else {
                         AutoExploreAction::Action(game::Action::Move(hex2d::Angle::Forward))
                     }
                 } else {
-                    AutoExploreAction::Action(game::Action::Turn(ndir - astate.dir))
+                    AutoExploreAction::Action(game::Action::Turn(ndir - astate.pos.dir))
                 }
             } else {
                 AutoExploreAction::Finish

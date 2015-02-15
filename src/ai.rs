@@ -44,19 +44,19 @@ fn grue(astate : &actor::State, gstate : &game::State) -> game::Action {
     roam()
 }
 
-fn go_to(astate : &actor::State, pos : Coordinate) -> game::Action {
-    let ndir = astate.pos.direction_to_cw(pos).expect("bfs gave me trash");
+fn go_to(astate : &actor::State, c: Coordinate) -> game::Action {
+    let ndir = astate.pos.coord.direction_to_cw(c).expect("bfs gave me trash");
 
-    if ndir == astate.dir {
+    if ndir == astate.pos.dir {
         return game::Action::Move(hex2d::Angle::Forward)
     } else {
-        return game::Action::Turn(ndir - astate.dir)
+        return game::Action::Turn(ndir - astate.pos.dir)
     }
 }
 
 fn pony_follow(astate : &actor::State, gstate : &game::State) -> game::Action {
 
-        let start = astate.pos;
+        let start = astate.pos.coord;
 
 
         let player_pos = closest_reachable(gstate, start, 10,

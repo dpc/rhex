@@ -1,5 +1,5 @@
 use std::collections::HashSet;
-use hex2d::{Coordinate, Direction, Angle};
+use hex2d::{Coordinate, Angle, Position, ToCoordinate};
 use game;
 use hex2dext::algo;
 
@@ -33,8 +33,7 @@ impl Stats {
 
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub struct State {
-    pub pos : Coordinate,
-    pub dir : Direction,
+    pub pos : Position,
 
     pub behavior : Behavior,
     pub stats : Stats,
@@ -55,29 +54,29 @@ pub struct State {
     pub light : u32,
 }
 
-fn calculate_los(pos : Coordinate, dir : Direction, gstate : &game::State) -> Visibility {
+fn calculate_los(pos : Position, gstate : &game::State) -> Visibility {
     let mut visibility = HashSet::new();
     algo::los::los(
         &|coord| gstate.tile_at(coord).map_or(10000, |tile| tile.opaqueness()),
         &mut |coord, _ | {
-            if pos.distance(coord) < 2 || gstate.light_map.contains_key(&coord) {
+            if pos.coord.distance(coord) < 2 || gstate.light_map.contains_key(&coord) {
                 let _ = visibility.insert(coord);
             }
         },
-        10, pos, &[dir]
+        10, pos.coord, &[pos.dir]
         );
 
     visibility
 }
 
 impl State {
-    pub fn new(behavior : Behavior, pos : Coordinate, dir : Direction, gstate : &game::State) -> State {
+    pub fn new(behavior : Behavior, pos : Position, gstate : &game::State) -> State {
 
-        let visible = calculate_los(pos, dir, gstate);
+        let visible = calculate_los(pos, gstate);
 
         let mut state = State {
             behavior : behavior,
-            pos: pos, dir: dir,
+            pos: pos,
             stats: Stats::new(),
             visible: visible,
             known: HashSet::new(),
@@ -92,10 +91,10 @@ impl State {
         state
     }
 
-    pub fn new_nolosyet(behavior : Behavior, pos : Coordinate, dir : Direction) -> State {
+    pub fn new_nolosyet(behavior : Behavior, pos : Position) -> State {
         State {
             behavior : behavior,
-            pos: pos, dir: dir,
+            pos: pos,
             stats: Stats::new(),
             visible: HashSet::new(),
             known: HashSet::new(),
@@ -110,7 +109,6 @@ impl State {
         State {
             behavior: self.behavior,
             pos: self.pos,
-            dir: self.dir,
             stats: Stats::new(),
             visible: self.visible.clone(),
             known: self.known.clone(),
@@ -130,26 +128,25 @@ impl State {
     }
 
     pub fn act(&self, gstate : &game::State, action : game::Action) -> State {
-        let (pos, dir) = match action {
-            game::Action::Wait => (self.pos, self.dir),
-            game::Action::Turn(a) => (self.pos, self.dir + a),
-            game::Action::Move(a) => (self.pos + (self.dir + a), self.dir),
-            game::Action::Spin(a) => (self.pos + (self.dir + a),
+        let pos = match action {
+            game::Action::Wait => self.pos,
+            game::Action::Turn(a) => self.pos + a,
+            game::Action::Move(a) => self.pos + (self.pos.dir + a).to_coordinate(),
+            game::Action::Spin(a) => self.pos + (self.pos.dir + a).to_coordinate() +
                                       match a {
-                                          Angle::Right => self.dir + Angle::Left,
-                                          Angle::Left => self.dir + Angle::Right,
+                                          Angle::Right => Angle::Left,
+                                          Angle::Left => Angle::Right,
                                           _ => return self.clone(),
-                                      }),
+                                      },
         };
 
-        let tile_type =  gstate.tile_map_or(pos, game::tile::Wall, |t| t.type_);
-        if self.pos == pos || (tile_type.is_passable() && !gstate.actors.contains_key(&pos)) {
-            let visible = calculate_los(pos, dir, gstate);
+        let tile_type =  gstate.tile_map_or(pos.coord, game::tile::Wall, |t| t.type_);
+        if self.pos.coord == pos.coord || (tile_type.is_passable() && !gstate.actors.contains_key(&pos.coord)) {
+            let visible = calculate_los(pos, gstate);
 
             let mut state = State {
                 behavior: self.behavior,
                 pos: pos,
-                dir: dir,
                 stats: self.stats,
                 visible: visible,
                 known: self.known.clone(),

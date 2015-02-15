@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::collections::hash_map::Entry;
 use std::sync::{Arc};
 
-use hex2d::{Coordinate, Direction, Angle};
+use hex2d::{Coordinate, Direction, Angle, Position};
 use actor;
 use generate;
 use hex2dext::algo;
@@ -113,12 +113,15 @@ impl State {
         self.light_map = Arc::new(light_map);
     }
 
-    pub fn spawn(&self, pos : Coordinate, behavior : actor::Behavior, light : u32) -> State {
+    pub fn spawn(&self, coord : Coordinate, behavior : actor::Behavior, light : u32) -> State {
 
         let mut actors = self.actors.clone().make_unique().clone();
 
-        actors.insert(pos, Arc::new(actor::State::new(behavior, pos, Direction::XY, self).add_light(light))
-);
+        let pos = Position::new(coord, Direction::XY);
+
+        actors.insert(pos.coord, Arc::new(
+                actor::State::new(behavior, pos, self).add_light(light)
+                ));
 
         State {
             actors: Arc::new(actors),
@@ -145,9 +148,9 @@ impl State {
         let mut actors = arc.make_unique().clone();
 
         let new_actor_state = actor.act(self, action);
-        actors.remove(&actor.pos);
-        assert!(!actors.contains_key(&new_actor_state.pos));
-        actors.insert(new_actor_state.pos, Arc::new(new_actor_state));
+        actors.remove(&actor.pos.coord);
+        assert!(!actors.contains_key(&new_actor_state.pos.coord));
+        actors.insert(new_actor_state.pos.coord, Arc::new(new_actor_state));
 
         let mut ret = State {
             actors: Arc::new(actors),
@@ -171,8 +174,10 @@ impl State {
         }
     }
 
-    pub fn actor_map_or<R, F : Fn(&actor::State) -> R>(&self, pos : Coordinate, def: R, cond : &F) -> R {
-        self.actors.get(&pos).map_or(def, |a| cond(a))
+    pub fn actor_map_or<R, F : Fn(&actor::State) -> R>
+        (&self, pos : Coordinate, def: R, cond : &F) -> R
+    {
+            self.actors.get(&pos).map_or(def, |a| cond(a))
     }
 
     pub fn tile_at(&self, pos : Coordinate) -> Option<&tile::Tile> {
