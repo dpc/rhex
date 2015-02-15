@@ -50,7 +50,7 @@ impl Controller {
         loop {
             let actors = self.state.actors.clone();
 
-            for (_, actor) in actors.iter() {
+            for (_, actor) in &*actors {
                 match actor.behavior {
                     actor::Behavior::Player => {
                         try!(pl_req.send((actor.clone(), self.state.clone())));
@@ -61,7 +61,7 @@ impl Controller {
                 }
             }
 
-            for (_, astate) in actors.iter() {
+            for (_, astate) in &*actors {
                 let (astate, action) = match astate.behavior {
                     actor::Behavior::Player => {
                         try!(pl_rep.recv())

@@ -35,7 +35,7 @@ fn closest_reachable<F>(gstate : &game::State, start : Coordinate, max_distance 
 
 fn grue(astate : &actor::State, gstate : &game::State) -> game::Action {
 
-    for &visible_pos in astate.visible.iter() {
+    for &visible_pos in &astate.visible {
         if gstate.actor_map_or(visible_pos, false, &|a| a.is_player()) {
             return go_to(astate, visible_pos);
         }

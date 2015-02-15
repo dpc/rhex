@@ -148,14 +148,14 @@ impl State {
         let mut discovered = HashSet::new();
         let mut discovered_areas = HashSet::new();
 
-        for i in self.visible.iter() {
+        for i in &self.visible {
             if !self.known.contains(i) {
                 self.known.insert(*i);
                 discovered.insert(*i);
             }
         }
 
-        for &coord in discovered.iter() {
+        for &coord in &discovered {
             if let Some(area) = gstate.tile_at(coord).and_then(|t| t.area) {
                 let area_center = area.center;
 

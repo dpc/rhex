@@ -53,7 +53,7 @@ impl State {
     pub fn recalculate_light_map(&mut self) {
         let mut light_map : HashMap<Coordinate, u32> = HashMap::new();
 
-        for (pos, tile) in self.map.iter() {
+        for (pos, tile) in &*self.map {
             let light = tile.light;
             if light > 0 {
                 algo::los::los(
@@ -82,7 +82,7 @@ impl State {
             }
         }
 
-        for (pos, astate) in self.actors.iter() {
+        for (pos, astate) in &*self.actors {
             if astate.light > 0 {
                 algo::los::los(
                     &|coord| {

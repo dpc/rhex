@@ -341,7 +341,7 @@ pub mod window {
         }
 
         fn print_log(&self, calloc : &RefCell<color::Allocator>, gstate : &game::State) {
-            for i in self.log.iter() {
+            for i in &self.log {
 
                 if nc::getcury(self.window) == nc::getmaxy(self.window) - 1 {
                     break;
@@ -506,7 +506,7 @@ impl ui::UiFrontend for CursesUI {
 
         nc::mv(max_y - 1, max_x - 1);
 
-        for w in self.windows.iter_mut() {
+        for w in &mut self.windows {
             w.draw(&self.calloc, astate, gstate);
         }
         (*self.log_window).draw(&self.calloc, astate, gstate);
