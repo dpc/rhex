@@ -7,7 +7,7 @@ use ncurses as nc;
 
 use super::Action;
 use game;
-use actor;
+use actor::{self, Behavior};
 use ui;
 
 use hex2d::{Angle, IntegerSpacing, Coordinate, ToCoordinate, Position};
@@ -230,7 +230,7 @@ impl CursesUI {
         nc::werase(window);
 
         let center = match self.mode {
-            Mode::Explore => {
+            Mode::Examine => {
                 match self.examine_pos {
                     None => {
                         self.examine_pos = Some(astate.pos);
@@ -440,7 +440,65 @@ impl CursesUI {
         fg.map(|fg| calloc.get(fg, color::BACKGROUND_BG))
     }
 
-    fn draw_log(&mut self, _ : &actor::State, gstate : &game::State) {
+    fn tile_description(&self, coord : Coordinate,
+                        astate : &actor::State, gstate : &game::State
+                        ) -> String
+    {
+        if !astate.knows(coord) {
+            return "Unknown".to_string();
+        }
+
+        let tile = gstate.tile_map_or(coord, tile::Wall, |t| t.type_);
+        let actor =
+            if astate.sees(coord) {
+                gstate.actor_map_or(coord, None, &|a| Some(match a.behavior {
+                    Behavior::Pony => "A pony",
+                    Behavior::Grue => "Toothless Grue",
+                    Behavior::Player => "Yourself",
+                }.to_string())
+                )
+            } else {
+                None
+            };
+
+        match (tile, actor) {
+            (tile::Wall, _) => {
+                "A wall".to_string()
+            },
+            (tile::Empty, None) => {
+                "Empty".to_string()
+            },
+            (tile::Empty, Some(descr)) => {
+                descr
+            },
+            _ => {
+                "Indescribable".to_string()
+            },
+        }
+    }
+
+    fn draw_examine(&self, astate : &actor::State, gstate : &game::State) {
+        let window = self.log_window.window;
+
+        let pos = self.examine_pos.expect("examine_pos should have not been None");
+
+        let cpair = nc::COLOR_PAIR(self.calloc.borrow_mut().get(color::VISIBLE_FG, color::BACKGROUND_BG));
+        nc::wbkgd(window, ' ' as nc::chtype | cpair as nc::chtype);
+        nc::werase(window);
+        nc::wmove(window, 0, 0);
+
+        let descr = self.tile_description(pos.coord, astate, gstate);
+        nc::waddstr(window, descr.as_slice());
+
+        nc::wnoutrefresh(window);
+    }
+
+    fn draw_log(&mut self, astate : &actor::State, gstate : &game::State) {
+        if self.mode == Mode::Examine {
+            self.draw_examine(astate, gstate);
+            return;
+        }
+
         let window = self.log_window.window;
 
         let cpair = nc::COLOR_PAIR(self.calloc.borrow_mut().get(color::VISIBLE_FG, color::BACKGROUND_BG));
@@ -497,9 +555,10 @@ impl CursesUI {
 
 }
 
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
 enum Mode {
     Normal,
-    Explore,
+    Examine,
     Help,
     Intro,
 }
@@ -523,7 +582,7 @@ impl ui::UiFrontend for CursesUI {
         nc::getmaxyx(nc::stdscr, &mut max_y, &mut max_x);
 
         match self.mode {
-            Mode::Normal|Mode::Explore => {
+            Mode::Normal|Mode::Examine => {
                 self.draw_map(astate, gstate);
                 self.draw_log(astate, gstate);
                 self.draw_stats(astate, gstate);
@@ -565,7 +624,7 @@ impl ui::UiFrontend for CursesUI {
                         'o' => Action::AutoExplore,
                         'x' =>  {
                             self.examine_pos = None;
-                            self.mode = Mode::Explore;
+                            self.mode = Mode::Examine;
                             return Some(Action::Redraw);
                         },
                         '?' => {
@@ -582,7 +641,7 @@ impl ui::UiFrontend for CursesUI {
                         return Some(Action::Redraw);
                     }
                 },
-                Mode::Explore => {
+                Mode::Examine => {
                     if ch == -1 {
                         return None;
                     }
