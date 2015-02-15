@@ -12,7 +12,7 @@ use hex2dext::algo::bfs;
 pub mod curses;
 
 pub trait UiFrontend {
-    fn input(&self) -> Option<Action>;
+    fn input(&mut self) -> Option<Action>;
     fn draw(&mut self, astate : &actor::State, gstate : &game::State);
     fn event(&mut self, event : Event, gstate : &game::State);
 }
@@ -20,6 +20,7 @@ pub trait UiFrontend {
 pub enum Action {
     Exit,
     AutoExplore,
+    Redraw,
     Game(game::Action),
 }
 
@@ -124,6 +125,7 @@ impl<U : UiFrontend> Ui<U> {
                                 rep.send((astate, action)).unwrap();
                                 pending_req = None;
                             },
+                            Action::Redraw => { },
                             Action::AutoExplore => { autoexploring = Some(gstate.turn); },
                         }
                     }
@@ -131,7 +133,6 @@ impl<U : UiFrontend> Ui<U> {
             } else {
                 match req.try_recv() {
                     Ok(state) => {
-
                         {
                             let (ref astate, ref gstate) = state;
                             self.frontend.draw(&astate, &gstate);
@@ -151,6 +152,11 @@ impl<U : UiFrontend> Ui<U> {
                     Action::AutoExplore => {
                         pending_action.push_back(action);
                     },
+                    Action::Redraw => {
+                        if let Some((astate, gstate)) = pending_req.clone() {
+                            self.frontend.draw(&astate, &gstate);
+                        }
+                    },
                     _ => {
                         autoexploring = None;
                         pending_action.push_back(action);
@@ -159,8 +165,6 @@ impl<U : UiFrontend> Ui<U> {
             } else {
                 timer.sleep(Duration::milliseconds(10));
             }
-
-
         }
     }
 }

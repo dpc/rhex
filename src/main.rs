@@ -31,7 +31,8 @@ pub fn main() {
     let state = state.spawn_pony(Coordinate::new(-1, 0));
     let mut controller = game::Controller::new(state);
 
-    let ui = ui::curses::CursesUI::new();
+    let mut ui = ui::curses::CursesUI::new();
+    ui.display_intro();
     let mut ui = ui::Ui::new(ui);
 
     let (pl_req_tx, pl_req_rx) = mpsc::channel();

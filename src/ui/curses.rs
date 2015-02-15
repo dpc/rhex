@@ -407,7 +407,7 @@ pub mod window {
         fn draw(
             &mut self,
                 calloc : &RefCell<color::Allocator>,
-                _ : &actor::State, gstate : &game::State
+                astate : &actor::State, gstate : &game::State
                 )
         {
             let mut calloc = calloc.borrow_mut();
@@ -416,13 +416,22 @@ pub mod window {
             nc::werase(self.window);
             nc::wmove(self.window, 0, 0);
 
+            let mut max_x = 0;
+            let mut max_y = 0;
+            nc::getmaxyx(self.window, &mut max_y, &mut max_x);
+
             let mut turn_str = String::new();
             write!(&mut turn_str, "Turn: {}", gstate.turn).unwrap();
 
-            nc::mvwaddstr(self.window, 0, 0, turn_str.as_slice());
-            nc::mvwaddstr(self.window, 2, 0, "STR: 15");
-            nc::mvwaddstr(self.window, 3, 0, "DEX: 15");
-            nc::mvwaddstr(self.window, 4, 0, "INT: 15");
+            nc::mvwaddstr(self.window, max_y - 1, 0 , turn_str.as_slice());
+            nc::mvwaddstr(self.window, 2, 0,
+                          &format!("STR: {:2>} HP: {:>4}/{}", astate.stats.str_,
+                                   astate.stats.hp, astate.stats.max_hp));
+            nc::mvwaddstr(self.window, 3, 0,
+                          &format!("DEX: {} MP: {:>4}/{}", astate.stats.dex,
+                                   astate.stats.mp, astate.stats.max_mp));
+            nc::mvwaddstr(self.window, 4, 0,
+                          &format!("INT: {}", astate.stats.int));
 
             nc::wnoutrefresh(self.window);
         }
@@ -433,12 +442,83 @@ pub mod window {
             nc::delwin(self.window);
         }
     }
+
+    pub struct Help {
+        window : nc::WINDOW,
+    }
+
+    impl Help {
+        pub fn new(w : i32, h : i32, x : i32, y : i32) -> Help {
+            Help {
+                window : nc::subwin(nc::stdscr, h, w, y, x),
+            }
+        }
+    }
+
+    impl Window for Help {
+        fn draw(
+            &mut self,
+                calloc : &RefCell<color::Allocator>,
+                _ : &actor::State, _ : &game::State
+               )
+        {
+            let window = self.window;
+            let mut calloc = calloc.borrow_mut();
+            let cpair = nc::COLOR_PAIR(calloc.get(color::VISIBLE_FG, color::BACKGROUND_BG));
+            nc::wbkgd(window, ' ' as nc::chtype | cpair as nc::chtype);
+            nc::werase(window);
+            nc::wmove(window, 0, 0);
+
+            nc::waddstr(window, "This game have no point (yet) and is incomplete. Sorry for that.\n\n");
+            nc::waddstr(window, "Just press one of: hjklui, or o. Especially o because it's cool.\n\n");
+            nc::wnoutrefresh(window);
+            nc::wnoutrefresh(window);
+        }
+    }
+
+    pub struct Intro {
+        window : nc::WINDOW,
+    }
+
+    impl Intro {
+        pub fn new(w : i32, h : i32, x : i32, y : i32) -> Intro {
+            Intro {
+                window : nc::subwin(nc::stdscr, h, w, y, x),
+            }
+        }
+    }
+
+    impl Window for Intro {
+
+        fn draw(
+            &mut self,
+                calloc : &RefCell<color::Allocator>,
+                _: &actor::State, _ : &game::State
+               )
+        {
+            let window = self.window;
+            let mut calloc = calloc.borrow_mut();
+            let cpair = nc::COLOR_PAIR(calloc.get(color::VISIBLE_FG, color::BACKGROUND_BG));
+            nc::wbkgd(window, ' ' as nc::chtype | cpair as nc::chtype);
+            nc::werase(window);
+            nc::wmove(window, 0, 0);
+
+            nc::waddstr(window, "Long, long ago in a galaxy far, far away...\n\n");
+            nc::waddstr(window, "You can press '?' in the game for help.\n\n");
+            nc::waddstr(window, "Press anything to start.");
+            nc::wnoutrefresh(window);
+        }
+    }
+
 }
 
 pub struct CursesUI {
     calloc : RefCell<color::Allocator>,
     windows : Vec<Box<(window::Window + 'static)>>,
     log_window : Box<window::Log>,
+    intro_window : Box<window::Intro>,
+    help_window : Box<window::Help>,
+    mode : Mode,
 }
 
 impl CursesUI {
@@ -486,13 +566,33 @@ impl CursesUI {
         let log_window = Box::new(window::Log::new(
                 max_x - mid_x, max_y - mid_y, mid_x, mid_y
                 ));
+        let help_window = Box::new(window::Help::new(
+                max_x, max_y, 0, 0
+                ));
+        let intro_window = Box::new(window::Intro::new(
+                max_x, max_y, 0, 0
+                ));
 
         CursesUI {
             calloc: RefCell::new(color::Allocator::new()),
             windows: windows,
             log_window: log_window,
+            help_window: help_window,
+            intro_window: intro_window,
+            mode : Mode::Normal,
         }
     }
+
+    pub fn display_intro(&mut self) {
+        self.mode = Mode::Intro;
+    }
+
+}
+
+enum Mode {
+    Normal,
+    Help,
+    Intro,
 }
 
 use self::window::Window;
@@ -504,29 +604,65 @@ impl ui::UiFrontend for CursesUI {
         let mut max_y = 0;
         nc::getmaxyx(nc::stdscr, &mut max_y, &mut max_x);
 
-        nc::mv(max_y - 1, max_x - 1);
 
-        for w in &mut self.windows {
-            w.draw(&self.calloc, astate, gstate);
+        match self.mode {
+            Mode::Normal => {
+                for w in &mut self.windows {
+                    w.draw(&self.calloc, astate, gstate);
+                }
+                (*self.log_window).draw(&self.calloc, astate, gstate);
+            },
+            Mode::Help => {
+                (*self.help_window).draw(&self.calloc, astate, gstate);
+            },
+            Mode::Intro => {
+                (*self.intro_window).draw(&self.calloc, astate, gstate);
+            },
         }
-        (*self.log_window).draw(&self.calloc, astate, gstate);
+
+        nc::mv(max_y - 1, max_x - 1);
     }
 
-    fn input(&self) -> Option<Action> {
-        Some(match (nc::getch() as u8) as char {
-            'q' => Action::Exit,
-            'h' =>  Action::Game(game::Action::Turn(Angle::Left)),
-            'l' => Action::Game(game::Action::Turn(Angle::Right)),
-            'k'|'K' => Action::Game(game::Action::Move(Angle::Forward)),
-            'H'|'J' => Action::Game(game::Action::Move(Angle::Left)),
-            'u' => Action::Game(game::Action::Spin(Angle::Left)),
-            'i' => Action::Game(game::Action::Spin(Angle::Right)),
-            'L' => Action::Game(game::Action::Move(Angle::Right)),
-            'j' => Action::Game(game::Action::Move(Angle::Back)),
-            '.' => Action::Game(game::Action::Wait),
-            'o' => Action::AutoExplore,
-            _ => { return None }
-        })
+    fn input(&mut self) -> Option<Action> {
+        loop {
+            let ch = nc::getch();
+            match self.mode {
+                Mode::Intro => match ch {
+                    -1 => return None,
+                    _ => {
+                        self.mode = Mode::Normal;
+                        return Some(Action::Redraw);
+                    }
+                },
+                Mode::Normal => {
+                    return Some(match (ch as u8) as char {
+                        'q' => Action::Exit,
+                        'h' =>  Action::Game(game::Action::Turn(Angle::Left)),
+                        'l' => Action::Game(game::Action::Turn(Angle::Right)),
+                        'k'|'K' => Action::Game(game::Action::Move(Angle::Forward)),
+                        'H'|'J' => Action::Game(game::Action::Move(Angle::Left)),
+                        'u' => Action::Game(game::Action::Spin(Angle::Left)),
+                        'i' => Action::Game(game::Action::Spin(Angle::Right)),
+                        'L' => Action::Game(game::Action::Move(Angle::Right)),
+                        'j' => Action::Game(game::Action::Move(Angle::Back)),
+                        '.' => Action::Game(game::Action::Wait),
+                        'o' => Action::AutoExplore,
+                        '?' => {
+                            self.mode = Mode::Help;
+                            return Some(Action::Redraw);
+                        },
+                        _ => { return None }
+                    })
+                },
+                Mode::Help => match ch {
+                    -1 => return None,
+                    _ => {
+                        self.mode = Mode::Normal;
+                        return Some(Action::Redraw);
+                    }
+                },
+            }
+        }
     }
 
     fn event(&mut self, event : ui::Event, gstate : &game::State) {

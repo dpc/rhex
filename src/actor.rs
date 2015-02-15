@@ -12,12 +12,32 @@ pub enum Behavior {
     Grue,
 }
 
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
+pub struct Stats {
+    pub int : i32,
+    pub dex : i32,
+    pub str_ : i32,
+    pub max_hp : i32,
+    pub max_mp : i32,
+    pub hp: i32,
+    pub mp: i32,
+}
+
+
+impl Stats {
+    pub fn new() -> Stats {
+        Stats { int: 3, dex : 3, str_ : 3,
+        max_hp: 3, max_mp: 3, mp: 3, hp: 3 }
+    }
+}
+
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub struct State {
     pub pos : Coordinate,
     pub dir : Direction,
 
     pub behavior : Behavior,
+    pub stats : Stats,
 
     /// Currently visible
     pub visible: Visibility,
@@ -58,6 +78,7 @@ impl State {
         let mut state = State {
             behavior : behavior,
             pos: pos, dir: dir,
+            stats: Stats::new(),
             visible: visible,
             known: HashSet::new(),
             known_areas: HashSet::new(),
@@ -75,6 +96,7 @@ impl State {
         State {
             behavior : behavior,
             pos: pos, dir: dir,
+            stats: Stats::new(),
             visible: HashSet::new(),
             known: HashSet::new(),
             known_areas: HashSet::new(),
@@ -89,6 +111,7 @@ impl State {
             behavior: self.behavior,
             pos: self.pos,
             dir: self.dir,
+            stats: Stats::new(),
             visible: self.visible.clone(),
             known: self.known.clone(),
             known_areas: self.known_areas.clone(),
@@ -127,6 +150,7 @@ impl State {
                 behavior: self.behavior,
                 pos: pos,
                 dir: dir,
+                stats: self.stats,
                 visible: visible,
                 known: self.known.clone(),
                 known_areas: self.known_areas.clone(),
