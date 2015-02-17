@@ -2,7 +2,7 @@ use std::error::FromError;
 use std::sync::{Arc, mpsc};
 
 use actor;
-use game::{State, Action};
+use game::{State, Action, Stage};
 
 pub type Request = (Arc<actor::State>, Arc<State>);
 pub type Reply = (Arc<actor::State>, Action);
@@ -61,8 +61,10 @@ impl Controller {
                 }
             }
 
+            let mut actions = vec!();
+
             for (_, astate) in &*actors {
-                let (astate, action) = match astate.behavior {
+                let astate_and_action = match astate.behavior {
                     actor::Behavior::Player => {
                         try!(pl_rep.recv())
                     },
@@ -71,7 +73,17 @@ impl Controller {
                     },
                 };
 
-                self.state = Arc::new(self.state.act(&astate, action));
+                actions.push(astate_and_action);
+
+            }
+
+            // todo: shuffle?
+            for &(ref astate, action) in &actions {
+                self.state = Arc::new(self.state.act(Stage::ST1, &astate, action));
+            }
+
+            for &(ref astate, action) in &actions {
+                self.state = Arc::new(self.state.act(Stage::ST2, &astate, action));
             }
 
             self.state = Arc::new(self.state.tick());

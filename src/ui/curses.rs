@@ -18,7 +18,7 @@ use std::fmt;
 use std::fmt::Writer;
 
 mod locale {
-    use libc::{c_int,c_char};
+    use libc::{c_int, c_char};
     pub const LC_ALL: c_int = 6;
     extern "C" {
         pub fn setlocale(category: c_int, locale: *const c_char) -> *mut c_char;
@@ -341,6 +341,11 @@ impl CursesUI {
                     bg = color::LIGHTSOURCE;
                 }
 
+                if is_proper_coord && self.mode == Mode::Examine
+                    && self.examine_pos.unwrap().coord == c {
+                    bg = color::TARGET;
+                }
+
                 if c == astate.pos.coord + astate.pos.dir && is_proper_coord {
                     fg = color::TARGET;
                 }
@@ -493,19 +498,13 @@ impl CursesUI {
         nc::wnoutrefresh(window);
     }
 
-    fn draw_log(&mut self, astate : &actor::State, gstate : &game::State) {
-        if self.mode == Mode::Examine {
-            self.draw_examine(astate, gstate);
-            return;
-        }
-
+    fn draw_log(&mut self, _ : &actor::State, gstate : &game::State) {
         let window = self.log_window.window;
 
         let cpair = nc::COLOR_PAIR(self.calloc.borrow_mut().get(color::VISIBLE_FG, color::BACKGROUND_BG));
         nc::wbkgd(window, ' ' as nc::chtype | cpair as nc::chtype);
         nc::werase(window);
         nc::wmove(window, 0, 0);
-
 
         for i in &self.log {
 
@@ -584,7 +583,11 @@ impl ui::UiFrontend for CursesUI {
         match self.mode {
             Mode::Normal|Mode::Examine => {
                 self.draw_map(astate, gstate);
-                self.draw_log(astate, gstate);
+                if self.mode == Mode::Normal {
+                    self.draw_log(astate, gstate);
+                } else {
+                    self.draw_examine(astate, gstate);
+                }
                 self.draw_stats(astate, gstate);
             },
             Mode::Help => {
@@ -649,7 +652,7 @@ impl ui::UiFrontend for CursesUI {
                     let pos = self.examine_pos.unwrap();
 
                     match ch as u8 as char {
-                        'x' => {
+                        'x' | 'q' => {
                             self.examine_pos = None;
                             self.mode = Mode::Normal;
                         },

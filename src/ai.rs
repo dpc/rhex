@@ -25,7 +25,7 @@ fn closest_reachable<F>(gstate : &game::State, start : Coordinate, max_distance 
 {
     let mut bfs = bfs::Traverser::new(
         |pos| pos == start || (gstate.tile_map_or(pos, false, |t| t.is_passable())
-                               && pos.distance(start) < max_distance && !gstate.occupied(pos)),
+                               && pos.distance(start) < max_distance && !gstate.is_occupied(pos)),
                                cond,
                                start
                                );
@@ -66,7 +66,7 @@ fn pony_follow(astate : &actor::State, gstate : &game::State) -> game::Action {
         let player_pos = if let Some((dst, _)) = player_pos {
             let distance = dst.distance(start);
             if distance < 3 {
-                closest_reachable(gstate, start, 10, |pos| pos.distance(dst) == 3 && gstate.passable(pos))
+                closest_reachable(gstate, start, 10, |pos| pos.distance(dst) == 3 && gstate.is_passable(pos))
             } else if distance < 5 {
                 None
             } else {

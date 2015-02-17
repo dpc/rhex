@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 use hex2d::{Coordinate, Angle, Position, ToCoordinate};
-use game;
+use game::{self, Action};
 use hex2dext::algo;
 
 type Visibility = HashSet<Coordinate>;
@@ -127,40 +127,18 @@ impl State {
         self.known.contains(&pos)
     }
 
-    pub fn act(&self, gstate : &game::State, action : game::Action) -> State {
-        let pos = match action {
-            game::Action::Wait => self.pos,
-            game::Action::Turn(a) => self.pos + a,
-            game::Action::Move(a) => self.pos + (self.pos.dir + a).to_coordinate(),
-            game::Action::Spin(a) => self.pos + (self.pos.dir + a).to_coordinate() +
-                                      match a {
-                                          Angle::Right => Angle::Left,
-                                          Angle::Left => Angle::Right,
-                                          _ => return self.clone(),
-                                      },
-        };
-
-        let tile_type =  gstate.tile_map_or(pos.coord, game::tile::Wall, |t| t.type_);
-        if self.pos.coord == pos.coord || (tile_type.is_passable() && !gstate.actors.contains_key(&pos.coord)) {
-            let visible = calculate_los(pos, gstate);
-
-            let mut state = State {
-                behavior: self.behavior,
-                pos: pos,
-                stats: self.stats,
-                visible: visible,
-                known: self.known.clone(),
-                known_areas: self.known_areas.clone(),
-                discovered: HashSet::new(),
-                discovered_areas: HashSet::new(),
-                light: self.light,
-            };
-
-            state.postprocess_visibile(gstate);
-
-            state
-        } else {
-            self.clone()
+    pub fn pos_after_action(&self, action : Action) -> Position {
+        let pos = self.pos;
+        match action {
+            Action::Wait => pos,
+            Action::Turn(a) => pos + a,
+            Action::Move(a) => pos + (pos.dir + a).to_coordinate(),
+            Action::Spin(a) => pos + (pos.dir + a).to_coordinate() +
+                match a {
+                    Angle::Right => Angle::Left,
+                    Angle::Left => Angle::Right,
+                    _ => return pos,
+                },
         }
     }
 
@@ -189,6 +167,34 @@ impl State {
 
         self.discovered_areas = discovered_areas;
         self.discovered = discovered;
+    }
+
+    pub fn hit(&self) -> State {
+        let mut state = self.clone();
+
+        state.stats.hp -= 1;
+
+        return state;
+    }
+
+    pub fn change_position(&self, new_pos : Position, gstate : &game::State) -> State {
+        let visible = calculate_los(new_pos, gstate);
+
+        let mut state = State {
+            behavior: self.behavior,
+            pos: new_pos,
+            stats: self.stats,
+            visible: visible,
+            known: self.known.clone(),
+            known_areas: self.known_areas.clone(),
+            discovered: HashSet::new(),
+            discovered_areas: HashSet::new(),
+            light: self.light,
+        };
+
+        state.postprocess_visibile(gstate);
+
+        state
     }
 
     pub fn is_player(&self) -> bool {

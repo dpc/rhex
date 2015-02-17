@@ -76,7 +76,7 @@ impl<U : UiFrontend> Ui<U> {
 
                 let ndir = astate.pos.coord.direction_to_cw(neigh).expect("bfs gave me trash");
                 if ndir == astate.pos.dir {
-                    if gstate.occupied(neigh) {
+                    if gstate.is_occupied(neigh) {
                         AutoExploreAction::Blocked
                     } else {
                         AutoExploreAction::Action(game::Action::Move(hex2d::Angle::Forward))

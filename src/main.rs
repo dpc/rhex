@@ -12,6 +12,8 @@ extern crate "hex2d-dpcext" as hex2dext;
 extern crate libc;
 extern crate rand;
 extern crate time;
+#[macro_use]
+extern crate log;
 
 use std::sync::mpsc;
 use std::thread;
@@ -26,9 +28,9 @@ mod generate;
 
 pub fn main() {
 
+
     let state = game::State::new();
     let state = state.spawn_player();
-    let state = state.spawn_monster();
     let state = state.spawn_pony(Coordinate::new(-1, 0));
     let mut controller = game::Controller::new(state);
 
