@@ -48,6 +48,8 @@ impl Controller {
                ) -> Result<(), Error>
     {
         loop {
+
+            self.state = Arc::new(self.state.tick());
             let actors = self.state.actors.clone();
 
             for (_, actor) in &*actors {
@@ -64,7 +66,7 @@ impl Controller {
             let mut actions = vec!();
 
             for (_, astate) in &*actors {
-                let astate_and_action = match astate.behavior {
+                let (astate, action) = match astate.behavior {
                     actor::Behavior::Player => {
                         try!(pl_rep.recv())
                     },
@@ -73,20 +75,18 @@ impl Controller {
                     },
                 };
 
-                actions.push(astate_and_action);
+                actions.push((astate.pos.coord, action));
 
             }
 
             // todo: shuffle?
-            for &(ref astate, action) in &actions {
-                self.state = Arc::new(self.state.act(Stage::ST1, &astate, action));
+            for &(acoord, action) in &actions {
+                self.state = Arc::new(self.state.act(Stage::ST1, acoord, action));
             }
 
-            for &(ref astate, action) in &actions {
-                self.state = Arc::new(self.state.act(Stage::ST2, &astate, action));
+            for &(acoord, action) in &actions {
+                self.state = Arc::new(self.state.act(Stage::ST2, acoord, action));
             }
-
-            self.state = Arc::new(self.state.tick());
         }
     }
 

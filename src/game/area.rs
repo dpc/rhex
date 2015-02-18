@@ -2,6 +2,8 @@ use hex2d as h2d;
 
 use std::fmt;
 
+pub use self::Type::*;
+
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub enum Type {
     Room(u32),

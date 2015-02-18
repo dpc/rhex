@@ -7,6 +7,7 @@ use ncurses as nc;
 
 use super::Action;
 use game;
+use game::area;
 use actor::{self, Behavior};
 use ui;
 
@@ -281,21 +282,14 @@ impl CursesUI {
                         continue;
                     }
 
-                    let (t1, t2) = match (
-                        gstate.tile_map(c1, |t| t.type_),
-                        gstate.tile_map(c2, |t| t.type_)
-                        ) {
-                        (Some(t1), Some(t2)) => (t1, t2),
-                        (Some(t1), None) => (t1, t1),
-                        (None, Some(t2)) => (t2, t2),
-                        (None, None) => (tile::Wall, tile::Wall),
-                    };
+                    let (e1, e2) = (
+                        gstate.tile_map_or(c1, tile::Wall, |t| t.type_).ascii_expand(),
+                        gstate.tile_map_or(c2, tile::Wall, |t| t.type_).ascii_expand()
+                        );
 
-                    let tt = if !(t1.ascii_expand() && t2.ascii_expand()) {
-                        None
-                    } else {
-                        Some(t1)
-                    };
+                    let c = Some(if e1 > e2 { c1 } else { c2 });
+
+                    let tt = c.map_or(None, |c| gstate.tile_map_or(c, Some(tile::Wall), |t| Some(t.type_)));
 
                     let visible = astate.sees(c1) && astate.sees(c2);
 
@@ -308,10 +302,17 @@ impl CursesUI {
                     } else {
                         match tt {
                             Some(tile::Empty) => {
-                                (color::EMPTY_FG, color::EMPTY_BG, self.dot)
+                                (
+                                    color::EMPTY_FG, color::EMPTY_BG,
+                                    if is_proper_coord { self.dot } else { " " }
+                                 )
                             },
                             Some(tile::Wall) => {
                                 (color::WALL_FG, color::WALL_BG, "#")
+                            },
+                            Some(tile::Door(open)) => {
+                                (color::WALL_FG, color::WALL_BG,
+                                 if open { "_" } else { "+" })
                             },
                             Some(tile::Tree) => {
                                 (color::TREE_FG, color::TREE_BG, "T")
@@ -453,7 +454,8 @@ impl CursesUI {
             return "Unknown".to_string();
         }
 
-        let tile = gstate.tile_map_or(coord, tile::Wall, |t| t.type_);
+        let tile_type = gstate.tile_map_or(coord, tile::Wall, |t| t.type_);
+        let tile = gstate.tile_map_or(coord, None, |t| Some(t.clone()));
         let actor =
             if astate.sees(coord) {
                 gstate.actor_map_or(coord, None, &|a| Some(match a.behavior {
@@ -466,12 +468,18 @@ impl CursesUI {
                 None
             };
 
-        match (tile, actor) {
+        match (tile_type, actor) {
             (tile::Wall, _) => {
-                "A wall".to_string()
+                "a wall".to_string()
+            },
+            (tile::Door(_), _) => {
+                "door".to_string()
             },
             (tile::Empty, None) => {
-                "Empty".to_string()
+                match tile.and_then(|t| t.area).and_then(|a| Some(a.type_)) {
+                    Some(area::Room(_)) => "room".to_string(),
+                    None => "nothing".to_string()
+                }
             },
             (tile::Empty, Some(descr)) => {
                 descr

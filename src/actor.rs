@@ -63,35 +63,14 @@ fn calculate_los(pos : Position, gstate : &game::State) -> Visibility {
                 let _ = visibility.insert(coord);
             }
         },
-        10, pos.coord, &[pos.dir]
+        10, pos.coord, &[pos.dir, pos.dir + Angle::Left, pos.dir + Angle::Right]
         );
 
     visibility
 }
 
 impl State {
-    pub fn new(behavior : Behavior, pos : Position, gstate : &game::State) -> State {
-
-        let visible = calculate_los(pos, gstate);
-
-        let mut state = State {
-            behavior : behavior,
-            pos: pos,
-            stats: Stats::new(),
-            visible: visible,
-            known: HashSet::new(),
-            known_areas: HashSet::new(),
-            discovered: HashSet::new(),
-            discovered_areas: HashSet::new(),
-            light: 0,
-        };
-
-        state.postprocess_visibile(gstate);
-
-        state
-    }
-
-    pub fn new_nolosyet(behavior : Behavior, pos : Position) -> State {
+    pub fn new(behavior : Behavior, pos : Position) -> State {
         State {
             behavior : behavior,
             pos: pos,
@@ -144,10 +123,12 @@ impl State {
 
     pub fn postprocess_visibile(&mut self, gstate : &game::State) {
 
+        let visible = calculate_los(self.pos, gstate);
+
         let mut discovered = HashSet::new();
         let mut discovered_areas = HashSet::new();
 
-        for i in &self.visible {
+        for i in &visible {
             if !self.known.contains(i) {
                 self.known.insert(*i);
                 discovered.insert(*i);
@@ -165,6 +146,7 @@ impl State {
             }
         }
 
+        self.visible = visible;
         self.discovered_areas = discovered_areas;
         self.discovered = discovered;
     }
@@ -177,24 +159,19 @@ impl State {
         return state;
     }
 
-    pub fn change_position(&self, new_pos : Position, gstate : &game::State) -> State {
-        let visible = calculate_los(new_pos, gstate);
-
-        let mut state = State {
+    pub fn change_position(&self, new_pos : Position) -> State {
+         State {
             behavior: self.behavior,
             pos: new_pos,
             stats: self.stats,
-            visible: visible,
+            visible: self.visible.clone(),
             known: self.known.clone(),
             known_areas: self.known_areas.clone(),
             discovered: HashSet::new(),
             discovered_areas: HashSet::new(),
             light: self.light,
-        };
+        }
 
-        state.postprocess_visibile(gstate);
-
-        state
     }
 
     pub fn is_player(&self) -> bool {

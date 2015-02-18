@@ -5,6 +5,7 @@ pub use super::area;
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub enum Type {
     Wall,
+    Door(bool),
     Tree,
     Empty,
 }
@@ -44,22 +45,25 @@ impl Type {
             Wall => false,
             Tree => false,
             Empty => true,
+            Door(_) => true,
         }
     }
 
     pub fn opaqueness(&self) -> i32 {
         match *self {
             Wall => 1000,
+            Door(open) => if open { 1 } else { 1000 },
             Tree => 4,
             Empty => 1,
         }
     }
 
-    pub fn ascii_expand(&self) -> bool {
+    pub fn ascii_expand(&self) -> i32 {
         match *self {
-            Wall => true,
-            Tree => true,
-            Empty => false,
+            Wall => 9,
+            Door(open) => if open { 1 } else { 0 },
+            Tree => 8,
+            Empty => 10,
         }
     }
 }

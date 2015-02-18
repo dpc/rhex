@@ -8,6 +8,8 @@ use actor;
 use generate;
 use hex2dext::algo;
 
+use self::tile::{Tile};
+
 pub mod area;
 pub mod tile;
 pub mod controller;
@@ -31,6 +33,7 @@ pub enum Stage {
     ST2,
 }
 
+
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub struct State {
     pub actors: Arc<Actors>,
@@ -46,17 +49,13 @@ impl State {
         let cp = Coordinate::new(0, 0);
         let (map, actors) = generate::DungeonGenerator.generate_map(cp, 400);
 
-        let mut state = State {
+        State {
             actors: Arc::new(actors),
             actors_done: Arc::new(HashSet::new()),
             map: Arc::new(map),
             turn: 0,
             light_map: Arc::new(HashMap::new()),
-        };
-
-        state.recalculate_light_map();
-
-        state
+        }
     }
 
     pub fn recalculate_light_map(&mut self) {
@@ -129,7 +128,7 @@ impl State {
         let pos = Position::new(coord, Direction::XY);
 
         actors.insert(pos.coord, Arc::new(
-                actor::State::new(behavior, pos, self).add_light(light)
+                actor::State::new(behavior, pos).add_light(light)
                 ));
 
         State {
@@ -170,16 +169,34 @@ impl State {
             actors.remove(&new_pos.coord);
             actors.insert(target_new_state.pos.coord, Arc::new(target_new_state));
 
-            actors_done.insert(new_pos.coord);
+            actors_done.insert(astate.pos.coord);
 
             let ret = State {
                 actors: Arc::new(actors),
                 actors_done: Arc::new(actors_done),
                 map: self.map.clone(),
                 turn: self.turn,
-                light_map: Arc::new(HashMap::new()),
+                light_map: self.light_map.clone(),
             };
             Some(ret)
+        } else if self.tile_map_or(new_pos.coord, false, |t| t.type_ == tile::Door(false)) {
+
+            if stage != Stage::ST2 {
+                return None
+            }
+
+            // open the door
+            let mut map = self.map.clone().make_unique().clone();
+
+            map.insert(new_pos.coord, Tile::new(tile::Door(true)));
+
+            Some(State {
+                actors: self.actors.clone(),
+                actors_done: self.actors_done.clone(),
+                map: Arc::new(map),
+                turn: self.turn,
+                light_map: self.light_map.clone(),
+            })
         } else if astate.pos.coord == new_pos.coord || self.is_passable(new_pos.coord) {
             // we've moved
             if stage != Stage::ST2 {
@@ -187,7 +204,7 @@ impl State {
             }
 
             let mut actors = self.actors.clone().make_unique().clone();
-            let actor_new_state = astate.change_position(new_pos, self);
+            let actor_new_state = astate.change_position(new_pos);
 
             actors.remove(&astate.pos.coord);
             actors.insert(actor_new_state.pos.coord, Arc::new(actor_new_state));
@@ -197,7 +214,7 @@ impl State {
                 actors_done: self.actors_done.clone(),
                 map: self.map.clone(),
                 turn: self.turn,
-                light_map: Arc::new(HashMap::new()),
+                light_map: self.light_map.clone(),
             };
             Some(ret)
         } else {
@@ -207,11 +224,13 @@ impl State {
     }
 
     pub fn act(&self, stage : Stage,
-               astate : &actor::State, action : Action) -> State {
+               acoord : Coordinate, action : Action) -> State {
 
-        if self.actors_done.contains(&astate.pos.coord) {
+        if self.actors_done.contains(&acoord) {
             return self.clone()
         }
+
+        let astate = &self.actors[acoord];
 
         if let Some(state) = self.actor_act(stage, astate, action) {
             state
@@ -222,7 +241,6 @@ impl State {
 
     /// Advance one turn (increase the turn counter) and do some maintenance
     pub fn tick(&self) -> State {
-
         // filter out the dead
         // TODO: Make this work
         // let actors = self.actors.make_unique().iter().filter(|&(ref coord, ref a)| a.stats.hp > 0).cloned().collect();
@@ -239,9 +257,25 @@ impl State {
             actors_done: Arc::new(HashSet::new()),
             map: self.map.clone(),
             turn: self.turn + 1,
-            light_map: self.light_map.clone(),
+            light_map: Arc::new(HashMap::new()),
         };
         ret.recalculate_light_map();
+
+        let mut actors = HashMap::new();
+
+        for (&coord, a) in ret.actors.iter() {
+                let mut a = a.clone().make_unique().clone();
+                a.postprocess_visibile(&ret);
+                actors.insert(coord, Arc::new(a));
+        }
+
+        let ret = State {
+            actors: Arc::new(actors),
+            actors_done: Arc::new(HashSet::new()),
+            map: ret.map.clone(),
+            turn: ret.turn,
+            light_map: ret.light_map.clone(),
+        };
         ret
     }
 
@@ -255,9 +289,10 @@ impl State {
         self.map.get(&pos)
     }
 
+    /*
     pub fn tile_map<R, F : Fn(&tile::Tile) -> R>(&self, pos : Coordinate, f : F) -> Option<R> {
         self.map.get(&pos).map(|a| f(a))
-    }
+    }*/
 
     pub fn tile_map_or<R, F : Fn(&tile::Tile) -> R>(&self, pos : Coordinate, def: R, f : F) -> R {
         self.map.get(&pos).map_or(def, |a| f(a))
