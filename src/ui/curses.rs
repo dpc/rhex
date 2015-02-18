@@ -1,4 +1,5 @@
 use std::cell::RefCell;
+use std::collections::HashMap;
 use std::collections::ring_buf::RingBuf;
 use std;
 use std::ffi::AsOsStr;
@@ -63,7 +64,9 @@ pub mod color {
     pub const TREE_FG : [u8; 3] = CHAR_FG;
     pub const TREE_BG : [u8; 3] = EMPTY_BG;
 
-    pub const TARGET : u8 = 52;
+    pub const TARGET_FG : u8 = 196;
+    pub const TARGET_SELF_FG : u8 = 20;
+    pub const TARGET_ENEMY_FG : u8 = 196;
     pub const LIGHTSOURCE : u8 = 227;
     pub const LOG_1_FG : u8 = GRAY[25];
     pub const LOG_2_FG : u8 = GRAY[21];
@@ -218,6 +221,10 @@ impl CursesUI {
 
         let window = self.map_window.window;
 
+        let actors_aheads : HashMap<Coordinate, Coordinate> =
+            gstate.actors.iter().map(|(_, a)| (a.pos.coord + a.pos.dir, a.pos.coord)).collect();
+        let astate_ahead = astate.pos.coord + astate.pos.dir;
+
         /* Get the screen bounds. */
         let mut max_x = 0;
         let mut max_y = 0;
@@ -259,11 +266,7 @@ impl CursesUI {
 
                 let is_proper_coord = off == (0, 0);
 
-                let (visible, tt, t, light) = if is_proper_coord {
-
-                    if !astate.knows(c) {
-                        continue;
-                    }
+                let (visible, mut draw, tt, t, light) = if is_proper_coord {
 
                     let t = gstate.map.get(&c);
 
@@ -272,15 +275,13 @@ impl CursesUI {
                         None => tile::Wall,
                     };
 
-                    (astate.sees(c), Some(tt), t, gstate.light(c))
+                    (astate.sees(c), astate.knows(c), Some(tt), t, gstate.light(c))
                 } else {
                     // Paint a glue characters between two real characters
                     let c1 = c;
                     let (c2, _) = Coordinate::from_pixel_integer(SPACING, (cvx + 1, cvy));
 
-                    if !astate.knows(c1) || !astate.knows(c2) {
-                        continue;
-                    }
+                    let knows = astate.knows(c1) && astate.knows(c2);
 
                     let (e1, e2) = (
                         gstate.tile_map_or(c1, tile::Wall, |t| t.type_).ascii_expand(),
@@ -293,10 +294,10 @@ impl CursesUI {
 
                     let visible = astate.sees(c1) && astate.sees(c2);
 
-                    (visible, tt, None, (gstate.light(c1) + gstate.light(c2)) / 2)
+                    (visible, knows, tt, None, (gstate.light(c1) + gstate.light(c2)) / 2)
                 };
 
-                let (fg, bg, glyph) =
+                let (fg, bg, mut glyph) =
                     if is_proper_coord && astate.sees(c) && gstate.actors.contains_key(&c) {
                         (color::CHAR_FG, color::CHAR_BG, "@")
                     } else {
@@ -342,27 +343,50 @@ impl CursesUI {
                     bg = color::LIGHTSOURCE;
                 }
 
-                if is_proper_coord && self.mode == Mode::Examine
-                    && self.examine_pos.unwrap().coord == c {
-                    bg = color::TARGET;
+                if self.mode == Mode::Examine {
+                    if is_proper_coord && self.examine_pos.unwrap().coord == c {
+                            if astate.knows(c) {
+                                fg = color::TARGET_SELF_FG;
+                            } else {
+                                draw = true;
+                                glyph = " ";
+                                bg = color::TARGET_SELF_FG;
+                            }
+                    }
+                } else {
+                    if is_proper_coord && actors_aheads.contains_key(&c) {
+                        if astate.sees(*actors_aheads.get(&c).unwrap()) {
+                            let color = if c == astate_ahead {
+                                color::TARGET_SELF_FG
+                            } else {
+                                color::TARGET_ENEMY_FG
+                            };
+
+                            if astate.knows(c) {
+                                fg = color;
+                            } else {
+                                draw = true;
+                                glyph = " ";
+                                bg = color;
+                            }
+                        }
+                    }
                 }
 
-                if c == astate.pos.coord + astate.pos.dir && is_proper_coord {
-                    fg = color::TARGET;
-                }
+                if draw {
+                    let cpair = nc::COLOR_PAIR(calloc.get(fg, bg));
 
-                let cpair = nc::COLOR_PAIR(calloc.get(fg, bg));
+                    if visible {
+                        nc::wattron(window, nc::A_BOLD() as i32);
+                    }
 
-                if visible {
-                    nc::wattron(window, nc::A_BOLD() as i32);
-                }
+                    nc::wattron(window, cpair as i32);
+                    nc::mvwaddstr(window, vy, vx, glyph);
+                    nc::wattroff(window, cpair as i32);
 
-                nc::wattron(window, cpair as i32);
-                nc::mvwaddstr(window, vy, vx, glyph);
-                nc::wattroff(window, cpair as i32);
-
-                if visible {
-                    nc::wattroff(window, nc::A_BOLD() as i32);
+                    if visible {
+                        nc::wattroff(window, nc::A_BOLD() as i32);
+                    }
                 }
 
             }

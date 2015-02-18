@@ -1,5 +1,7 @@
 use std::error::FromError;
 use std::sync::{Arc, mpsc};
+use rand;
+use rand::Rng;
 
 use actor;
 use game::{State, Action, Stage};
@@ -79,7 +81,8 @@ impl Controller {
 
             }
 
-            // todo: shuffle?
+            rand::thread_rng().shuffle(&mut actions);
+
             for &(acoord, action) in &actions {
                 self.state = Arc::new(self.state.act(Stage::ST1, acoord, action));
             }
