@@ -55,13 +55,13 @@ pub mod color {
     pub const VISIBLE_FG : u8 = WHITE;
 
     // in light, shaded (barely visible), out of sight
-    pub const EMPTY_FG : [u8; 3] = [GRAY[17], GRAY[12] , GRAY[5]];
-    pub const EMPTY_BG : [u8; 3] = [GRAY[23], GRAY[20] , GRAY[6]];
+    pub const EMPTY_FG : [u8; 3] = [GRAY[17], GRAY[12], GRAY[5]];
+    pub const EMPTY_BG : [u8; 3] = [GRAY[24], GRAY[22], GRAY[6]];
     pub const WALL_FG : [u8; 3] = [BLACK, GRAY[1] , GRAY[2]];
     pub const WALL_BG : [u8; 3] = [GRAY[14], GRAY[8] , GRAY[4]];
-    pub const CHAR_SELF_FG : [u8; 3] = [18, 18 , 18];
-    pub const CHAR_ALLY_FG : [u8; 3] = [22, 22, 22];
-    pub const CHAR_ENEMY_FG : [u8; 3] = [52, 52, 52];
+    pub const CHAR_SELF_FG : [u8; 3] = [19, 18, 17];
+    pub const CHAR_ALLY_FG : [u8; 3] = [28, 22, 23];
+    pub const CHAR_ENEMY_FG : [u8; 3] = [124, 88, 52];
     pub const CHAR_BG : [u8; 3] = EMPTY_BG;
     pub const TREE_FG : [u8; 3] = CHAR_ALLY_FG;
     pub const TREE_BG : [u8; 3] = EMPTY_BG;
@@ -334,7 +334,7 @@ impl CursesUI {
                     };
 
 
-                let (mut fg, mut bg) = if !visible {
+                let (mut fg, mut bg) = if !visible || light == 0 {
                     (fg[2], bg[2])
                 } else if light < 3 {
                     (fg[1], bg[1])
