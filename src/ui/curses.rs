@@ -131,10 +131,10 @@ impl Drop for Window {
 
 pub struct CursesUI {
     calloc : RefCell<color::Allocator>,
-    map_window : Window,
-    log_window : Window,
-    stats_window : Window,
-    fs_window : Window, /* full screen */
+    map_window : Option<Window>,
+    log_window : Option<Window>,
+    stats_window : Option<Window>,
+    fs_window : Option<Window>,
     mode : Mode,
     log : RingBuf<LogEntry>,
     examine_pos : Option<Position>,
@@ -173,6 +173,24 @@ impl CursesUI {
 
         nc::doupdate();
 
+        let mut ret = CursesUI {
+            calloc: RefCell::new(color::Allocator::new()),
+            map_window: None,
+            stats_window: None,
+            log_window: None,
+            fs_window: None,
+            mode : Mode::Normal,
+            examine_pos : None,
+            dot: if term_putty { NORMAL_DOT } else { UNICODE_DOT },
+            log : RingBuf::new(),
+        };
+
+        ret.resize();
+        ret
+    }
+
+    fn resize(&mut self) {
+
         let mut max_x = 0;
         let mut max_y = 0;
         nc::getmaxyx(nc::stdscr, &mut max_y, &mut max_x);
@@ -193,17 +211,10 @@ impl CursesUI {
                 max_x, max_y, 0, 0
                 );
 
-        CursesUI {
-            calloc: RefCell::new(color::Allocator::new()),
-            map_window: map_window,
-            stats_window: stats_window,
-            log_window: log_window,
-            fs_window: fs_window,
-            mode : Mode::Normal,
-            examine_pos : None,
-            dot: if term_putty { NORMAL_DOT } else { UNICODE_DOT },
-            log : RingBuf::new(),
-        }
+        self.map_window = Some(map_window);
+        self.stats_window = Some(stats_window);
+        self.log_window = Some(log_window);
+        self.fs_window = Some(fs_window);
     }
 
     pub fn log(&mut self, s : String, gstate : &game::State) {
@@ -221,7 +232,7 @@ impl CursesUI {
     {
         let mut calloc = self.calloc.borrow_mut();
 
-        let window = self.map_window.window;
+        let window = self.map_window.as_ref().unwrap().window;
 
         let actors_aheads : HashMap<Coordinate, Coordinate> =
             gstate.actors.iter().map(|(_, a)| (a.pos.coord + a.pos.dir, a.pos.coord)).collect();
@@ -410,7 +421,7 @@ impl CursesUI {
     }
 
     fn draw_stats(&mut self, astate : &actor::State, gstate : &game::State) {
-        let window = self.stats_window.window;
+        let window = self.stats_window.as_ref().unwrap().window;
 
         let mut calloc = self.calloc.borrow_mut();
         let cpair = nc::COLOR_PAIR(calloc.get(color::VISIBLE_FG, color::BACKGROUND_BG));
@@ -529,7 +540,7 @@ impl CursesUI {
     }
 
     fn draw_examine(&self, astate : &actor::State, gstate : &game::State) {
-        let window = self.log_window.window;
+        let window = self.log_window.as_ref().unwrap().window;
 
         let pos = self.examine_pos.expect("examine_pos should have not been None");
 
@@ -545,7 +556,7 @@ impl CursesUI {
     }
 
     fn draw_log(&mut self, _ : &actor::State, gstate : &game::State) {
-        let window = self.log_window.window;
+        let window = self.log_window.as_ref().unwrap().window;
 
         let cpair = nc::COLOR_PAIR(self.calloc.borrow_mut().get(color::VISIBLE_FG, color::BACKGROUND_BG));
         nc::wbkgd(window, ' ' as nc::chtype | cpair as nc::chtype);
@@ -571,7 +582,7 @@ impl CursesUI {
 
     fn draw_intro(&mut self)
     {
-        let window = self.fs_window.window;
+        let window = self.fs_window.as_ref().unwrap().window;
         let mut calloc = self.calloc.borrow_mut();
         let cpair = nc::COLOR_PAIR(calloc.get(color::VISIBLE_FG, color::BACKGROUND_BG));
         nc::wbkgd(window, ' ' as nc::chtype | cpair as nc::chtype);
@@ -585,7 +596,7 @@ impl CursesUI {
     }
 
     fn draw_help( &mut self) {
-        let window = self.fs_window.window;
+        let window = self.fs_window.as_ref().unwrap().window;
         let mut calloc = self.calloc.borrow_mut();
         let cpair = nc::COLOR_PAIR(calloc.get(color::VISIBLE_FG, color::BACKGROUND_BG));
         nc::wbkgd(window, ' ' as nc::chtype | cpair as nc::chtype);
@@ -647,9 +658,14 @@ impl ui::UiFrontend for CursesUI {
         nc::mv(max_y - 1, max_x - 1);
     }
 
+    
     fn input(&mut self) -> Option<Action> {
         loop {
             let ch = nc::getch();
+            if ch == nc::KEY_RESIZE {
+                self.resize();
+                return Some(Action::Redraw);
+            }
             match self.mode {
                 Mode::Intro => match ch {
                     -1 =>
