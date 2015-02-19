@@ -28,6 +28,10 @@ This project is based on more general and useful: [hex2d-rs - Hexagonal grid map
 
 [ss]: http://i.imgur.com/LI0FOPF.png
 
+[Watch rhex demo video][screencast]
+
+[screencast]: https://asciinema.org/a/16712
+
 ## Building
 
 	git clone https://github.com/dpc/rhex.git
