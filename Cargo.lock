@@ -2,11 +2,11 @@
 name = "rhex"
 version = "0.0.1"
 dependencies = [
- "hex2d 0.0.7 (registry+https://github.com/rust-lang/crates.io-index)",
+ "hex2d 0.0.9 (registry+https://github.com/rust-lang/crates.io-index)",
  "hex2d-dpcext 0.0.3 (registry+https://github.com/rust-lang/crates.io-index)",
- "log 0.2.3 (registry+https://github.com/rust-lang/crates.io-index)",
+ "log 0.2.4 (registry+https://github.com/rust-lang/crates.io-index)",
  "ncurses 5.71.1 (git+https://github.com/jeaye/ncurses-rs.git)",
- "num 0.1.12 (registry+https://github.com/rust-lang/crates.io-index)",
+ "num 0.1.13 (registry+https://github.com/rust-lang/crates.io-index)",
  "rand 0.1.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "time 0.1.17 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
@@ -18,10 +18,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
 name = "hex2d"
-version = "0.0.7"
+version = "0.0.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
- "num 0.1.12 (registry+https://github.com/rust-lang/crates.io-index)",
+ "num 0.1.13 (registry+https://github.com/rust-lang/crates.io-index)",
  "rand 0.1.2 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
@@ -30,8 +30,8 @@ name = "hex2d-dpcext"
 version = "0.0.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
- "hex2d 0.0.7 (registry+https://github.com/rust-lang/crates.io-index)",
- "num 0.1.12 (registry+https://github.com/rust-lang/crates.io-index)",
+ "hex2d 0.0.9 (registry+https://github.com/rust-lang/crates.io-index)",
+ "num 0.1.13 (registry+https://github.com/rust-lang/crates.io-index)",
  "rand 0.1.2 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
@@ -42,7 +42,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
 name = "log"
-version = "0.2.3"
+version = "0.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
@@ -52,10 +52,11 @@ source = "git+https://github.com/jeaye/ncurses-rs.git#89ad3e1b0879d734650d093780
 
 [[package]]
 name = "num"
-version = "0.1.12"
+version = "0.1.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
- "rustc-serialize 0.2.13 (registry+https://github.com/rust-lang/crates.io-index)",
+ "rand 0.1.2 (registry+https://github.com/rust-lang/crates.io-index)",
+ "rustc-serialize 0.2.14 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -64,12 +65,12 @@ version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "libc 0.1.2 (registry+https://github.com/rust-lang/crates.io-index)",
- "log 0.2.3 (registry+https://github.com/rust-lang/crates.io-index)",
+ "log 0.2.4 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
 name = "rustc-serialize"
-version = "0.2.13"
+version = "0.2.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]

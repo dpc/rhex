@@ -17,7 +17,7 @@ use hex2d::{Angle, IntegerSpacing, Coordinate, ToCoordinate, Position};
 use game::tile;
 
 use std::fmt;
-use std::fmt::Writer;
+use std::fmt::Write;
 
 mod locale {
     use libc::{c_int, c_char};
