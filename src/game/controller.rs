@@ -1,10 +1,12 @@
-use std::error::FromError;
 use std::sync::{Arc, mpsc};
 use rand;
 use rand::Rng;
+use std::old_io::Timer;
+use std::time::Duration;
 
 use actor;
 use game::{State, Action, Stage};
+use error::Error;
 
 pub type Request = (Arc<actor::State>, Arc<State>);
 pub type Reply = (Arc<actor::State>, Action);
@@ -17,23 +19,6 @@ pub struct Controller {
     state : Arc<State>,
 }
 
-/// Possible errors that could terminate Controller
-pub enum Error {
-    Receive(mpsc::RecvError),
-    Transmit(mpsc::SendError<Request>),
-}
-
-impl FromError<mpsc::RecvError> for Error {
-    fn from_error(err: mpsc::RecvError) -> Error {
-        Error::Receive(err)
-    }
-}
-
-impl FromError<mpsc::SendError<Request>> for Error {
-    fn from_error(err: mpsc::SendError<Request>) -> Error {
-        Error::Transmit(err)
-    }
-}
 
 impl Controller {
     pub fn new(state : State) -> Controller {
@@ -47,8 +32,12 @@ impl Controller {
                pl_rep : mpsc::Receiver<Reply>,
                ai_req : mpsc::Sender<Request>,
                ai_rep : mpsc::Receiver<Reply>,
-               ) -> Result<(), Error>
+               ) -> Result<(), Error<Request>>
     {
+
+        let mut timer = Timer::new().unwrap();
+        let timer = timer.periodic(Duration::milliseconds(100));
+
         loop {
 
             self.state = Arc::new(self.state.tick());
@@ -63,6 +52,15 @@ impl Controller {
                         try!(ai_req.send((actor.clone(), self.state.clone())));
                     },
                 }
+            }
+
+            for astate in &*self.state.actors_dead {
+                match astate.behavior {
+                    actor::Behavior::Player => {
+                        try!(pl_req.send((astate.clone(), self.state.clone())));
+                    },
+                    _ => {},
+                };
             }
 
             let mut actions = vec!();
@@ -90,6 +88,7 @@ impl Controller {
             for &(acoord, action) in &actions {
                 self.state = Arc::new(self.state.act(Stage::ST2, acoord, action));
             }
+            timer.recv().unwrap();
         }
     }
 

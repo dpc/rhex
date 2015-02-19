@@ -59,12 +59,13 @@ pub mod color {
     pub const EMPTY_BG : [u8; 3] = [GRAY[23], GRAY[20] , GRAY[6]];
     pub const WALL_FG : [u8; 3] = [BLACK, GRAY[1] , GRAY[2]];
     pub const WALL_BG : [u8; 3] = [GRAY[14], GRAY[8] , GRAY[4]];
-    pub const CHAR_FG : [u8; 3] = [GRAY[1], GRAY[8] , GRAY[4]];
+    pub const CHAR_SELF_FG : [u8; 3] = [18, 18 , 18];
+    pub const CHAR_ALLY_FG : [u8; 3] = [22, 22, 22];
+    pub const CHAR_ENEMY_FG : [u8; 3] = [52, 52, 52];
     pub const CHAR_BG : [u8; 3] = EMPTY_BG;
-    pub const TREE_FG : [u8; 3] = CHAR_FG;
+    pub const TREE_FG : [u8; 3] = CHAR_ALLY_FG;
     pub const TREE_BG : [u8; 3] = EMPTY_BG;
 
-    pub const TARGET_FG : u8 = 196;
     pub const TARGET_SELF_FG : u8 = 20;
     pub const TARGET_ENEMY_FG : u8 = 196;
     pub const LIGHTSOURCE : u8 = 227;
@@ -167,9 +168,10 @@ impl CursesUI {
         nc::raw();
         nc::timeout(0);
         nc::flushinp();
-        nc::curs_set(nc::CURSOR_VISIBILITY::CURSOR_INVISIBLE);
 
         assert!(nc::has_colors());
+
+        nc::doupdate();
 
         let mut max_x = 0;
         let mut max_y = 0;
@@ -241,7 +243,7 @@ impl CursesUI {
             Mode::Examine => {
                 match self.examine_pos {
                     None => {
-                        self.examine_pos = Some(astate.pos);
+                        self.examine_pos = Some(astate.pos + astate.pos.dir.to_coordinate());
                         astate.pos.coord
                     },
                     Some(pos) => {
@@ -275,7 +277,7 @@ impl CursesUI {
                         None => tile::Wall,
                     };
 
-                    (astate.sees(c), astate.knows(c), Some(tt), t, gstate.light(c))
+                    (astate.sees(c) || astate.is_dead(), astate.knows(c), Some(tt), t, gstate.light(c))
                 } else {
                     // Paint a glue characters between two real characters
                     let c1 = c;
@@ -292,14 +294,21 @@ impl CursesUI {
 
                     let tt = c.map_or(None, |c| gstate.tile_map_or(c, Some(tile::Wall), |t| Some(t.type_)));
 
-                    let visible = astate.sees(c1) && astate.sees(c2);
+                    let visible = (astate.sees(c1) && astate.sees(c2)) || astate.is_dead();
 
                     (visible, knows, tt, None, (gstate.light(c1) + gstate.light(c2)) / 2)
                 };
 
+                let mut bold = false;
+                let occupied = gstate.is_occupied(c);
                 let (fg, bg, mut glyph) =
-                    if is_proper_coord && astate.sees(c) && gstate.actors.contains_key(&c) {
-                        (color::CHAR_FG, color::CHAR_BG, "@")
+                    if is_proper_coord && visible && occupied {
+                        let fg = match gstate.actor_map_or(c, Behavior::Grue, |a| a.behavior) {
+                            Behavior::Player => color::CHAR_SELF_FG,
+                            Behavior::Pony => color::CHAR_ALLY_FG,
+                            Behavior::Grue => color::CHAR_ENEMY_FG,
+                        };
+                        (fg, color::CHAR_BG, "@")
                     } else {
                         match tt {
                             Some(tile::Empty) => {
@@ -339,36 +348,41 @@ impl CursesUI {
                     }
                 }
 
-                if is_proper_coord && visible && gstate.actor_map_or(c, 0, &|a| a.light) > 0u32 {
+                if is_proper_coord && visible && gstate.actor_map_or(c, 0, |a| a.light) > 0u32 {
                     bg = color::LIGHTSOURCE;
                 }
 
                 if self.mode == Mode::Examine {
                     if is_proper_coord && self.examine_pos.unwrap().coord == c {
-                            if astate.knows(c) {
-                                fg = color::TARGET_SELF_FG;
-                            } else {
-                                draw = true;
-                                glyph = " ";
-                                bg = color::TARGET_SELF_FG;
-                            }
+                        bold = true;
+                        if astate.knows(c) {
+                            fg = color::TARGET_SELF_FG;
+                        } else {
+                            draw = true;
+                            glyph = " ";
+                            bg = color::TARGET_SELF_FG;
+                        }
                     }
                 } else {
-                    if is_proper_coord && actors_aheads.contains_key(&c) {
-                        if astate.sees(*actors_aheads.get(&c).unwrap()) {
-                            let color = if c == astate_ahead {
-                                color::TARGET_SELF_FG
-                            } else {
-                                color::TARGET_ENEMY_FG
-                            };
+                    if is_proper_coord && actors_aheads.contains_key(&c) &&
+                        astate.sees(*actors_aheads.get(&c).unwrap()) {
+                        bold = true;
+                        let color = if c == astate_ahead {
+                            color::TARGET_SELF_FG
+                        } else {
+                            color::TARGET_ENEMY_FG
+                        };
 
-                            if astate.knows(c) {
-                                fg = color;
-                            } else {
-                                draw = true;
-                                glyph = " ";
+                        if astate.knows(c) {
+                            if occupied {
                                 bg = color;
+                            } else {
+                                fg = color;
                             }
+                        } else {
+                            draw = true;
+                            glyph = " ";
+                            bg = color;
                         }
                     }
                 }
@@ -376,7 +390,7 @@ impl CursesUI {
                 if draw {
                     let cpair = nc::COLOR_PAIR(calloc.get(fg, bg));
 
-                    if visible {
+                    if bold {
                         nc::wattron(window, nc::A_BOLD() as i32);
                     }
 
@@ -384,7 +398,7 @@ impl CursesUI {
                     nc::mvwaddstr(window, vy, vx, glyph);
                     nc::wattroff(window, cpair as i32);
 
-                    if visible {
+                    if bold {
                         nc::wattroff(window, nc::A_BOLD() as i32);
                     }
                 }
@@ -481,8 +495,8 @@ impl CursesUI {
         let tile_type = gstate.tile_map_or(coord, tile::Wall, |t| t.type_);
         let tile = gstate.tile_map_or(coord, None, |t| Some(t.clone()));
         let actor =
-            if astate.sees(coord) {
-                gstate.actor_map_or(coord, None, &|a| Some(match a.behavior {
+            if astate.sees(coord) || astate.is_dead() {
+                gstate.actor_map_or(coord, None, |a| Some(match a.behavior {
                     Behavior::Pony => "A pony",
                     Behavior::Grue => "Toothless Grue",
                     Behavior::Player => "Yourself",
@@ -579,7 +593,7 @@ impl CursesUI {
         nc::wmove(window, 0, 0);
 
         nc::waddstr(window, "This game have no point (yet) and is incomplete. Sorry for that.\n\n");
-        nc::waddstr(window, "Just press one of: hjklui, or o. Especially o because it's cool.\n\n");
+        nc::waddstr(window, "Just press one of: hjklui, or o, x. Especially o because it's cool.\n\n");
         nc::wnoutrefresh(window);
         nc::wnoutrefresh(window);
     }
@@ -638,7 +652,8 @@ impl ui::UiFrontend for CursesUI {
             let ch = nc::getch();
             match self.mode {
                 Mode::Intro => match ch {
-                    -1 => return None,
+                    -1 =>
+                        return None,
                     _ => {
                         self.mode = Mode::Normal;
                         return Some(Action::Redraw);

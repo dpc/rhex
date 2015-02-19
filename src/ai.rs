@@ -8,7 +8,7 @@ use hex2d::{self, Coordinate};
 use hex2d as h2d;
 use game;
 use actor;
-
+use error::Error;
 
 fn roam() -> game::Action {
     match rand::thread_rng().gen_range(0, 10) {
@@ -36,7 +36,7 @@ fn closest_reachable<F>(gstate : &game::State, start : Coordinate, max_distance 
 fn grue(astate : &actor::State, gstate : &game::State) -> game::Action {
 
     for &visible_pos in &astate.visible {
-        if gstate.actor_map_or(visible_pos, false, &|a| a.is_player()) {
+        if gstate.actor_map_or(visible_pos, false, |a| a.is_player()) {
             return go_to(astate, visible_pos);
         }
     }
@@ -60,7 +60,7 @@ fn pony_follow(astate : &actor::State, gstate : &game::State) -> game::Action {
 
 
         let player_pos = closest_reachable(gstate, start, 10,
-            |pos| gstate.actor_map_or(pos, false, &|a| a.is_player())
+            |pos| gstate.actor_map_or(pos, false, |a| a.is_player())
             );
 
         let player_pos = if let Some((dst, _)) = player_pos {
@@ -86,11 +86,11 @@ fn pony_follow(astate : &actor::State, gstate : &game::State) -> game::Action {
 pub fn run(
     req : mpsc::Receiver<(Arc<actor::State>, Arc<game::State>)>,
     rep : mpsc::Sender<(Arc<actor::State>, game::Action)>
-    )
+    ) -> Result<(), Error<game::controller::Reply>>
 {
 
     loop {
-        let (astate, gstate) = req.recv().unwrap();
+        let (astate, gstate) = try!(req.recv());
 
         let action = match astate.behavior {
             actor::Behavior::Grue => grue(&astate, &gstate),
@@ -98,6 +98,6 @@ pub fn run(
             _ => panic!(),
         };
 
-        rep.send((astate, action)).unwrap();
+        try!(rep.send((astate, action)));
     }
 }

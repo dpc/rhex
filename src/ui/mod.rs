@@ -59,7 +59,7 @@ impl<U : UiFrontend> Ui<U> {
 
     pub fn should_stop_autoexploring(&self, astate : &actor::State, gstate : &game::State) -> bool {
         astate.discovered_areas.iter().count() > 0 ||
-            astate.visible.iter().any(|&coord| gstate.actor_map_or(coord, false, &|a| a.behavior == actor::Behavior::Grue))
+            astate.visible.iter().any(|&coord| gstate.actor_map_or(coord, false, |a| a.behavior == actor::Behavior::Grue))
     }
 
     pub fn autoexplore_action(&self, astate : &actor::State, gstate : &game::State) -> AutoExploreAction {
@@ -94,15 +94,15 @@ impl<U : UiFrontend> Ui<U> {
     }
 
     pub fn redraw(&mut self, req : &Option<game::controller::Request>) {
-        let now = time::precise_time_ns();
+        if let &Some((ref astate, ref gstate)) = req {
+            let now = time::precise_time_ns();
 
-        if self.autoexploring.is_some() && self.last_redraw_ns + 50 * 1000 * 1000 > now {
-            return
-        }
+            if self.autoexploring.is_some() && self.last_redraw_ns + 50 * 1000 * 1000 > now {
+                return
+            }
 
-        self.last_redraw_ns = now;
+            self.last_redraw_ns = now;
 
-        if let Some((ref astate, ref gstate)) = *req {
             self.frontend.draw(&astate, &gstate);
         }
     }
@@ -157,12 +157,19 @@ impl<U : UiFrontend> Ui<U> {
             } else {
                 match req.try_recv() {
                     Ok(state) => {
-                        {
+                        let dead = {
                             let (ref astate, ref gstate) = state;
                             self.frontend.update(&astate, &gstate);
-                        }
+                            astate.is_dead()
+                        };
+
                         pending_req = Some(state);
                         self.redraw(&pending_req);
+
+                        if dead {
+                            // no need to respond
+                            pending_req = None;
+                        }
                     },
                     Err(err) => match err {
                         mpsc::TryRecvError::Empty => {},

@@ -33,11 +33,11 @@ pub enum Stage {
     ST2,
 }
 
-
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub struct State {
     pub actors: Arc<Actors>,
     pub actors_done: Arc<HashSet<Coordinate>>,
+    pub actors_dead: Arc<Vec<Arc<actor::State>>>,
     pub map : Arc<Map>,
     pub light_map: Arc<HashMap<Coordinate, u32>>,
     pub turn : u64,
@@ -52,6 +52,7 @@ impl State {
         State {
             actors: Arc::new(actors),
             actors_done: Arc::new(HashSet::new()),
+            actors_dead: Arc::new(Vec::new()),
             map: Arc::new(map),
             turn: 0,
             light_map: Arc::new(HashMap::new()),
@@ -134,6 +135,7 @@ impl State {
         State {
             actors: Arc::new(actors),
             actors_done: self.actors_done.clone(),
+            actors_dead: self.actors_dead.clone(),
             map: self.map.clone(),
             turn: self.turn,
             light_map: self.light_map.clone(),
@@ -174,6 +176,7 @@ impl State {
             let ret = State {
                 actors: Arc::new(actors),
                 actors_done: Arc::new(actors_done),
+                actors_dead: self.actors_dead.clone(),
                 map: self.map.clone(),
                 turn: self.turn,
                 light_map: self.light_map.clone(),
@@ -193,6 +196,7 @@ impl State {
             Some(State {
                 actors: self.actors.clone(),
                 actors_done: self.actors_done.clone(),
+                actors_dead: self.actors_dead.clone(),
                 map: Arc::new(map),
                 turn: self.turn,
                 light_map: self.light_map.clone(),
@@ -212,6 +216,7 @@ impl State {
             let ret = State {
                 actors: Arc::new(actors),
                 actors_done: self.actors_done.clone(),
+                actors_dead: self.actors_dead.clone(),
                 map: self.map.clone(),
                 turn: self.turn,
                 light_map: self.light_map.clone(),
@@ -242,12 +247,15 @@ impl State {
     /// Advance one turn (increase the turn counter) and do some maintenance
     pub fn tick(&self) -> State {
         // filter out the dead
-        // TODO: Make this work
-        // let actors = self.actors.make_unique().iter().filter(|&(ref coord, ref a)| a.stats.hp > 0).cloned().collect();
         let mut actors = HashMap::new();
+        let mut actors_dead : Vec<_> = self.actors_dead.clone().make_unique().clone();
 
         for (&coord, a) in self.actors.iter() {
-            if a.stats.hp > 0 {
+            if a.is_dead() {
+                if a.behavior == actor::Behavior::Player {
+                    actors_dead.push(a.clone());
+                }
+            } else {
                 actors.insert(coord, a.clone());
             }
         }
@@ -255,6 +263,7 @@ impl State {
         let mut ret = State {
             actors: Arc::new(actors),
             actors_done: Arc::new(HashSet::new()),
+            actors_dead: Arc::new(actors_dead),
             map: self.map.clone(),
             turn: self.turn + 1,
             light_map: Arc::new(HashMap::new()),
@@ -272,6 +281,7 @@ impl State {
         let ret = State {
             actors: Arc::new(actors),
             actors_done: Arc::new(HashSet::new()),
+            actors_dead: ret.actors_dead.clone(),
             map: ret.map.clone(),
             turn: ret.turn,
             light_map: ret.light_map.clone(),
@@ -280,7 +290,7 @@ impl State {
     }
 
     pub fn actor_map_or<R, F : Fn(&actor::State) -> R>
-        (&self, pos : Coordinate, def: R, cond : &F) -> R
+        (&self, pos : Coordinate, def: R, cond : F) -> R
     {
             self.actors.get(&pos).map_or(def, |a| cond(a))
     }
@@ -288,11 +298,6 @@ impl State {
     pub fn tile_at(&self, pos : Coordinate) -> Option<&tile::Tile> {
         self.map.get(&pos)
     }
-
-    /*
-    pub fn tile_map<R, F : Fn(&tile::Tile) -> R>(&self, pos : Coordinate, f : F) -> Option<R> {
-        self.map.get(&pos).map(|a| f(a))
-    }*/
 
     pub fn tile_map_or<R, F : Fn(&tile::Tile) -> R>(&self, pos : Coordinate, def: R, f : F) -> R {
         self.map.get(&pos).map_or(def, |a| f(a))

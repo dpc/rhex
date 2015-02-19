@@ -25,9 +25,9 @@ pub struct Stats {
 
 
 impl Stats {
-    pub fn new() -> Stats {
+    pub fn new(hp : i32) -> Stats {
         Stats { int: 3, dex : 3, str_ : 3,
-        max_hp: 3, max_mp: 3, mp: 3, hp: 3 }
+        max_hp: 3, max_mp: 3, mp: 3, hp: hp }
     }
 }
 
@@ -74,7 +74,7 @@ impl State {
         State {
             behavior : behavior,
             pos: pos,
-            stats: Stats::new(),
+            stats: Stats::new(if behavior == Behavior::Player { 3 } else { 1 }),
             visible: HashSet::new(),
             known: HashSet::new(),
             known_areas: HashSet::new(),
@@ -88,7 +88,7 @@ impl State {
         State {
             behavior: self.behavior,
             pos: self.pos,
-            stats: Stats::new(),
+            stats: self.stats,
             visible: self.visible.clone(),
             known: self.known.clone(),
             known_areas: self.known_areas.clone(),
@@ -176,6 +176,10 @@ impl State {
 
     pub fn is_player(&self) -> bool {
         self.behavior == Behavior::Player
+    }
+
+    pub fn is_dead(&self) -> bool {
+        self.stats.hp <= 0
     }
 
 }

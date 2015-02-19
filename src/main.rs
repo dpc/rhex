@@ -25,18 +25,14 @@ mod ui;
 mod game;
 mod actor;
 mod generate;
+mod error;
 
 pub fn main() {
-
-
+    println!("Generating map...");
     let state = game::State::new();
     let state = state.spawn_player();
     let state = state.spawn_pony(Coordinate::new(-1, 0));
     let mut controller = game::Controller::new(state);
-
-    let mut ui = ui::curses::CursesUI::new();
-    ui.display_intro();
-    let mut ui = ui::Ui::new(ui);
 
     let (pl_req_tx, pl_req_rx) = mpsc::channel();
     let (pl_rep_tx, pl_rep_rx) = mpsc::channel();
@@ -44,6 +40,7 @@ pub fn main() {
     let (ai_req_tx, ai_req_rx) = mpsc::channel();
     let (ai_rep_tx, ai_rep_rx) = mpsc::channel();
 
+    println!("Starting game...");
     thread::Thread::spawn(move|| {
         let _ = controller.run(
             pl_req_tx, pl_rep_rx,
@@ -51,10 +48,16 @@ pub fn main() {
             );
     });
 
+    println!("Starting AI...");
     thread::Thread::spawn(move|| {
-        ai::run(ai_req_rx, ai_rep_tx);
+        let _ = ai::run(ai_req_rx, ai_rep_tx);
     });
 
+
+    println!("Starting UI...");
+    let mut ui = ui::curses::CursesUI::new();
+    ui.display_intro();
+    let mut ui = ui::Ui::new(ui);
 
     ui.run(pl_req_rx, pl_rep_tx);
 }
