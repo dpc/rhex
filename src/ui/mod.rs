@@ -3,6 +3,7 @@ use std::time::duration::Duration;
 use std::sync::{mpsc, Arc};
 use std::collections::ring_buf::RingBuf;
 use time;
+use std;
 
 use hex2d;
 
@@ -39,6 +40,7 @@ pub struct Ui<U : UiFrontend> {
     frontend : U,
     autoexploring : Option<u64>,
     last_redraw_ns : u64,
+    last_redraw_turn : u64,
 }
 
 pub enum AutoExploreAction {
@@ -54,6 +56,7 @@ impl<U : UiFrontend> Ui<U> {
             frontend: frontend,
             autoexploring: None,
             last_redraw_ns: 0,
+            last_redraw_turn: 0,
         }
     }
 
@@ -93,17 +96,37 @@ impl<U : UiFrontend> Ui<U> {
         }
     }
 
+    pub fn redraw_force(&mut self, req : &Option<game::controller::Request>) {
+
+        if let &Some((ref astate, ref gstate)) = req {
+            let now = time::precise_time_ns();
+            self.last_redraw_ns = now;
+            self.last_redraw_turn = gstate.turn;
+
+            self.frontend.draw(&astate, &gstate);
+            std::old_io::stdio::flush();
+        }
+    }
+
     pub fn redraw(&mut self, req : &Option<game::controller::Request>) {
         if let &Some((ref astate, ref gstate)) = req {
             let now = time::precise_time_ns();
 
-            if self.autoexploring.is_some() && self.last_redraw_ns + 50 * 1000 * 1000 > now {
-                return
+            if self.autoexploring.is_some() {
+                if self.last_redraw_ns + 250 * 1000 * 1000 > now {
+                    return
+                }
+            } else {
+                if self.last_redraw_turn == gstate.turn && self.last_redraw_ns + 500 * 1000 * 1000 > now {
+                    return
+                }
             }
 
             self.last_redraw_ns = now;
+            self.last_redraw_turn = gstate.turn;
 
             self.frontend.draw(&astate, &gstate);
+            std::old_io::stdio::flush();
         }
     }
 
@@ -185,7 +208,7 @@ impl<U : UiFrontend> Ui<U> {
                         pending_action.push_back(action);
                     },
                     Action::Redraw => {
-                        self.redraw(&pending_req);
+                        self.redraw_force(&pending_req);
                     },
                     _ => {
                         if self.autoexploring.is_some() {
@@ -198,6 +221,7 @@ impl<U : UiFrontend> Ui<U> {
             } else {
                 timer.sleep(Duration::milliseconds(10));
             }
+            self.redraw(&pending_req);
         }
     }
 }

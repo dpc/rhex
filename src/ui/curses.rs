@@ -2,6 +2,7 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::collections::ring_buf::RingBuf;
 use std;
+use time;
 use std::ffi::AsOsStr;
 
 use ncurses as nc;
@@ -139,6 +140,8 @@ pub struct CursesUI {
     log : RingBuf<LogEntry>,
     examine_pos : Option<Position>,
     dot : &'static str,
+    last_turn_ns : u64,
+    last_turn : u64,
 }
 
 impl CursesUI {
@@ -182,6 +185,8 @@ impl CursesUI {
             mode : Mode::Normal,
             examine_pos : None,
             dot: if term_putty { NORMAL_DOT } else { UNICODE_DOT },
+            last_turn_ns: 0,
+            last_turn: 0,
             log : RingBuf::new(),
         };
 
@@ -375,7 +380,8 @@ impl CursesUI {
                         }
                     }
                 } else {
-                    if is_proper_coord && actors_aheads.contains_key(&c) &&
+                    let time = (time::precise_time_ns() - self.last_turn_ns) / (1000 * 1000 * 1000);
+                    if (time & 1) == 0 && is_proper_coord && actors_aheads.contains_key(&c) &&
                         astate.sees(*actors_aheads.get(&c).unwrap()) {
                         bold = true;
                         let color = if c == astate_ahead {
@@ -435,6 +441,7 @@ impl CursesUI {
 
         let mut turn_str = String::new();
         write!(&mut turn_str, "Turn: {}", gstate.turn).unwrap();
+        write!(&mut turn_str, " Time: {}", time::precise_time_ns() / 1000 / 1000).unwrap();
 
         nc::mvwaddstr(window, max_y - 1, 0 , turn_str.as_slice());
         nc::mvwaddstr(window, 2, 0,
@@ -633,6 +640,11 @@ impl ui::UiFrontend for CursesUI {
     }
 
     fn draw(&mut self, astate : &actor::State, gstate : &game::State) {
+        if gstate.turn != self.last_turn {
+            self.last_turn_ns = time::precise_time_ns();
+            self.last_turn = gstate.turn;
+        }
+
         let mut max_x = 0;
         let mut max_y = 0;
         nc::getmaxyx(nc::stdscr, &mut max_y, &mut max_x);
@@ -658,7 +670,6 @@ impl ui::UiFrontend for CursesUI {
         nc::mv(max_y - 1, max_x - 1);
     }
 
-    
     fn input(&mut self) -> Option<Action> {
         loop {
             let ch = nc::getch();
