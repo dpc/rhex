@@ -244,11 +244,26 @@ impl State {
         }
     }
 
+    pub fn pre_tick(&self) -> State {
+        let mut actors = HashMap::new();
+        for (&coord, a) in self.actors.iter() {
+                let mut a = a.clone().make_unique().clone();
+                a.pre_tick(self);
+                actors.insert(coord, Arc::new(a));
+        }
+
+        let mut ret = self.clone();
+
+        ret.actors = Arc::new(actors);
+
+        ret
+    }
+
     /// Advance one turn (increase the turn counter) and do some maintenance
-    pub fn tick(&self) -> State {
+    pub fn post_tick(&self) -> State {
         // filter out the dead
         let mut actors = HashMap::new();
-        let mut actors_dead : Vec<_> = self.actors_dead.clone().make_unique().clone();
+        let mut actors_dead = self.actors_dead.clone().make_unique().clone();
 
         for (&coord, a) in self.actors.iter() {
             if a.is_dead() {
@@ -274,19 +289,18 @@ impl State {
 
         for (&coord, a) in ret.actors.iter() {
                 let mut a = a.clone().make_unique().clone();
-                a.postprocess_visibile(&ret);
+                a.post_tick(&ret);
                 actors.insert(coord, Arc::new(a));
         }
 
-        let ret = State {
+        State {
             actors: Arc::new(actors),
             actors_done: Arc::new(HashSet::new()),
             actors_dead: ret.actors_dead.clone(),
             map: ret.map.clone(),
             turn: ret.turn,
             light_map: ret.light_map.clone(),
-        };
-        ret
+        }
     }
 
     pub fn actor_map_or<R, F : Fn(&actor::State) -> R>

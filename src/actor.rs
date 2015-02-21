@@ -37,6 +37,7 @@ pub struct State {
 
     pub behavior : Behavior,
     pub stats : Stats,
+    pub prev_stats : Stats,
 
     /// Currently visible
     pub visible: Visibility,
@@ -71,10 +72,12 @@ fn calculate_los(pos : Position, gstate : &game::State) -> Visibility {
 
 impl State {
     pub fn new(behavior : Behavior, pos : Position) -> State {
+        let stats = Stats::new(if behavior == Behavior::Player { 3 } else { 1 });
         State {
             behavior : behavior,
             pos: pos,
-            stats: Stats::new(if behavior == Behavior::Player { 3 } else { 1 }),
+            stats: stats,
+            prev_stats: stats,
             visible: HashSet::new(),
             known: HashSet::new(),
             known_areas: HashSet::new(),
@@ -88,6 +91,7 @@ impl State {
         State {
             behavior: self.behavior,
             pos: self.pos,
+            prev_stats: self.prev_stats,
             stats: self.stats,
             visible: self.visible.clone(),
             known: self.known.clone(),
@@ -121,7 +125,7 @@ impl State {
         }
     }
 
-    pub fn postprocess_visibile(&mut self, gstate : &game::State) {
+    fn postprocess_visibile(&mut self, gstate : &game::State) {
 
         let visible = calculate_los(self.pos, gstate);
 
@@ -151,6 +155,14 @@ impl State {
         self.discovered = discovered;
     }
 
+    pub fn pre_tick(&mut self, _ : &game::State) {
+        self.prev_stats = self.stats;
+    }
+
+    pub fn post_tick(&mut self, gstate : &game::State) {
+        self.postprocess_visibile(gstate);
+    }
+
     pub fn hit(&self) -> State {
         let mut state = self.clone();
 
@@ -163,6 +175,7 @@ impl State {
          State {
             behavior: self.behavior,
             pos: new_pos,
+            prev_stats: self.prev_stats,
             stats: self.stats,
             visible: self.visible.clone(),
             known: self.known.clone(),

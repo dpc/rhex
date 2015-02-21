@@ -34,22 +34,25 @@ impl Controller {
                ai_rep : mpsc::Receiver<Reply>,
                ) -> Result<(), Error<Request>>
     {
-
         let mut timer = Timer::new().unwrap();
         let timer = timer.periodic(Duration::milliseconds(100));
 
-        loop {
+        self.state = Arc::new(self.state.post_tick());
 
-            self.state = Arc::new(self.state.tick());
+        loop {
             let actors = self.state.actors.clone();
 
             for (_, actor) in &*actors {
                 match actor.behavior {
                     actor::Behavior::Player => {
-                        try!(pl_req.send((actor.clone(), self.state.clone())));
+                        try!(pl_req.send(
+                                (actor.clone(), self.state.clone())
+                                ));
                     },
                     actor::Behavior::Grue|actor::Behavior::Pony => {
-                        try!(ai_req.send((actor.clone(), self.state.clone())));
+                        try!(ai_req.send(
+                                (actor.clone(), self.state.clone())
+                                ));
                     },
                 }
             }
@@ -57,7 +60,9 @@ impl Controller {
             for astate in &*self.state.actors_dead {
                 match astate.behavior {
                     actor::Behavior::Player => {
-                        try!(pl_req.send((astate.clone(), self.state.clone())));
+                        try!(pl_req.send(
+                                (astate.clone(), self.state.clone())
+                                ));
                     },
                     _ => {},
                 };
@@ -76,18 +81,24 @@ impl Controller {
                 };
 
                 actions.push((astate.pos.coord, action));
-
             }
+
+            self.state = Arc::new(self.state.pre_tick());
 
             rand::thread_rng().shuffle(&mut actions);
 
             for &(acoord, action) in &actions {
-                self.state = Arc::new(self.state.act(Stage::ST1, acoord, action));
+                self.state = Arc::new(
+                    self.state.act(Stage::ST1, acoord, action)
+                    );
             }
 
             for &(acoord, action) in &actions {
-                self.state = Arc::new(self.state.act(Stage::ST2, acoord, action));
+                self.state = Arc::new(
+                    self.state.act(Stage::ST2, acoord, action)
+                    );
             }
+            self.state = Arc::new(self.state.post_tick());
             timer.recv().unwrap();
         }
     }

@@ -1,9 +1,9 @@
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::collections::ring_buf::RingBuf;
-use std;
+use std::{self, cmp, num};
 use std::ffi::AsOsStr;
-
+use core::str::StrExt;
 use ncurses as nc;
 
 use super::Action;
@@ -66,6 +66,9 @@ pub mod color {
     pub const TREE_FG : [u8; 3] = CHAR_ALLY_FG;
     pub const TREE_BG : [u8; 3] = EMPTY_BG;
 
+    pub const LABEL_FG: u8 = 94;
+    pub const GREEN_FG: u8 = 34;
+    pub const RED_FG:   u8 = 124;
     pub const TARGET_SELF_FG : u8 = 20;
     pub const TARGET_ENEMY_FG : u8 = 196;
     pub const LIGHTSOURCE : u8 = 227;
@@ -131,6 +134,7 @@ impl Drop for Window {
 
 pub struct CursesUI {
     calloc : RefCell<color::Allocator>,
+
     map_window : Option<Window>,
     log_window : Option<Window>,
     stats_window : Option<Window>,
@@ -139,6 +143,11 @@ pub struct CursesUI {
     log : RingBuf<LogEntry>,
     examine_pos : Option<Position>,
     dot : &'static str,
+
+    label_color: u64,
+    text_color: u64,
+    red_color: u64,
+    green_color: u64,
 }
 
 impl CursesUI {
@@ -171,10 +180,24 @@ impl CursesUI {
 
         assert!(nc::has_colors());
 
+        let mut calloc = color::Allocator::new();
+        let label_color = nc::COLOR_PAIR(
+            calloc.get(color::LABEL_FG, color::BACKGROUND_BG)
+            );
+        let text_color = nc::COLOR_PAIR(
+            calloc.get(color::VISIBLE_FG, color::BACKGROUND_BG)
+            );
+        let green_color = nc::COLOR_PAIR(
+            calloc.get(color::GREEN_FG, color::BACKGROUND_BG)
+            );
+        let red_color = nc::COLOR_PAIR(
+            calloc.get(color::RED_FG, color::BACKGROUND_BG)
+            );
+
         nc::doupdate();
 
         let mut ret = CursesUI {
-            calloc: RefCell::new(color::Allocator::new()),
+            calloc: RefCell::new(calloc),
             map_window: None,
             stats_window: None,
             log_window: None,
@@ -183,6 +206,10 @@ impl CursesUI {
             examine_pos : None,
             dot: if term_putty { NORMAL_DOT } else { UNICODE_DOT },
             log : RingBuf::new(),
+            label_color: label_color,
+            text_color: text_color,
+            red_color: red_color,
+            green_color: green_color,
         };
 
         ret.resize();
@@ -195,8 +222,8 @@ impl CursesUI {
         let mut max_y = 0;
         nc::getmaxyx(nc::stdscr, &mut max_y, &mut max_x);
 
-        let mid_x = max_x * 3 / 5;
-        let mid_y = max_y * 4 / 5;
+        let mid_x = max_x - 30;
+        let mid_y = 10;
 
         let map_window = Window::new(
                 mid_x, max_y, 0, 0
@@ -420,12 +447,76 @@ impl CursesUI {
         nc::wnoutrefresh(window);
     }
 
+    fn draw_stats_bar(&mut self, window : nc::WINDOW, name : &str,
+                      cur : i32, prev : i32, max : i32) {
+
+        let mut max_x = 0;
+        let mut max_y = 0;
+        nc::getmaxyx(window, &mut max_y, &mut max_x);
+
+        let cur = cmp::max(cur, 0) as u32;
+        let prev = cmp::max(prev, 0) as u32;
+        let max = cmp::max(max, 1) as u32;
+
+        nc::wattron(window, self.label_color as i32);
+        nc::waddstr(window, &format!("{}: ", name));
+
+        let width = max_x as u32 - 4 - name.char_len() as u32;
+        let cur_w = cur * width / max;
+        let prev_w = prev * width / max;
+
+        nc::wattron(window, self.text_color as i32);
+        nc::waddstr(window, "[");
+        for i in range(0, width) {
+            let (color, s) = match (i < cur_w, i < prev_w) {
+                (true, true) => (self.text_color, "="),
+                (false, true) => (self.red_color, "-"),
+                (true, false) => (self.green_color, "+"),
+                (false, false) => (self.text_color, " "),
+            };
+            nc::wattron(window, color as i32);
+            nc::waddstr(window, s);
+        }
+        nc::wattron(window, self.text_color as i32);
+        nc::waddstr(window, "]");
+    }
+
+    fn draw_turn<T>(&self, window : nc::WINDOW, label: &str, val: T)
+        where T : num::Int+fmt::Display
+    {
+        nc::wattron(window, self.label_color as i32);
+        nc::waddstr(window, &format!("{}: ", label));
+
+        nc::wattron(window, self.text_color as i32);
+        nc::waddstr(window, &format!("{:<8}", val));
+    }
+
+    fn draw_val<T>(&self, window : nc::WINDOW, label: &str, val: T)
+        where T : num::Int+fmt::Display
+    {
+        nc::wattron(window, self.label_color as i32);
+        nc::waddstr(window, &format!("{}:", label));
+
+        nc::wattron(window, self.text_color as i32);
+        nc::waddstr(window, &format!("{:>2} ", val));
+    }
+
+    fn draw_item(&self, window : nc::WINDOW, label: &str, item : &str) {
+        nc::wattron(window, self.label_color as i32);
+        nc::waddstr(window, &format!("{}:", label));
+
+        nc::wattron(window, self.text_color as i32);
+        let item = item.slice_chars(0, cmp::min(item.char_len(), 13));
+        nc::waddstr(window, &format!("{:^13}", item));
+    }
+
+
     fn draw_stats(&mut self, astate : &actor::State, gstate : &game::State) {
         let window = self.stats_window.as_ref().unwrap().window;
 
-        let mut calloc = self.calloc.borrow_mut();
-        let cpair = nc::COLOR_PAIR(calloc.get(color::VISIBLE_FG, color::BACKGROUND_BG));
+        let cpair = self.text_color;
         nc::wbkgd(window, ' ' as nc::chtype | cpair as nc::chtype);
+
         nc::werase(window);
         nc::wmove(window, 0, 0);
 
@@ -433,21 +524,61 @@ impl CursesUI {
         let mut max_y = 0;
         nc::getmaxyx(window, &mut max_y, &mut max_x);
 
-        let mut turn_str = String::new();
-        write!(&mut turn_str, "Turn: {}", gstate.turn).unwrap();
+        let y = 0;
+        nc::wmove(window, y, 0);
+        self.draw_val(window, "Str", astate.stats.str_);
+        nc::wmove(window, y, 8);
+        self.draw_val(window, "AC", 2);
 
-        nc::mvwaddstr(window, max_y - 1, 0 , turn_str.as_slice());
-        nc::mvwaddstr(window, 2, 0,
-                      &format!("STR: {:2>} HP: {:>4}/{}", astate.stats.str_,
-                               astate.stats.hp, astate.stats.max_hp));
-        nc::mvwaddstr(window, 3, 0,
-                      &format!("DEX: {} MP: {:>4}/{}", astate.stats.dex,
-                               astate.stats.mp, astate.stats.max_mp));
-        nc::mvwaddstr(window, 4, 0,
-                      &format!("INT: {}", astate.stats.int));
+        let y = y + 1;
+        nc::wmove(window, y, 0);
+        self.draw_val(window, "Int", astate.stats.int);
+        nc::wmove(window, y, 8);
+        self.draw_val(window, "EV", 3);
+
+        let y = y + 1;
+        nc::wmove(window, y, 0);
+        self.draw_val(window, "Dex", astate.stats.dex);
+
+        let y = y + 1;
+        nc::wmove(window, y, 0);
+
+        self.draw_stats_bar(window, "HP",
+                            astate.stats.hp, astate.prev_stats.hp,
+                            astate.stats.max_hp);
+
+        let y = y + 1;
+        nc::wmove(window, y, 0);
+        self.draw_stats_bar(window, "MP",
+                            astate.stats.mp, astate.prev_stats.mp,
+                            astate.stats.max_mp);
+
+        let y = y + 1;
+        nc::wmove(window, y, 0);
+        self.draw_stats_bar(window, "XP", 50, 50, 100);
+
+        let y = y + 1;
+        nc::wmove(window, y, 0);
+        self.draw_item(window, "H", "Helmet");
+        self.draw_item(window, "F", "Leather Boots");
+
+        let y = y + 1;
+        nc::wmove(window, y, 0);
+        self.draw_item(window, "B", "Chain Armour");
+        self.draw_item(window, "C", "Cloak");
+
+        let y = y + 1;
+        nc::wmove(window, y, 0);
+        self.draw_item(window, "L", "Sword");
+        self.draw_item(window, "R", "Shield");
+
+        let y = y + 1;
+        nc::wmove(window, y, 0);
+        self.draw_turn(window, "Turn", gstate.turn);
 
         nc::wnoutrefresh(window);
     }
+
     // TODO: Consider the distance to the Item to print something
     // like "you see x in the distance", "you find yourself in x".
     fn format_areas<I>(&self, mut i : I) -> Option<String>
@@ -656,9 +787,9 @@ impl ui::UiFrontend for CursesUI {
         }
 
         nc::mv(max_y - 1, max_x - 1);
+        std::old_io::stdio::flush();
     }
 
-    
     fn input(&mut self) -> Option<Action> {
         loop {
             let ch = nc::getch();

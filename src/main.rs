@@ -14,6 +14,7 @@ extern crate rand;
 extern crate time;
 #[macro_use]
 extern crate log;
+extern crate core;
 
 use std::sync::mpsc;
 use std::thread;
