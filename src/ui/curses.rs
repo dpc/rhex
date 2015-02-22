@@ -1,6 +1,6 @@
 use std::cell::RefCell;
 use std::collections::HashMap;
-use std::collections::ring_buf::RingBuf;
+use std::collections::VecDeque;
 use std::{self, cmp, num};
 use std::ffi::AsOsStr;
 use core::str::StrExt;
@@ -140,7 +140,7 @@ pub struct CursesUI {
     stats_window : Option<Window>,
     fs_window : Option<Window>,
     mode : Mode,
-    log : RingBuf<LogEntry>,
+    log : VecDeque<LogEntry>,
     examine_pos : Option<Position>,
     dot : &'static str,
 
@@ -205,7 +205,7 @@ impl CursesUI {
             mode : Mode::Normal,
             examine_pos : None,
             dot: if term_putty { NORMAL_DOT } else { UNICODE_DOT },
-            log : RingBuf::new(),
+            log : VecDeque::new(),
             label_color: label_color,
             text_color: text_color,
             red_color: red_color,
@@ -315,7 +315,7 @@ impl CursesUI {
                         None => tile::Wall,
                     };
 
-                    (astate.sees(c) || astate.is_dead(), astate.knows(c), Some(tt), t, gstate.light(c))
+                    (astate.sees(c) || astate.is_dead(), astate.knows(c), Some(tt), t, gstate.at(c).light())
                 } else {
                     // Paint a glue characters between two real characters
                     let c1 = c;
@@ -324,29 +324,31 @@ impl CursesUI {
                     let knows = astate.knows(c1) && astate.knows(c2);
 
                     let (e1, e2) = (
-                        gstate.tile_map_or(c1, tile::Wall, |t| t.type_).ascii_expand(),
-                        gstate.tile_map_or(c2, tile::Wall, |t| t.type_).ascii_expand()
+                        gstate.at(c1).tile_map_or(tile::Wall, |t| t.type_).ascii_expand(),
+                        gstate.at(c2).tile_map_or(tile::Wall, |t| t.type_).ascii_expand()
                         );
 
                     let c = Some(if e1 > e2 { c1 } else { c2 });
 
-                    let tt = c.map_or(None, |c| gstate.tile_map_or(c, Some(tile::Wall), |t| Some(t.type_)));
+                    let tt = c.map_or(None, |c| gstate.at(c).tile_map_or(Some(tile::Wall), |t| Some(t.type_)));
 
                     let visible = (astate.sees(c1) && astate.sees(c2)) || astate.is_dead();
 
-                    (visible, knows, tt, None, (gstate.light(c1) + gstate.light(c2)) / 2)
+                    (visible, knows, tt, None, (gstate.at(c1).light() + gstate.at(c2).light()) / 2)
                 };
 
                 let mut bold = false;
-                let occupied = gstate.is_occupied(c);
+                let occupied = gstate.at(c).is_occupied();
                 let (fg, bg, mut glyph) =
                     if is_proper_coord && visible && occupied {
-                        let fg = match gstate.actor_map_or(c, Behavior::Grue, |a| a.behavior) {
+                        let fg = match gstate.at(c).actor_map_or(Behavior::Grue, |a| a.behavior) {
                             Behavior::Player => color::CHAR_SELF_FG,
                             Behavior::Pony => color::CHAR_ALLY_FG,
                             Behavior::Grue => color::CHAR_ENEMY_FG,
                         };
                         (fg, color::CHAR_BG, "@")
+                    } else if is_proper_coord && visible && gstate.at(c).item().is_some() {
+                        (color::WALL_FG, color::EMPTY_BG, "(")
                     } else {
                         match tt {
                             Some(tile::Empty) => {
@@ -386,7 +388,7 @@ impl CursesUI {
                     }
                 }
 
-                if is_proper_coord && visible && gstate.actor_map_or(c, 0, |a| a.light) > 0u32 {
+                if is_proper_coord && visible && gstate.at(c).actor_map_or(0, |a| a.light) > 0u32 {
                     bg = color::LIGHTSOURCE;
                 }
 
@@ -634,11 +636,11 @@ impl CursesUI {
             return "Unknown".to_string();
         }
 
-        let tile_type = gstate.tile_map_or(coord, tile::Wall, |t| t.type_);
-        let tile = gstate.tile_map_or(coord, None, |t| Some(t.clone()));
+        let tile_type = gstate.at(coord).tile_map_or(tile::Wall, |t| t.type_);
+        let tile = gstate.at(coord).tile_map_or(None, |t| Some(t.clone()));
         let actor =
             if astate.sees(coord) || astate.is_dead() {
-                gstate.actor_map_or(coord, None, |a| Some(match a.behavior {
+                gstate.at(coord).actor_map_or(None, |a| Some(match a.behavior {
                     Behavior::Pony => "A pony",
                     Behavior::Grue => "Toothless Grue",
                     Behavior::Player => "Yourself",
@@ -754,8 +756,7 @@ impl ui::UiFrontend for CursesUI {
 
     fn update(&mut self, astate : &actor::State, gstate : &game::State) {
         let discoviered_areas = astate.discovered_areas.iter()
-            .filter_map(|coord| gstate.tile_at(*coord))
-            .filter_map(|tile| tile.area.as_ref())
+            .filter_map(|coord| gstate.at(*coord).tile_map_or(None, |t| t.area))
             ;
 
         if let Some(s) = self.format_areas(discoviered_areas.map(|area| area.type_)) {

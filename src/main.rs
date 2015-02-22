@@ -1,10 +1,10 @@
 #![feature(core)]
 #![feature(std_misc)]
-#![feature(io)]
 #![feature(libc)]
 #![feature(alloc)]
 #![feature(env)]
 #![feature(os)]
+#![feature(old_io)]
 
 extern crate ncurses;
 extern crate hex2d;
@@ -27,10 +27,12 @@ mod game;
 mod actor;
 mod generate;
 mod error;
+mod item;
 
 pub fn main() {
     println!("Generating map...");
-    let state = game::State::new();
+    let mut state = game::State::new();
+    state.at_mut(Coordinate::new(0, 0)).drop_item(Box::new(item::Weapon::new()));
     let state = state.spawn_player();
     let state = state.spawn_pony(Coordinate::new(-1, 0));
     let mut controller = game::Controller::new(state);
@@ -42,7 +44,7 @@ pub fn main() {
     let (ai_rep_tx, ai_rep_rx) = mpsc::channel();
 
     println!("Starting game...");
-    thread::Thread::spawn(move|| {
+    thread::spawn(move || {
         let _ = controller.run(
             pl_req_tx, pl_rep_rx,
             ai_req_tx, ai_rep_rx
@@ -50,10 +52,9 @@ pub fn main() {
     });
 
     println!("Starting AI...");
-    thread::Thread::spawn(move|| {
+    thread::spawn(move|| {
         let _ = ai::run(ai_req_rx, ai_rep_tx);
     });
-
 
     println!("Starting UI...");
     let mut ui = ui::curses::CursesUI::new();
