@@ -20,7 +20,7 @@ pub use self::controller::Controller;
 
 pub type Map = HashMap<Coordinate, tile::Tile>;
 pub type Actors = HashMap<Coordinate, Arc<actor::State>>;
-pub type Items = HashMap<Coordinate, Box<Item+Send+Sync>>;
+pub type Items = HashMap<Coordinate, Box<Item>>;
 pub type LightMap = HashMap<Coordinate, u32>;
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
@@ -384,7 +384,7 @@ impl<'a> AtMut<'a> {
         }
     }*/
 
-    pub fn drop_item(&mut self, item : Box<Item+Send+Sync>) {
+    pub fn drop_item(&mut self, item : Box<Item>) {
         let coord = {
             let mut bfs = bfs::Traverser::new(
                 |coord| self.state.at(coord).tile_map_or(false, |t| t.is_passable()),

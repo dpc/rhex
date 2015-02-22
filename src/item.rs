@@ -3,11 +3,11 @@ use std::fmt;
 pub trait Item : Send+Sync+fmt::Debug {
     fn description(&self) -> &str;
     fn type_(&self) -> Type;
-    fn clone_item<'a>(&self) -> Box<Item + Send + Sync + 'a> where Self: 'a;
+    fn clone_item<'a>(&self) -> Box<Item + 'a> where Self: 'a;
 }
 
-impl<'a> Clone for Box<Item+Send+Sync+'a> {
-    fn clone(&self) -> Box<Item+Send+Sync+'a> {
+impl<'a> Clone for Box<Item+'a> {
+    fn clone(&self) -> Box<Item+'a> {
         self.clone_item()
     }
 }
@@ -32,7 +32,7 @@ impl Item for Weapon {
         Type::Weapon
     }
 
-    fn clone_item<'a>(&self) -> Box<Item + Send + Sync + 'a> where Self: 'a {
+    fn clone_item<'a>(&self) -> Box<Item + 'a> where Self: 'a {
         Box::new(self.clone())
     }
 }
