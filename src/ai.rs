@@ -23,8 +23,8 @@ fn closest_reachable<F>(gstate : &game::State, start : Coordinate, max_distance 
     where F : Fn(Coordinate) -> bool
 {
     let mut bfs = bfs::Traverser::new(
-        |pos| pos == start || (gstate.tile_map_or(pos, false, |t| t.is_passable())
-                               && pos.distance(start) < max_distance && !gstate.is_occupied(pos)),
+        |pos| pos == start || (gstate.at(pos).tile_map_or(false, |t| t.is_passable())
+                               && pos.distance(start) < max_distance && !gstate.at(pos).is_occupied()),
                                cond,
                                start
                                );
@@ -34,7 +34,7 @@ fn closest_reachable<F>(gstate : &game::State, start : Coordinate, max_distance 
 fn grue(astate : &actor::State, gstate : &game::State) -> game::Action {
 
     for &visible_pos in &astate.visible {
-        if gstate.actor_map_or(visible_pos, false, |a| a.is_player()) {
+        if gstate.at(visible_pos).actor_map_or(false, |a| a.is_player()) {
             return go_to(visible_pos, astate, gstate);
         }
     }
@@ -46,7 +46,7 @@ fn go_to(c: Coordinate, astate : &actor::State, gstate : &game::State) -> game::
     let ndir = astate.pos.coord.direction_to_cw(c).expect("bfs gave me trash");
 
     let n_pos = astate.pos + ndir.to_coordinate();
-    if gstate.tile_map_or(n_pos.coord, false, |t| t.type_.is_passable()) {
+    if gstate.at(n_pos.coord).tile_map_or(false, |t| t.type_.is_passable()) {
         if ndir == astate.pos.dir {
             return game::Action::Move(hex2d::Angle::Forward)
         } else {
@@ -70,13 +70,13 @@ fn pony_follow(astate : &actor::State, gstate : &game::State) -> game::Action {
         let start = astate.pos.coord;
 
         let player_pos = closest_reachable(gstate, start, 10,
-            |pos| gstate.actor_map_or(pos, false, |a| a.is_player())
+            |pos| gstate.at(pos).actor_map_or(false, |a| a.is_player())
             );
 
         let player_pos = if let Some((dst, _)) = player_pos {
             let distance = dst.distance(start);
             if distance < 3 {
-                closest_reachable(gstate, start, 10, |pos| pos.distance(dst) == 3 && gstate.is_passable(pos))
+                closest_reachable(gstate, start, 10, |pos| pos.distance(dst) == 3 && gstate.at(pos).is_passable())
             } else if distance < 5 {
                 None
             } else {

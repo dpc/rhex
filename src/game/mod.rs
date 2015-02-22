@@ -7,8 +7,10 @@ use hex2d::{Coordinate, Direction, Angle, Position};
 use actor;
 use generate;
 use hex2dext::algo;
+use item::Item;
 
 use self::tile::{Tile};
+use hex2dext::algo::bfs;
 
 pub mod area;
 pub mod tile;
@@ -18,6 +20,8 @@ pub use self::controller::Controller;
 
 pub type Map = HashMap<Coordinate, tile::Tile>;
 pub type Actors = HashMap<Coordinate, Arc<actor::State>>;
+pub type Items = HashMap<Coordinate, Box<Item+Send+Sync>>;
+pub type LightMap = HashMap<Coordinate, u32>;
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub enum Action {
@@ -33,26 +37,38 @@ pub enum Stage {
     ST2,
 }
 
-#[derive(Clone, Eq, PartialEq, Debug)]
+#[derive(Clone, Debug)]
 pub struct State {
     pub actors: Arc<Actors>,
     pub actors_done: Arc<HashSet<Coordinate>>,
     pub actors_dead: Arc<Vec<Arc<actor::State>>>,
     pub map : Arc<Map>,
-    pub light_map: Arc<HashMap<Coordinate, u32>>,
+    pub items: Arc<Items>,
+    pub light_map: Arc<LightMap>,
     pub turn : u64,
+}
+
+pub struct At<'a> {
+    coord : Coordinate,
+    state : &'a State,
+}
+
+pub struct AtMut<'a> {
+    coord : Coordinate,
+    state : &'a mut State,
 }
 
 impl State {
     pub fn new() -> State {
 
         let cp = Coordinate::new(0, 0);
-        let (map, actors) = generate::DungeonGenerator.generate_map(cp, 400);
+        let (map, actors, _items) = generate::DungeonGenerator.generate_map(cp, 400);
 
         State {
             actors: Arc::new(actors),
             actors_done: Arc::new(HashSet::new()),
             actors_dead: Arc::new(Vec::new()),
+            items: Arc::new(HashMap::new()),
             map: Arc::new(map),
             turn: 0,
             light_map: Arc::new(HashMap::new()),
@@ -70,7 +86,7 @@ impl State {
                         if coord == *pos {
                             0
                         } else {
-                            self.tile_at(coord).map_or(light, |tile| tile.opaqueness())
+                            self.at(coord).tile_map_or(light, |tile| tile.opaqueness())
                         }
                     },
                     &mut |coord, light| {
@@ -98,7 +114,7 @@ impl State {
                         if coord == *pos {
                             0
                         } else {
-                            self.tile_at(coord).map_or(astate.light as i32, |tile| tile.opaqueness())
+                            self.at(coord).tile_map_or(astate.light as i32, |tile| tile.opaqueness())
                         }
                     },
                     &mut |coord, light| {
@@ -136,6 +152,7 @@ impl State {
             actors: Arc::new(actors),
             actors_done: self.actors_done.clone(),
             actors_dead: self.actors_dead.clone(),
+            items: self.items.clone(),
             map: self.map.clone(),
             turn: self.turn,
             light_map: self.light_map.clone(),
@@ -178,11 +195,12 @@ impl State {
                 actors_done: Arc::new(actors_done),
                 actors_dead: self.actors_dead.clone(),
                 map: self.map.clone(),
+                items: self.items.clone(),
                 turn: self.turn,
                 light_map: self.light_map.clone(),
             };
             Some(ret)
-        } else if self.tile_map_or(new_pos.coord, false, |t| t.type_ == tile::Door(false)) {
+        } else if self.at(new_pos.coord).tile_map_or(false, |t| t.type_ == tile::Door(false)) {
 
             if stage != Stage::ST2 {
                 return None
@@ -197,11 +215,12 @@ impl State {
                 actors: self.actors.clone(),
                 actors_done: self.actors_done.clone(),
                 actors_dead: self.actors_dead.clone(),
+                items: self.items.clone(),
                 map: Arc::new(map),
                 turn: self.turn,
                 light_map: self.light_map.clone(),
             })
-        } else if astate.pos.coord == new_pos.coord || self.is_passable(new_pos.coord) {
+        } else if astate.pos.coord == new_pos.coord || self.at(new_pos.coord).is_passable() {
             // we've moved
             if stage != Stage::ST2 {
                 return None
@@ -217,6 +236,7 @@ impl State {
                 actors: Arc::new(actors),
                 actors_done: self.actors_done.clone(),
                 actors_dead: self.actors_dead.clone(),
+                items: self.items.clone(),
                 map: self.map.clone(),
                 turn: self.turn,
                 light_map: self.light_map.clone(),
@@ -279,6 +299,7 @@ impl State {
             actors: Arc::new(actors),
             actors_done: Arc::new(HashSet::new()),
             actors_dead: Arc::new(actors_dead),
+            items: self.items.clone(),
             map: self.map.clone(),
             turn: self.turn + 1,
             light_map: Arc::new(HashMap::new()),
@@ -297,36 +318,90 @@ impl State {
             actors: Arc::new(actors),
             actors_done: Arc::new(HashSet::new()),
             actors_dead: ret.actors_dead.clone(),
+            items: ret.items.clone(),
             map: ret.map.clone(),
             turn: ret.turn,
             light_map: ret.light_map.clone(),
         }
     }
 
-    pub fn actor_map_or<R, F : Fn(&actor::State) -> R>
-        (&self, pos : Coordinate, def: R, cond : F) -> R
-    {
-            self.actors.get(&pos).map_or(def, |a| cond(a))
+    pub fn at(&self, coord: Coordinate) -> At {
+        At {
+            coord: coord,
+            state: self
+        }
     }
 
-    pub fn tile_at(&self, pos : Coordinate) -> Option<&tile::Tile> {
-        self.map.get(&pos)
-    }
-
-    pub fn tile_map_or<R, F : Fn(&tile::Tile) -> R>(&self, pos : Coordinate, def: R, f : F) -> R {
-        self.map.get(&pos).map_or(def, |a| f(a))
-    }
-
-    pub fn is_occupied(&self, pos : Coordinate) -> bool {
-        self.actors.contains_key(&pos)
-    }
-
-    pub fn is_passable(&self, pos : Coordinate) -> bool {
-        !self.is_occupied(pos) && self.tile_map_or(pos, false, |t| t.is_passable())
-    }
-
-    pub fn light(&self, pos : Coordinate) -> u32 {
-        self.light_map.get(&pos).map_or(0, |l| *l)
+    pub fn at_mut(&mut self, coord: Coordinate) -> AtMut {
+        AtMut {
+            coord: coord,
+            state: self
+        }
     }
 }
 
+impl<'a> At<'a> {
+    pub fn tile(&self) -> Option<&'a tile::Tile> {
+        self.state.map.get(&self.coord)
+    }
+
+    pub fn tile_map_or<R, F>(&self, def: R, f : F) -> R
+        where F : Fn(&tile::Tile) -> R
+    {
+        self.state.map.get(&self.coord).map_or(def, |a| f(a))
+    }
+
+    pub fn actor_map_or<R, F : Fn(&actor::State) -> R>
+        (&self, def: R, cond : F) -> R
+    {
+        self.state.actors.get(&self.coord).map_or(def, |a| cond(a))
+    }
+
+    pub fn is_occupied(&self) -> bool {
+        self.state.actors.contains_key(&self.coord)
+    }
+
+    pub fn is_passable(&self) -> bool {
+        !self.is_occupied() && self.tile_map_or(false, |t| t.is_passable())
+    }
+
+    pub fn light(&self) -> u32 {
+        self.state.light_map.get(&self.coord).map_or(0, |l| *l)
+    }
+
+    pub fn item(&self) -> Option<&'a Item> {
+        self.state.items.get(&self.coord).map(|i| &**i)
+    }
+
+}
+
+impl<'a> AtMut<'a> {
+    /*
+    pub fn to_at(&'a self) -> At<'a> {
+        At {
+            coord: self.coord,
+            state: self.state
+        }
+    }*/
+
+    pub fn drop_item(&mut self, item : Box<Item+Send+Sync>) {
+        let coord = {
+            let mut bfs = bfs::Traverser::new(
+                |coord| self.state.at(coord).tile_map_or(false, |t| t.is_passable()),
+                |coord| self.state.items.get(&coord).is_none(),
+                self.coord
+                );
+
+            bfs.find()
+        };
+
+        match coord {
+            None => { /* destroy the item :/ */ },
+            Some(coord) => {
+                let mut items = self.state.items.clone().make_unique().clone();
+                items[coord] = item;
+                self.state.items = Arc::new(items);
+            }
+        }
+    }
+}

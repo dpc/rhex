@@ -1,20 +1,20 @@
 
 use rand;
 use rand::Rng;
-use std::collections::ring_buf::RingBuf;
+use std::collections::VecDeque;
 use std::collections::HashMap;
 use std::sync::Arc;
 
 use hex2d as h2d;
 use hex2d::{ToCoordinate, Direction, Position, Coordinate};
 use game::tile;
-use game::{Map, Actors};
+use game::{Map, Actors, Items};
 use game::area;
 use actor;
 
 pub struct DungeonGenerator;
 
-type EndpointQueue = RingBuf<(h2d::Coordinate, h2d::Direction)>;
+type EndpointQueue = VecDeque<(h2d::Coordinate, h2d::Direction)>;
 
 fn tile_is_deadend(map : &Map, coord : Coordinate) -> bool {
     let neighbors = coord.neighbors();
@@ -184,10 +184,11 @@ impl DungeonGenerator {
         tile_count
     }
 
-    pub fn generate_map(&self, start : h2d::Coordinate, size : u32) -> (Map, Actors) {
+    pub fn generate_map(&self, start : h2d::Coordinate, size : u32) -> (Map, Actors, Items) {
         let mut map = HashMap::new();
-        let mut endpoints = RingBuf::new();
+        let mut endpoints = VecDeque::new();
         let mut actors = HashMap::new();
+        let items = HashMap::new();
         let start_dir = h2d::Direction::XY;
         let first_room_r = rand::thread_rng().gen_range(0, 2) + 2;
 
@@ -236,6 +237,6 @@ impl DungeonGenerator {
             }
         }
 
-        return (map, actors);
+        return (map, actors, items);
     }
 }

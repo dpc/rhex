@@ -1,7 +1,7 @@
 use std::old_io::Timer;
 use std::time::duration::Duration;
 use std::sync::{mpsc, Arc};
-use std::collections::ring_buf::RingBuf;
+use std::collections::VecDeque;
 use time;
 
 use hex2d;
@@ -59,7 +59,7 @@ impl<U : UiFrontend> Ui<U> {
 
     pub fn should_stop_autoexploring(&self, astate : &actor::State, gstate : &game::State) -> bool {
         astate.discovered_areas.iter().count() > 0 ||
-            astate.visible.iter().any(|&coord| gstate.actor_map_or(coord, false, |a| a.behavior == actor::Behavior::Grue))
+            astate.visible.iter().any(|&coord| gstate.at(coord).actor_map_or(false, |a| a.behavior == actor::Behavior::Grue))
     }
 
     pub fn autoexplore_action(&self, astate : &actor::State, gstate : &game::State) -> AutoExploreAction {
@@ -67,7 +67,7 @@ impl<U : UiFrontend> Ui<U> {
         let start = astate.pos.coord;
 
         let mut bfs = bfs::Traverser::new(
-            |c| c == start || gstate.tile_at(c).map(|t| t.is_passable()) == Some(true),
+            |c| c == start || gstate.at(c).tile_map_or(false, |t| t.is_passable()),
             |c| !astate.knows(c),
             start
             );
@@ -77,7 +77,7 @@ impl<U : UiFrontend> Ui<U> {
 
                 let ndir = astate.pos.coord.direction_to_cw(neigh).expect("bfs gave me trash");
                 if ndir == astate.pos.dir {
-                    if gstate.is_occupied(neigh) {
+                    if gstate.at(neigh).is_occupied() {
                         AutoExploreAction::Blocked
                     } else {
                         AutoExploreAction::Action(game::Action::Move(hex2d::Angle::Forward))
@@ -113,7 +113,7 @@ impl<U : UiFrontend> Ui<U> {
                ) {
 
         let mut pending_req : Option<(Arc<actor::State>, Arc<game::State>)> = None;
-        let mut pending_action = RingBuf::new();
+        let mut pending_action = VecDeque::new();
 
         let mut timer = Timer::new().unwrap();
 

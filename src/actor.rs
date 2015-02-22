@@ -58,7 +58,7 @@ pub struct State {
 fn calculate_los(pos : Position, gstate : &game::State) -> Visibility {
     let mut visibility = HashSet::new();
     algo::los::los(
-        &|coord| gstate.tile_at(coord).map_or(10000, |tile| tile.opaqueness()),
+        &|coord| gstate.at(coord).tile_map_or(10000, |tile| tile.opaqueness()),
         &mut |coord, _ | {
             if pos.coord.distance(coord) < 2 || gstate.light_map.contains_key(&coord) {
                 let _ = visibility.insert(coord);
@@ -140,7 +140,7 @@ impl State {
         }
 
         for &coord in &discovered {
-            if let Some(area) = gstate.tile_at(coord).and_then(|t| t.area) {
+            if let Some(area) = gstate.at(coord).tile().and_then(|t| t.area) {
                 let area_center = area.center;
 
                 if !self.known_areas.contains(&area_center) {
