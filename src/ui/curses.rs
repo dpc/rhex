@@ -819,6 +819,7 @@ impl ui::UiFrontend for CursesUI {
                         'L' => Action::Game(game::Action::Move(Angle::Right)),
                         'j' => Action::Game(game::Action::Move(Angle::Back)),
                         '.' => Action::Game(game::Action::Wait),
+                        ',' => Action::Game(game::Action::Pick),
                         'o' => Action::AutoExplore,
                         'x' =>  {
                             self.examine_pos = None;

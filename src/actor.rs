@@ -23,7 +23,6 @@ pub struct Stats {
     pub mp: i32,
 }
 
-
 impl Stats {
     pub fn new(hp : i32) -> Stats {
         Stats { int: 3, dex : 3, str_ : 3,
@@ -53,21 +52,6 @@ pub struct State {
     pub discovered_areas: Visibility,
 
     pub light : u32,
-}
-
-fn calculate_los(pos : Position, gstate : &game::State) -> Visibility {
-    let mut visibility = HashSet::new();
-    algo::los::los(
-        &|coord| gstate.at(coord).tile_map_or(10000, |tile| tile.opaqueness()),
-        &mut |coord, _ | {
-            if pos.coord.distance(coord) < 2 || gstate.light_map.contains_key(&coord) {
-                let _ = visibility.insert(coord);
-            }
-        },
-        10, pos.coord, &[pos.dir, pos.dir + Angle::Left, pos.dir + Angle::Right]
-        );
-
-    visibility
 }
 
 impl State {
@@ -114,6 +98,7 @@ impl State {
         let pos = self.pos;
         match action {
             Action::Wait => pos,
+            Action::Pick => pos,
             Action::Turn(a) => pos + a,
             Action::Move(a) => pos + (pos.dir + a).to_coordinate(),
             Action::Spin(a) => pos + (pos.dir + a).to_coordinate() +
@@ -194,5 +179,19 @@ impl State {
     pub fn is_dead(&self) -> bool {
         self.stats.hp <= 0
     }
+}
 
+fn calculate_los(pos : Position, gstate : &game::State) -> Visibility {
+    let mut visibility = HashSet::new();
+    algo::los::los(
+        &|coord| gstate.at(coord).tile_map_or(10000, |tile| tile.opaqueness()),
+        &mut |coord, _ | {
+            if pos.coord.distance(coord) < 2 || gstate.light_map.contains_key(&coord) {
+                let _ = visibility.insert(coord);
+            }
+        },
+        10, pos.coord, &[pos.dir, pos.dir + Angle::Left, pos.dir + Angle::Right]
+        );
+
+    visibility
 }

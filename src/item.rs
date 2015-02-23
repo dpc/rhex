@@ -13,6 +13,11 @@ impl<'a> Clone for Box<Item+'a> {
 }
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
+pub enum Type {
+    Weapon,
+}
+
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub struct Weapon {
     pub base_dmg : i32,
 }
@@ -37,7 +42,4 @@ impl Item for Weapon {
     }
 }
 
-pub enum Type {
-    Weapon,
-}
 

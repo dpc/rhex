@@ -16,14 +16,13 @@ pub type Reply = (Arc<actor::State>, Action);
 ///
 /// Meant to be running in it's own thread
 pub struct Controller {
-    state : Arc<State>,
+    state : State,
 }
-
 
 impl Controller {
     pub fn new(state : State) -> Controller {
         Controller {
-            state: Arc::new(state),
+            state: state,
         }
     }
 
@@ -37,31 +36,33 @@ impl Controller {
         let mut timer = Timer::new().unwrap();
         let timer = timer.periodic(Duration::milliseconds(100));
 
-        self.state = Arc::new(self.state.post_tick());
 
         loop {
+            self.state.post_tick();
+
+            let rc_state = Arc::new(self.state.clone());
             let actors = self.state.actors.clone();
 
-            for (_, actor) in &*actors {
+            for (&acoord, actor) in &actors {
                 match actor.behavior {
                     actor::Behavior::Player => {
                         try!(pl_req.send(
-                                (actor.clone(), self.state.clone())
+                                (rc_state.actors[acoord].clone(), rc_state.clone())
                                 ));
                     },
                     actor::Behavior::Grue|actor::Behavior::Pony => {
                         try!(ai_req.send(
-                                (actor.clone(), self.state.clone())
+                                (rc_state.actors[acoord].clone(), rc_state.clone())
                                 ));
                     },
                 }
             }
 
-            for astate in &*self.state.actors_dead {
+            for astate in &rc_state.actors_dead {
                 match astate.behavior {
                     actor::Behavior::Player => {
                         try!(pl_req.send(
-                                (astate.clone(), self.state.clone())
+                                (astate.clone(), rc_state.clone())
                                 ));
                     },
                     _ => {},
@@ -70,8 +71,8 @@ impl Controller {
 
             let mut actions = vec!();
 
-            for (_, astate) in &*actors {
-                let (astate, action) = match astate.behavior {
+            for (_, astate) in &actors {
+                let (acoord, action) = match astate.behavior {
                     actor::Behavior::Player => {
                         try!(pl_rep.recv())
                     },
@@ -80,25 +81,20 @@ impl Controller {
                     },
                 };
 
-                actions.push((astate.pos.coord, action));
+                actions.push((acoord, action));
             }
 
-            self.state = Arc::new(self.state.pre_tick());
+            self.state.pre_tick();
 
             rand::thread_rng().shuffle(&mut actions);
 
-            for &(acoord, action) in &actions {
-                self.state = Arc::new(
-                    self.state.act(Stage::ST1, acoord, action)
-                    );
+            for &(ref astate, ref action) in &actions {
+                self.state.act(Stage::ST1, astate.pos.coord, *action)
             }
 
-            for &(acoord, action) in &actions {
-                self.state = Arc::new(
-                    self.state.act(Stage::ST2, acoord, action)
-                    );
+            for &(ref astate, ref action) in &actions {
+                self.state.act(Stage::ST2, astate.pos.coord, *action)
             }
-            self.state = Arc::new(self.state.post_tick());
             timer.recv().unwrap();
         }
     }

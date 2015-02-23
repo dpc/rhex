@@ -29,6 +29,7 @@ pub enum Action {
     Turn(Angle),
     Move(Angle),
     Spin(Angle),
+    Pick,
 }
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
@@ -39,23 +40,13 @@ pub enum Stage {
 
 #[derive(Clone, Debug)]
 pub struct State {
-    pub actors: Arc<Actors>,
-    pub actors_done: Arc<HashSet<Coordinate>>,
-    pub actors_dead: Arc<Vec<Arc<actor::State>>>,
+    pub actors: Actors,
+    pub actors_done: HashSet<Coordinate>,
+    pub actors_dead: Vec<Arc<actor::State>>,
     pub map : Arc<Map>,
     pub items: Arc<Items>,
-    pub light_map: Arc<LightMap>,
+    pub light_map: LightMap,
     pub turn : u64,
-}
-
-pub struct At<'a> {
-    coord : Coordinate,
-    state : &'a State,
-}
-
-pub struct AtMut<'a> {
-    coord : Coordinate,
-    state : &'a mut State,
 }
 
 impl State {
@@ -65,13 +56,13 @@ impl State {
         let (map, actors, _items) = generate::DungeonGenerator.generate_map(cp, 400);
 
         State {
-            actors: Arc::new(actors),
-            actors_done: Arc::new(HashSet::new()),
-            actors_dead: Arc::new(Vec::new()),
+            actors: actors,
+            actors_done: HashSet::new(),
+            actors_dead: Vec::new(),
             items: Arc::new(HashMap::new()),
             map: Arc::new(map),
             turn: 0,
-            light_map: Arc::new(HashMap::new()),
+            light_map: HashMap::new(),
         }
     }
 
@@ -107,7 +98,7 @@ impl State {
             }
         }
 
-        for (pos, astate) in &*self.actors {
+        for (pos, astate) in &self.actors {
             if astate.light > 0 {
                 algo::los::los(
                     &|coord| {
@@ -135,12 +126,13 @@ impl State {
             }
         }
 
-        self.light_map = Arc::new(light_map);
+        self.light_map = light_map;
     }
 
-    pub fn spawn(&self, coord : Coordinate, behavior : actor::Behavior, light : u32) -> State {
+    pub fn spawn(&self, coord : Coordinate,
+                 behavior : actor::Behavior, light : u32) -> State {
 
-        let mut actors = self.actors.clone().make_unique().clone();
+        let mut actors = self.actors.clone();
 
         let pos = Position::new(coord, Direction::XY);
 
@@ -149,7 +141,7 @@ impl State {
                 ));
 
         State {
-            actors: Arc::new(actors),
+            actors: actors,
             actors_done: self.actors_done.clone(),
             actors_dead: self.actors_dead.clone(),
             items: self.items.clone(),
@@ -166,163 +158,115 @@ impl State {
     pub fn spawn_pony(&self, pos : Coordinate) -> State {
         self.spawn(pos, actor::Behavior::Pony, 7)
     }
-
-    pub fn actor_act(&self, stage : Stage,
+/*
+    pub fn actor_act(&mut self, stage : Stage,
                      astate : &actor::State,
-                     action : Action) -> Option<State> {
+                     action : Action) -> Option<State> 
+    }
+*/
+    pub fn act(&mut self, stage : Stage,
+               acoord : Coordinate, action : Action) {
+
+        if self.actors_done.contains(&acoord) {
+            return;
+        }
+
+        let astate = self.actors[acoord].clone();
+
         let new_pos = astate.pos_after_action(action);
 
         if astate.pos == new_pos {
             // we did nothing
-            None
-        } else if astate.pos.coord != new_pos.coord && self.actors.contains_key(&new_pos.coord) {
+            if action == Action::Pick {
+                let _ = self.at_mut(astate.pos.coord).pick_item();
+            }
+        } else if astate.pos.coord != new_pos.coord &&
+            self.actors.contains_key(&new_pos.coord)
+            {
             // that was an attack!
             if stage != Stage::ST1 {
-                return None;
+                return;
             }
-            let mut actors = self.actors.clone().make_unique().clone();
-            let mut actors_done = self.actors_done.clone().make_unique().clone();
 
-            let target = &self.actors[new_pos.coord];
+            let target = self.actors[new_pos.coord].clone();
             let target_new_state = target.hit();
-            actors.remove(&new_pos.coord);
-            actors.insert(target_new_state.pos.coord, Arc::new(target_new_state));
+            self.actors.remove(&new_pos.coord);
+            self.actors.insert(target_new_state.pos.coord, Arc::new(target_new_state));
 
-            actors_done.insert(astate.pos.coord);
-
-            let ret = State {
-                actors: Arc::new(actors),
-                actors_done: Arc::new(actors_done),
-                actors_dead: self.actors_dead.clone(),
-                map: self.map.clone(),
-                items: self.items.clone(),
-                turn: self.turn,
-                light_map: self.light_map.clone(),
-            };
-            Some(ret)
-        } else if self.at(new_pos.coord).tile_map_or(false, |t| t.type_ == tile::Door(false)) {
+            self.actors_done.insert(astate.pos.coord);
+        } else if self.at(new_pos.coord).tile_map_or(
+            false, |t| t.type_ == tile::Door(false)
+            ) {
 
             if stage != Stage::ST2 {
-                return None
+                return;
             }
 
-            // open the door
             let mut map = self.map.clone().make_unique().clone();
-
             map.insert(new_pos.coord, Tile::new(tile::Door(true)));
+            self.map = Arc::new(map);
 
-            Some(State {
-                actors: self.actors.clone(),
-                actors_done: self.actors_done.clone(),
-                actors_dead: self.actors_dead.clone(),
-                items: self.items.clone(),
-                map: Arc::new(map),
-                turn: self.turn,
-                light_map: self.light_map.clone(),
-            })
         } else if astate.pos.coord == new_pos.coord || self.at(new_pos.coord).is_passable() {
             // we've moved
             if stage != Stage::ST2 {
-                return None
+                return;
             }
 
-            let mut actors = self.actors.clone().make_unique().clone();
             let actor_new_state = astate.change_position(new_pos);
 
-            actors.remove(&astate.pos.coord);
-            actors.insert(actor_new_state.pos.coord, Arc::new(actor_new_state));
-
-            let ret = State {
-                actors: Arc::new(actors),
-                actors_done: self.actors_done.clone(),
-                actors_dead: self.actors_dead.clone(),
-                items: self.items.clone(),
-                map: self.map.clone(),
-                turn: self.turn,
-                light_map: self.light_map.clone(),
-            };
-            Some(ret)
+            self.actors.remove(&astate.pos.coord);
+            self.actors.insert(actor_new_state.pos.coord, Arc::new(actor_new_state));
         } else {
             // we hit the wall or something
-            None
         }
     }
 
-    pub fn act(&self, stage : Stage,
-               acoord : Coordinate, action : Action) -> State {
-
-        if self.actors_done.contains(&acoord) {
-            return self.clone()
-        }
-
-        let astate = &self.actors[acoord];
-
-        if let Some(state) = self.actor_act(stage, astate, action) {
-            state
-        } else {
-            self.clone()
-        }
-    }
-
-    pub fn pre_tick(&self) -> State {
+    pub fn pre_tick(&mut self) {
         let mut actors = HashMap::new();
-        for (&coord, a) in self.actors.iter() {
-                let mut a = a.clone().make_unique().clone();
-                a.pre_tick(self);
-                actors.insert(coord, Arc::new(a));
+        for (coord, ref mut a) in self.actors.iter() {
+            let mut a = a.clone().make_unique().clone();
+            a.pre_tick(self);
+            actors.insert(*coord, Arc::new(a));
         }
 
-        let mut ret = self.clone();
-
-        ret.actors = Arc::new(actors);
-
-        ret
+        self.actors = actors;
     }
 
     /// Advance one turn (increase the turn counter) and do some maintenance
-    pub fn post_tick(&self) -> State {
+    pub fn post_tick(&mut self) {
         // filter out the dead
-        let mut actors = HashMap::new();
-        let mut actors_dead = self.actors_dead.clone().make_unique().clone();
+        let mut left_actors = HashMap::new();
+        let mut new_dead_actors = Vec::new();
 
         for (&coord, a) in self.actors.iter() {
             if a.is_dead() {
                 if a.behavior == actor::Behavior::Player {
-                    actors_dead.push(a.clone());
+                    new_dead_actors.push(a.clone());
                 }
             } else {
-                actors.insert(coord, a.clone());
+                left_actors.insert(coord, a.clone());
             }
         }
 
-        let mut ret = State {
-            actors: Arc::new(actors),
-            actors_done: Arc::new(HashSet::new()),
-            actors_dead: Arc::new(actors_dead),
-            items: self.items.clone(),
-            map: self.map.clone(),
-            turn: self.turn + 1,
-            light_map: Arc::new(HashMap::new()),
-        };
-        ret.recalculate_light_map();
+        self.actors = left_actors;
+
+        for a in new_dead_actors.iter() {
+            self.actors_dead.push(a.clone());
+        }
+
+        self.recalculate_light_map();
 
         let mut actors = HashMap::new();
 
-        for (&coord, a) in ret.actors.iter() {
-                let mut a = a.clone().make_unique().clone();
-                a.post_tick(&ret);
-                actors.insert(coord, Arc::new(a));
+        for (&coord, a) in self.actors.iter() {
+            let mut a = a.clone().make_unique().clone();
+            a.post_tick(self);
+            actors.insert(coord, Arc::new(a));
         }
 
-        State {
-            actors: Arc::new(actors),
-            actors_done: Arc::new(HashSet::new()),
-            actors_dead: ret.actors_dead.clone(),
-            items: ret.items.clone(),
-            map: ret.map.clone(),
-            turn: ret.turn,
-            light_map: ret.light_map.clone(),
-        }
+        self.actors = actors;
+        self.actors_done = HashSet::new();
+        self.turn += 1;
     }
 
     pub fn at(&self, coord: Coordinate) -> At {
@@ -338,6 +282,11 @@ impl State {
             state: self
         }
     }
+}
+
+pub struct At<'a> {
+    coord : Coordinate,
+    state : &'a State,
 }
 
 impl<'a> At<'a> {
@@ -372,7 +321,11 @@ impl<'a> At<'a> {
     pub fn item(&self) -> Option<&'a Item> {
         self.state.items.get(&self.coord).map(|i| &**i)
     }
+}
 
+pub struct AtMut<'a> {
+    coord : Coordinate,
+    state : &'a mut State,
 }
 
 impl<'a> AtMut<'a> {
@@ -402,6 +355,17 @@ impl<'a> AtMut<'a> {
                 items.insert(coord, item);
                 self.state.items = Arc::new(items);
             }
+        }
+    }
+
+    pub fn pick_item(&mut self) -> Option<Box<Item>> {
+        if self.state.items.get(&self.coord).is_some() {
+            let mut items = self.state.items.clone().make_unique().clone();
+            let item = items.remove(&self.coord);
+            self.state.items = Arc::new(items);
+            item
+        } else {
+            None
         }
     }
 }

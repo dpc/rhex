@@ -1,9 +1,9 @@
 use std::old_io::Timer;
 use std::time::duration::Duration;
-use std::sync::{mpsc, Arc};
+use std::sync::{mpsc};
 use std::collections::VecDeque;
 use time;
-
+use game::controller::{Request, Reply};
 use hex2d;
 
 use actor;
@@ -93,7 +93,7 @@ impl<U : UiFrontend> Ui<U> {
         }
     }
 
-    pub fn redraw(&mut self, req : &Option<game::controller::Request>) {
+    pub fn redraw(&mut self, req : &Option<Request>) {
         if let &Some((ref astate, ref gstate)) = req {
             let now = time::precise_time_ns();
 
@@ -108,11 +108,11 @@ impl<U : UiFrontend> Ui<U> {
     }
 
     pub fn run(&mut self,
-               req : mpsc::Receiver<(Arc<actor::State>, Arc<game::State>)>,
-               rep : mpsc::Sender<(Arc<actor::State>, game::Action)>
+               req : mpsc::Receiver<Request>,
+               rep : mpsc::Sender<Reply>
                ) {
 
-        let mut pending_req : Option<(Arc<actor::State>, Arc<game::State>)> = None;
+        let mut pending_req : Option<Request> = None;
         let mut pending_action = VecDeque::new();
 
         let mut timer = Timer::new().unwrap();
@@ -156,14 +156,14 @@ impl<U : UiFrontend> Ui<U> {
                 }
             } else {
                 match req.try_recv() {
-                    Ok(state) => {
+                    Ok(req) => {
                         let dead = {
-                            let (ref astate, ref gstate) = state;
+                            let (ref astate, ref gstate) = req;
                             self.frontend.update(&astate, &gstate);
                             astate.is_dead()
                         };
 
-                        pending_req = Some(state);
+                        pending_req = Some(req);
                         self.redraw(&pending_req);
 
                         if dead {

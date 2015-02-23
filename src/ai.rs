@@ -1,6 +1,6 @@
 use rand;
 use rand::Rng;
-use std::sync::{Arc,mpsc};
+use std::sync::{mpsc};
 
 use hex2dext::algo::bfs;
 
@@ -94,13 +94,13 @@ fn pony_follow(astate : &actor::State, gstate : &game::State) -> game::Action {
 }
 
 pub fn run(
-    req : mpsc::Receiver<(Arc<actor::State>, Arc<game::State>)>,
-    rep : mpsc::Sender<(Arc<actor::State>, game::Action)>
+    req : mpsc::Receiver<game::controller::Request>,
+    rep : mpsc::Sender<game::controller::Reply>
     ) -> Result<(), Error<game::controller::Reply>>
 {
 
     loop {
-        let (astate, gstate) = try!(req.recv());
+        let (ref astate, ref gstate) = try!(req.recv());
 
         let action = match astate.behavior {
             actor::Behavior::Grue => grue(&astate, &gstate),
@@ -108,6 +108,6 @@ pub fn run(
             _ => panic!(),
         };
 
-        try!(rep.send((astate, action)));
+        try!(rep.send((astate.clone(), action)));
     }
 }
