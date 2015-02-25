@@ -11,6 +11,7 @@ use game;
 use game::area;
 use actor::{self, Behavior, Slot};
 use ui;
+use item;
 
 use hex2d::{Angle, IntegerSpacing, Coordinate, ToCoordinate, Position};
 
@@ -36,6 +37,13 @@ static SPACING: IntegerSpacing<i32> = IntegerSpacing::PointyTop(2, 1);
 
 const NORMAL_DOT : &'static str = ".";
 const UNICODE_DOT : &'static str = "·";
+
+pub fn item_to_str(t : item::Type) -> &'static str {
+    match t {
+        item::Type::Weapon => "(",
+        item::Type::Armor => "[",
+    }
+}
 
 pub mod color {
     use std::collections::HashMap;
@@ -171,7 +179,6 @@ impl CursesUI {
         unsafe {
             let _ = locale::setlocale(locale::LC_ALL, b"en_US.UTF-8".as_ptr() as *const i8);
         }
-
 
         nc::initscr();
         nc::start_color();
@@ -351,7 +358,8 @@ impl CursesUI {
                         };
                         (fg, color::CHAR_BG, "@")
                     } else if is_proper_coord && visible && gstate.at(c).item().is_some() {
-                        (color::WALL_FG, color::EMPTY_BG, "(")
+                        let item = gstate.at(c).item().unwrap();
+                        (color::WALL_FG, color::EMPTY_BG, item_to_str(item.type_()))
                     } else {
                         match tt {
                             Some(tile::Empty) => {
@@ -512,7 +520,7 @@ impl CursesUI {
 
         nc::wattron(window, self.text_color as i32);
 
-        let item = if let Some(&(ref ch, ref item)) = astate.equipped.get(&slot) {
+        let item = if let Some(&(_, ref item)) = astate.equipped.get(&slot) {
             item.description().to_string()
         } else {
             "-".to_string()
@@ -530,11 +538,21 @@ impl CursesUI {
 
         nc::werase(window);
         nc::wmove(window, 0, 0);
+        if astate.equipped.iter().any(|_| true) {
+            nc::waddstr(window, &format!("Equipped: \n"));
+            for (slot, &(ref ch, ref i)) in &astate.equipped {
+                nc::waddstr(window, &format!(" {} - {} [{:?}]\n", ch, i.description(), slot));
+            }
+            nc::waddstr(window, &format!("\n"));
+        }
 
-        nc::waddstr(window, &format!("Inventory: \n"));
+        if astate.items.iter().any(|_| true) {
+            nc::waddstr(window, &format!("Inventory: \n"));
 
-        for (ch, i) in &astate.items {
-            nc::waddstr(window, &format!("{} - {}\n", ch, i.description()));
+            for (ch, i) in &astate.items {
+                nc::waddstr(window, &format!(" {} - {}\n", ch, i.description()));
+            }
+            nc::waddstr(window, &format!("\n"));
         }
 
         nc::wnoutrefresh(window);

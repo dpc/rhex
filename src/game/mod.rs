@@ -4,7 +4,7 @@ use std::collections::hash_map::Entry;
 use std::sync::{Arc};
 
 use hex2d::{Coordinate, Direction, Angle, Position};
-use actor;
+use actor::{self};
 use generate;
 use hex2dext::algo;
 use item::Item;
@@ -160,12 +160,7 @@ impl State {
     pub fn spawn_pony(&self, pos : Coordinate) -> State {
         self.spawn(pos, actor::Behavior::Pony, 7)
     }
-/*
-    pub fn actor_act(&mut self, stage : Stage,
-                     astate : &actor::State,
-                     action : Action) -> Option<State> 
-    }
-*/
+
     pub fn act(&mut self, stage : Stage,
                acoord : Coordinate, action : Action) {
 
@@ -193,7 +188,9 @@ impl State {
                     }
                 },
                 Action::Equip(ch) => {
-
+                    let mut astate = self.actors.remove(&astate.pos.coord).unwrap().make_unique().clone();
+                    astate.equip(ch);
+                    self.actors.insert(astate.pos.coord, Arc::new(astate));
                 },
                 _ => {}
             }

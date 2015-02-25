@@ -164,8 +164,9 @@ impl State {
         false
     }
 
-    pub fn equip(&mut self, ch : char, slot : Slot) {
+    pub fn equip(&mut self, ch : char) {
         if let Some(item) = self.items.remove(&ch) {
+            let slot = item.slot();
             self.unequip(slot);
             self.equipped.insert(slot, (ch, item));
         }
