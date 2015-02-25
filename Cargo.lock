@@ -3,7 +3,7 @@ name = "rhex"
 version = "0.0.1"
 dependencies = [
  "hex2d 0.0.9 (registry+https://github.com/rust-lang/crates.io-index)",
- "hex2d-dpcext 0.0.3 (registry+https://github.com/rust-lang/crates.io-index)",
+ "hex2d-dpcext 0.0.4 (registry+https://github.com/rust-lang/crates.io-index)",
  "log 0.2.4 (registry+https://github.com/rust-lang/crates.io-index)",
  "ncurses 5.71.1 (git+https://github.com/jeaye/ncurses-rs.git)",
  "num 0.1.14 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -27,7 +27,7 @@ dependencies = [
 
 [[package]]
 name = "hex2d-dpcext"
-version = "0.0.3"
+version = "0.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "hex2d 0.0.9 (registry+https://github.com/rust-lang/crates.io-index)",
