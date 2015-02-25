@@ -1,7 +1,9 @@
-use std::collections::HashSet;
+use std::collections::{HashSet,HashMap};
 use hex2d::{Coordinate, Angle, Position, ToCoordinate};
 use game::{self, Action};
 use hex2dext::algo;
+
+use item::Item;
 
 type Visibility = HashSet<Coordinate>;
 
@@ -30,7 +32,17 @@ impl Stats {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Debug)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug, Hash)]
+pub enum Slot {
+    Head,
+    Feet,
+    LHand,
+    RHand,
+    Body,
+    Cloak,
+}
+
+#[derive(Clone, Debug)]
 pub struct State {
     pub pos : Position,
 
@@ -52,6 +64,9 @@ pub struct State {
     pub discovered_areas: Visibility,
 
     pub light : u32,
+
+    pub equipped : HashMap<Slot, (char, Box<Item>)>,
+    pub items : HashMap<char, Box<Item>>,
 }
 
 impl State {
@@ -68,22 +83,13 @@ impl State {
             discovered: HashSet::new(),
             discovered_areas: HashSet::new(),
             light: 0,
+            items: HashMap::new(),
+            equipped: HashMap::new(),
         }
     }
 
-    pub fn add_light(&self, light : u32) -> State {
-        State {
-            behavior: self.behavior,
-            pos: self.pos,
-            prev_stats: self.prev_stats,
-            stats: self.stats,
-            visible: self.visible.clone(),
-            known: self.known.clone(),
-            known_areas: self.known_areas.clone(),
-            discovered: self.discovered.clone(),
-            discovered_areas: self.discovered_areas.clone(),
-            light: light,
-        }
+    pub fn add_light(&mut self, light : u32) {
+        self.light = light;
     }
 
     pub fn sees(&self, pos : Coordinate) -> bool {
@@ -97,8 +103,7 @@ impl State {
     pub fn pos_after_action(&self, action : Action) -> Position {
         let pos = self.pos;
         match action {
-            Action::Wait => pos,
-            Action::Pick => pos,
+            Action::Wait|Action::Pick|Action::Equip(_) => pos,
             Action::Turn(a) => pos + a,
             Action::Move(a) => pos + (pos.dir + a).to_coordinate(),
             Action::Spin(a) => pos + (pos.dir + a).to_coordinate() +
@@ -148,6 +153,30 @@ impl State {
         self.postprocess_visibile(gstate);
     }
 
+    pub fn add_item(&mut self, item : Box<Item>) -> bool {
+        for ch in range('a' as u8, 'z' as u8).chain(range('A' as u8, 'Z' as u8)) {
+            let ch = ch as char;
+            if !self.items.contains_key(&ch) {
+                self.items.insert(ch, item);
+                return true;
+            }
+        }
+        false
+    }
+
+    pub fn equip(&mut self, ch : char, slot : Slot) {
+        if let Some(item) = self.items.remove(&ch) {
+            self.unequip(slot);
+            self.equipped.insert(slot, (ch, item));
+        }
+    }
+
+    pub fn unequip(&mut self, slot : Slot) {
+        if let Some((ch, item)) = self.equipped.remove(&slot) {
+            self.items.insert(ch, item);
+        }
+    }
+
     pub fn hit(&self) -> State {
         let mut state = self.clone();
 
@@ -156,20 +185,8 @@ impl State {
         return state;
     }
 
-    pub fn change_position(&self, new_pos : Position) -> State {
-         State {
-            behavior: self.behavior,
-            pos: new_pos,
-            prev_stats: self.prev_stats,
-            stats: self.stats,
-            visible: self.visible.clone(),
-            known: self.known.clone(),
-            known_areas: self.known_areas.clone(),
-            discovered: HashSet::new(),
-            discovered_areas: HashSet::new(),
-            light: self.light,
-        }
-
+    pub fn change_position(&mut self, new_pos : Position) {
+        self.pos = new_pos;
     }
 
     pub fn is_player(&self) -> bool {

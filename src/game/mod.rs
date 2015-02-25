@@ -29,6 +29,7 @@ pub enum Action {
     Turn(Angle),
     Move(Angle),
     Spin(Angle),
+    Equip(char),
     Pick,
 }
 
@@ -136,9 +137,10 @@ impl State {
 
         let pos = Position::new(coord, Direction::XY);
 
-        actors.insert(pos.coord, Arc::new(
-                actor::State::new(behavior, pos).add_light(light)
-                ));
+        let mut actor = actor::State::new(behavior, pos);
+        actor.add_light(light);
+
+        actors.insert(pos.coord, Arc::new(actor));
 
         State {
             actors: actors,
@@ -177,8 +179,23 @@ impl State {
 
         if astate.pos == new_pos {
             // we did nothing
-            if action == Action::Pick {
-                let _ = self.at_mut(astate.pos.coord).pick_item();
+            match action {
+                Action::Pick => {
+                    let item = self.at_mut(astate.pos.coord).pick_item();
+
+                    match item {
+                        Some(item) => {
+                            let mut astate = self.actors.remove(&astate.pos.coord).unwrap().make_unique().clone();
+                            astate.add_item(item);
+                            self.actors.insert(astate.pos.coord, Arc::new(astate));
+                        },
+                        None => {},
+                    }
+                },
+                Action::Equip(ch) => {
+
+                },
+                _ => {}
             }
         } else if astate.pos.coord != new_pos.coord &&
             self.actors.contains_key(&new_pos.coord)
@@ -212,10 +229,9 @@ impl State {
                 return;
             }
 
-            let actor_new_state = astate.change_position(new_pos);
-
-            self.actors.remove(&astate.pos.coord);
-            self.actors.insert(actor_new_state.pos.coord, Arc::new(actor_new_state));
+            let mut astate = self.actors.remove(&astate.pos.coord).unwrap().make_unique().clone();
+            astate.change_position(new_pos);
+            self.actors.insert(astate.pos.coord, Arc::new(astate));
         } else {
             // we hit the wall or something
         }

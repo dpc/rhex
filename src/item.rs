@@ -41,5 +41,3 @@ impl Item for Weapon {
         Box::new(self.clone())
     }
 }
-
-

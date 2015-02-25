@@ -1,7 +1,7 @@
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::collections::VecDeque;
-use std::{self, cmp, num};
+use std::{self, cmp, num, env};
 use std::ffi::AsOsStr;
 use core::str::StrExt;
 use ncurses as nc;
@@ -9,7 +9,7 @@ use ncurses as nc;
 use super::Action;
 use game;
 use game::area;
-use actor::{self, Behavior};
+use actor::{self, Behavior, Slot};
 use ui;
 
 use hex2d::{Angle, IntegerSpacing, Coordinate, ToCoordinate, Position};
@@ -111,12 +111,10 @@ pub struct Window {
     pub window : nc::WINDOW,
 }
 
-
 pub struct LogEntry {
     turn : u64,
     text : String,
 }
-
 
 impl Window {
     pub fn new(w : i32, h : i32, x : i32, y : i32) -> Window {
@@ -154,11 +152,11 @@ impl CursesUI {
 
     pub fn new() -> CursesUI {
 
-        let term_ok = std::env::var_os("TERM").as_ref()
+        let term_ok = env::var_os("TERM").as_ref()
             .and_then(|s| s.as_os_str().to_str())
             .map_or(false, |s| s.ends_with("-256color"));
 
-        let term_putty = std::env::var_os("TERM").as_ref()
+        let term_putty = env::var_os("TERM").as_ref()
             .and_then(|s| s.as_os_str().to_str())
             .map_or(false, |s| s.starts_with("putty"));
 
@@ -166,9 +164,14 @@ impl CursesUI {
             panic!("Your TERM environment variable must end with -256color, sorry, stranger from the past. It is curable. Google it, fix it, try again.");
         }
 
+        if env::var_os("ESCDELAY").is_none() {
+         //   env::set_var("ESCDELAY", "25");
+        }
+
         unsafe {
             let _ = locale::setlocale(locale::LC_ALL, b"en_US.UTF-8".as_ptr() as *const i8);
         }
+
 
         nc::initscr();
         nc::start_color();
@@ -249,7 +252,7 @@ impl CursesUI {
     }
 
     pub fn display_intro(&mut self) {
-        self.mode = Mode::Intro;
+        self.mode = Mode::FullScreen(FSMode::Intro);
     }
 
     fn draw_map(
@@ -503,15 +506,39 @@ impl CursesUI {
         nc::waddstr(window, &format!("{:>2} ", val));
     }
 
-    fn draw_item(&self, window : nc::WINDOW, label: &str, item : &str) {
+    fn draw_item(&self, window : nc::WINDOW, astate : &actor::State, label: &str, slot : actor::Slot) {
         nc::wattron(window, self.label_color as i32);
         nc::waddstr(window, &format!("{}:", label));
 
         nc::wattron(window, self.text_color as i32);
+
+        let item = if let Some(&(ref ch, ref item)) = astate.equipped.get(&slot) {
+            item.description().to_string()
+        } else {
+            "-".to_string()
+        };
+
         let item = item.slice_chars(0, cmp::min(item.char_len(), 13));
         nc::waddstr(window, &format!("{:^13}", item));
     }
 
+    fn draw_inventory(&mut self, astate : &actor::State, _gstate : &game::State) {
+        let window = self.map_window.as_ref().unwrap().window;
+
+        let cpair = self.text_color;
+        nc::wbkgd(window, ' ' as nc::chtype | cpair as nc::chtype);
+
+        nc::werase(window);
+        nc::wmove(window, 0, 0);
+
+        nc::waddstr(window, &format!("Inventory: \n"));
+
+        for (ch, i) in &astate.items {
+            nc::waddstr(window, &format!("{} - {}\n", ch, i.description()));
+        }
+
+        nc::wnoutrefresh(window);
+    }
 
     fn draw_stats(&mut self, astate : &actor::State, gstate : &game::State) {
         let window = self.stats_window.as_ref().unwrap().window;
@@ -561,18 +588,18 @@ impl CursesUI {
 
         let y = y + 1;
         nc::wmove(window, y, 0);
-        self.draw_item(window, "H", "Helmet");
-        self.draw_item(window, "F", "Leather Boots");
+        self.draw_item(window, astate, "H", Slot::Head);
+        self.draw_item(window, astate, "F", Slot::Feet);
 
         let y = y + 1;
         nc::wmove(window, y, 0);
-        self.draw_item(window, "B", "Chain Armour");
-        self.draw_item(window, "C", "Cloak");
+        self.draw_item(window, astate, "B", Slot::Body);
+        self.draw_item(window, astate, "C", Slot::Cloak);
 
         let y = y + 1;
         nc::wmove(window, y, 0);
-        self.draw_item(window, "L", "Sword");
-        self.draw_item(window, "R", "Shield");
+        self.draw_item(window, astate, "L", Slot::LHand);
+        self.draw_item(window, astate, "R", Slot::RHand);
 
         let y = y + 1;
         nc::wmove(window, y, 0);
@@ -745,11 +772,23 @@ impl CursesUI {
 }
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
+enum InvMode {
+    View,
+    Equip,
+}
+
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
+enum FSMode {
+    Help,
+    Intro,
+}
+
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
 enum Mode {
     Normal,
     Examine,
-    Help,
-    Intro,
+    FullScreen(FSMode),
+    Inventory(InvMode),
 }
 
 impl ui::UiFrontend for CursesUI {
@@ -770,20 +809,28 @@ impl ui::UiFrontend for CursesUI {
         nc::getmaxyx(nc::stdscr, &mut max_y, &mut max_x);
 
         match self.mode {
-            Mode::Normal|Mode::Examine => {
-                self.draw_map(astate, gstate);
-                if self.mode == Mode::Normal {
-                    self.draw_log(astate, gstate);
+            Mode::Normal|Mode::Examine|Mode::Inventory(_) => {
+                if let Mode::Inventory(_) = self.mode {
+                    self.draw_inventory(astate, gstate);
                 } else {
-                    self.draw_examine(astate, gstate);
+                    self.draw_map(astate, gstate);
                 }
+
+                if self.mode == Mode::Examine {
+                    self.draw_examine(astate, gstate);
+                } else {
+                    self.draw_log(astate, gstate);
+                }
+
                 self.draw_stats(astate, gstate);
             },
-            Mode::Help => {
-                self.draw_help();
-            },
-            Mode::Intro => {
-                self.draw_intro();
+            Mode::FullScreen(fs_mode) => match fs_mode {
+                FSMode::Help => {
+                    self.draw_help();
+                },
+                FSMode::Intro => {
+                    self.draw_intro();
+                },
             },
         }
 
@@ -799,7 +846,7 @@ impl ui::UiFrontend for CursesUI {
                 return Some(Action::Redraw);
             }
             match self.mode {
-                Mode::Intro => match ch {
+                Mode::FullScreen(_) => match ch {
                     -1 =>
                         return None,
                     _ => {
@@ -810,34 +857,60 @@ impl ui::UiFrontend for CursesUI {
                 Mode::Normal => {
                     return Some(match (ch as u8) as char {
                         'q' => Action::Exit,
-                        'h' =>  Action::Game(game::Action::Turn(Angle::Left)),
+                        'h' => Action::Game(game::Action::Turn(Angle::Left)),
                         'l' => Action::Game(game::Action::Turn(Angle::Right)),
-                        'k'|'K' => Action::Game(game::Action::Move(Angle::Forward)),
-                        'H'|'J' => Action::Game(game::Action::Move(Angle::Left)),
+                        'k' => Action::Game(game::Action::Move(Angle::Forward)),
                         'u' => Action::Game(game::Action::Spin(Angle::Left)),
                         'i' => Action::Game(game::Action::Spin(Angle::Right)),
+                        'H' => Action::Game(game::Action::Move(Angle::Left)),
                         'L' => Action::Game(game::Action::Move(Angle::Right)),
                         'j' => Action::Game(game::Action::Move(Angle::Back)),
                         '.' => Action::Game(game::Action::Wait),
                         ',' => Action::Game(game::Action::Pick),
                         'o' => Action::AutoExplore,
+                        'I' =>  {
+                            self.mode = Mode::Inventory(InvMode::View);
+                            return Some(Action::Redraw);
+                        },
+                        'E' =>  {
+                            self.mode = Mode::Inventory(InvMode::Equip);
+                            return Some(Action::Redraw);
+                        },
                         'x' =>  {
                             self.examine_pos = None;
                             self.mode = Mode::Examine;
                             return Some(Action::Redraw);
                         },
                         '?' => {
-                            self.mode = Mode::Help;
+                            self.mode = Mode::FullScreen(FSMode::Help);
                             return Some(Action::Redraw);
                         },
                         _ => { return None }
                     })
                 },
-                Mode::Help => match ch {
+                Mode::Inventory(InvMode::Equip) => match ch {
                     -1 => return None,
-                    _ => {
-                        self.mode = Mode::Normal;
-                        return Some(Action::Redraw);
+                    ch => match ch as u8 as char {
+                        'a'...'z'|'A'...'Z' => {
+                            return Some(Action::Game(game::Action::Equip(ch as u8 as char)))
+                        },
+                        '\x1b' => {
+                            self.mode = Mode::Normal;
+                            return Some(Action::Redraw);
+                        },
+                        _ => {},
+                    }
+                },
+                Mode::Inventory(InvMode::View) => match ch {
+                    -1 => return None,
+                    ch => match ch as u8 as char {
+                        'a'...'z'|'A'...'Z' => {
+                        },
+                        '\x1b' => {
+                            self.mode = Mode::Normal;
+                            return Some(Action::Redraw);
+                        },
+                        _ => {},
                     }
                 },
                 Mode::Examine => {
