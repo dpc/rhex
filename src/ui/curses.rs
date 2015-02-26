@@ -173,12 +173,13 @@ impl CursesUI {
         }
 
         if env::var_os("ESCDELAY").is_none() {
-         //   env::set_var("ESCDELAY", "25");
+            env::set_var("ESCDELAY", "25");
         }
 
         unsafe {
-            let _ = locale::setlocale(locale::LC_ALL, b"en_US.UTF-8".as_ptr() as *const i8);
+            let _ = locale::setlocale(locale::LC_ALL, b"en_US.UTF-8\0".as_ptr() as *const i8);
         }
+
 
         nc::initscr();
         nc::start_color();

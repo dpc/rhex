@@ -65,6 +65,7 @@ pub struct State {
 
     pub light : u32,
 
+    pub item_letters: HashSet<char>,
     pub equipped : HashMap<Slot, (char, Box<Item>)>,
     pub items : HashMap<char, Box<Item>>,
 }
@@ -85,6 +86,7 @@ impl State {
             light: 0,
             items: HashMap::new(),
             equipped: HashMap::new(),
+            item_letters: HashSet::new(),
         }
     }
 
@@ -154,9 +156,12 @@ impl State {
     }
 
     pub fn add_item(&mut self, item : Box<Item>) -> bool {
-        for ch in range('a' as u8, 'z' as u8).chain(range('A' as u8, 'Z' as u8)) {
+        for ch in range('a' as u8, 'z' as u8)
+            .chain(range('A' as u8, 'Z' as u8)) {
             let ch = ch as char;
-            if !self.items.contains_key(&ch) {
+            if !self.item_letters.contains(&ch) {
+                assert!(!self.items.contains_key(&ch));
+                self.item_letters.insert(ch);
                 self.items.insert(ch, item);
                 return true;
             }
@@ -164,17 +169,38 @@ impl State {
         false
     }
 
+    pub fn equip_switch(&mut self, ch : char) {
+        if self.items.contains_key(&ch) {
+            self.equip(ch);
+        } else {
+            self.unequip(ch);
+        }
+    }
+
     pub fn equip(&mut self, ch : char) {
         if let Some(item) = self.items.remove(&ch) {
             let slot = item.slot();
-            self.unequip(slot);
+            self.unequip_slot(slot);
             self.equipped.insert(slot, (ch, item));
         }
     }
 
-    pub fn unequip(&mut self, slot : Slot) {
+    pub fn unequip_slot(&mut self, slot : Slot) {
         if let Some((ch, item)) = self.equipped.remove(&slot) {
             self.items.insert(ch, item);
+        }
+    }
+
+    pub fn unequip(&mut self, ch : char) {
+        let mut found_slot = None;
+        for (&slot, &(ref item_ch, _)) in &self.equipped {
+            if ch == *item_ch {
+                found_slot = Some(slot);
+                break;
+            }
+        }
+        if let Some(slot) = found_slot {
+            self.unequip_slot(slot);
         }
     }
 

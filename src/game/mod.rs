@@ -173,6 +173,9 @@ impl State {
         let new_pos = astate.pos_after_action(action);
 
         if astate.pos == new_pos {
+            if stage != Stage::ST2 {
+                return;
+            }
             // we did nothing
             match action {
                 Action::Pick => {
@@ -189,7 +192,7 @@ impl State {
                 },
                 Action::Equip(ch) => {
                     let mut astate = self.actors.remove(&astate.pos.coord).unwrap().make_unique().clone();
-                    astate.equip(ch);
+                    astate.equip_switch(ch);
                     self.actors.insert(astate.pos.coord, Arc::new(astate));
                 },
                 _ => {}
