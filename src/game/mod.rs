@@ -179,7 +179,9 @@ impl State {
             // we did nothing
             match action {
                 Action::Pick => {
-                    let item = self.at_mut(astate.pos.coord).pick_item();
+                    let item = self.at_mut(
+                        astate.pos.coord + astate.pos.dir
+                        ).pick_item();
 
                     match item {
                         Some(item) => {
@@ -200,17 +202,29 @@ impl State {
         } else if astate.pos.coord != new_pos.coord &&
             self.actors.contains_key(&new_pos.coord)
             {
-            // that was an attack!
+            // that is an attack!
             if stage != Stage::ST1 {
                 return;
             }
 
-            let target = self.actors[new_pos.coord].clone();
-            let target_new_state = target.hit();
-            self.actors.remove(&new_pos.coord);
-            self.actors.insert(target_new_state.pos.coord, Arc::new(target_new_state));
+            if !astate.can_attack() {
+                return;
+            }
 
-            self.actors_done.insert(astate.pos.coord);
+            let target = self.actors.remove(&new_pos.coord);
+            if let Some(mut target) = target {
+                let mut target = target.make_unique().clone();
+                target.hit();
+                self.actors.insert(target.pos.coord,
+                                   Arc::new(target)
+                                   );
+            }
+
+            let mut astate = self.actors.remove(&astate.pos.coord).unwrap().make_unique().clone();
+            astate.attacks();
+            let coord = astate.pos.coord;
+            self.actors.insert(coord, Arc::new(astate));
+            self.actors_done.insert(coord);
         } else if self.at(new_pos.coord).tile_map_or(
             false, |t| t.type_ == tile::Door(false)
             ) {
@@ -320,6 +334,12 @@ impl<'a> At<'a> {
         (&self, def: R, cond : F) -> R
     {
         self.state.actors.get(&self.coord).map_or(def, |a| cond(a))
+    }
+
+    pub fn item_map_or<R, F : Fn(&Box<Item>) -> R>
+        (&self, def: R, cond : F) -> R
+    {
+        self.state.items.get(&self.coord).map_or(def, |i| cond(i))
     }
 
     pub fn is_occupied(&self) -> bool {

@@ -28,7 +28,7 @@ pub struct Stats {
 impl Stats {
     pub fn new(hp : i32) -> Stats {
         Stats { int: 3, dex : 3, str_ : 3,
-        max_hp: 3, max_mp: 3, mp: 3, hp: hp }
+        max_hp: 30, max_mp: 10, mp: 10, hp: hp }
     }
 }
 
@@ -40,6 +40,7 @@ pub enum Slot {
     RHand,
     Body,
     Cloak,
+    Quick,
 }
 
 #[derive(Clone, Debug)]
@@ -65,6 +66,7 @@ pub struct State {
 
     pub light : u32,
 
+    pub attack_cooldown : i32,
     pub item_letters: HashSet<char>,
     pub equipped : HashMap<Slot, (char, Box<Item>)>,
     pub items : HashMap<char, Box<Item>>,
@@ -72,7 +74,10 @@ pub struct State {
 
 impl State {
     pub fn new(behavior : Behavior, pos : Position) -> State {
-        let stats = Stats::new(if behavior == Behavior::Player { 3 } else { 1 });
+        let stats = Stats::new(
+            if behavior == Behavior::Player { 30 } else { 10 }
+            );
+
         State {
             behavior : behavior,
             pos: pos,
@@ -87,6 +92,7 @@ impl State {
             items: HashMap::new(),
             equipped: HashMap::new(),
             item_letters: HashSet::new(),
+            attack_cooldown: 0,
         }
     }
 
@@ -153,6 +159,9 @@ impl State {
 
     pub fn post_tick(&mut self, gstate : &game::State) {
         self.postprocess_visibile(gstate);
+        if self.attack_cooldown > 0 {
+            self.attack_cooldown -= 1;
+        }
     }
 
     pub fn add_item(&mut self, item : Box<Item>) -> bool {
@@ -204,12 +213,16 @@ impl State {
         }
     }
 
-    pub fn hit(&self) -> State {
-        let mut state = self.clone();
+    pub fn attacks(&mut self) {
+        self.attack_cooldown = 2;
+    }
 
-        state.stats.hp -= 1;
+    pub fn hit(&mut self) {
+        self.stats.hp -= 1;
+    }
 
-        return state;
+    pub fn can_attack(&self) -> bool {
+        self.attack_cooldown == 0
     }
 
     pub fn change_position(&mut self, new_pos : Position) {

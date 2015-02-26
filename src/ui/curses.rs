@@ -40,7 +40,7 @@ const UNICODE_DOT : &'static str = "·";
 
 pub fn item_to_str(t : item::Type) -> &'static str {
     match t {
-        item::Type::Weapon => "(",
+        item::Type::Weapon => ")",
         item::Type::Armor => "[",
     }
 }
@@ -70,6 +70,7 @@ pub mod color {
     pub const CHAR_SELF_FG : [u8; 3] = [19, 18, 17];
     pub const CHAR_ALLY_FG : [u8; 3] = [28, 22, 23];
     pub const CHAR_ENEMY_FG : [u8; 3] = [124, 88, 52];
+    pub const CHAR_GRAY_FG : u8= GRAY[17];
     pub const CHAR_BG : [u8; 3] = EMPTY_BG;
     pub const TREE_FG : [u8; 3] = CHAR_ALLY_FG;
     pub const TREE_BG : [u8; 3] = EMPTY_BG;
@@ -152,6 +153,7 @@ pub struct CursesUI {
 
     label_color: u64,
     text_color: u64,
+    text_gray_color: u64,
     red_color: u64,
     green_color: u64,
 }
@@ -198,6 +200,9 @@ impl CursesUI {
         let text_color = nc::COLOR_PAIR(
             calloc.get(color::VISIBLE_FG, color::BACKGROUND_BG)
             );
+        let text_gray_color = nc::COLOR_PAIR(
+            calloc.get(color::GRAY[10], color::BACKGROUND_BG)
+            );
         let green_color = nc::COLOR_PAIR(
             calloc.get(color::GREEN_FG, color::BACKGROUND_BG)
             );
@@ -219,6 +224,7 @@ impl CursesUI {
             log : VecDeque::new(),
             label_color: label_color,
             text_color: text_color,
+            text_gray_color: text_gray_color,
             red_color: red_color,
             green_color: green_color,
         };
@@ -288,20 +294,20 @@ impl CursesUI {
         nc::wbkgd(window, ' ' as nc::chtype | cpair as nc::chtype);
         nc::werase(window);
 
-        let center = match self.mode {
+        let (center, head) = match self.mode {
             Mode::Examine => {
                 match self.examine_pos {
                     None => {
-                        self.examine_pos = Some(astate.pos + astate.pos.dir.to_coordinate());
-                        astate.pos.coord
+                        self.examine_pos = Some(astate.pos);
+                        (astate.pos.coord, astate.pos.coord + astate.pos.dir)
                     },
                     Some(pos) => {
-                        pos.coord
+                        (pos.coord, pos.coord + pos.dir)
                     },
                 }
             },
             _ => {
-                astate.pos.coord
+                (astate.pos.coord, astate.pos.coord + astate.pos.dir)
             }
         };
 
@@ -405,7 +411,11 @@ impl CursesUI {
                 }
 
                 if self.mode == Mode::Examine {
-                    if is_proper_coord && self.examine_pos.unwrap().coord == c {
+                    if is_proper_coord && center == c {
+                        glyph = "@";
+                        fg = color::CHAR_GRAY_FG;
+                        draw = true;
+                    } else if is_proper_coord && c == head {
                         bold = true;
                         if astate.knows(c) {
                             fg = color::TARGET_SELF_FG;
@@ -515,16 +525,28 @@ impl CursesUI {
         nc::waddstr(window, &format!("{:>2} ", val));
     }
 
-    fn draw_item(&self, window : nc::WINDOW, astate : &actor::State, label: &str, slot : actor::Slot) {
+    fn draw_label(&self, window : nc::WINDOW, label: &str) {
         nc::wattron(window, self.label_color as i32);
         nc::waddstr(window, &format!("{}:", label));
+    }
 
-        nc::wattron(window, self.text_color as i32);
+    fn draw_item(&self, window : nc::WINDOW, astate : &actor::State, label: &str, slot : actor::Slot) {
+        self.draw_label(window, label);
+
+        if slot == Slot::RHand && astate.attack_cooldown > 0 {
+            nc::wattron(window, self.text_gray_color as i32);
+        } else {
+            nc::wattron(window, self.text_color as i32);
+        }
 
         let item = if let Some(&(_, ref item)) = astate.equipped.get(&slot) {
             item.description().to_string()
         } else {
-            "-".to_string()
+            if slot == Slot::RHand {
+                "fist".to_string()
+            } else {
+                "-".to_string()
+            }
         };
 
         let item = item.slice_chars(0, cmp::min(item.char_len(), 13));
@@ -572,55 +594,52 @@ impl CursesUI {
         let mut max_y = 0;
         nc::getmaxyx(window, &mut max_y, &mut max_x);
 
-        let y = 0;
+        let mut y = 0;
         nc::wmove(window, y, 0);
         self.draw_val(window, "Str", astate.stats.str_);
         nc::wmove(window, y, 8);
         self.draw_val(window, "AC", 2);
 
-        let y = y + 1;
+        y += 1;
         nc::wmove(window, y, 0);
         self.draw_val(window, "Int", astate.stats.int);
         nc::wmove(window, y, 8);
         self.draw_val(window, "EV", 3);
 
-        let y = y + 1;
+        y += 1;
         nc::wmove(window, y, 0);
         self.draw_val(window, "Dex", astate.stats.dex);
 
-        let y = y + 1;
+        y += 1;
         nc::wmove(window, y, 0);
 
         self.draw_stats_bar(window, "HP",
                             astate.stats.hp, astate.prev_stats.hp,
                             astate.stats.max_hp);
 
-        let y = y + 1;
+        y += 1;
         nc::wmove(window, y, 0);
         self.draw_stats_bar(window, "MP",
                             astate.stats.mp, astate.prev_stats.mp,
                             astate.stats.max_mp);
 
-        let y = y + 1;
+        y += 1;
         nc::wmove(window, y, 0);
         self.draw_stats_bar(window, "XP", 50, 50, 100);
 
-        let y = y + 1;
-        nc::wmove(window, y, 0);
-        self.draw_item(window, astate, "H", Slot::Head);
-        self.draw_item(window, astate, "F", Slot::Feet);
+        let slots = [
+            ("L", Slot::LHand),
+            ("R", Slot::RHand),
+            ("Q", Slot::Quick),
+        ];
 
-        let y = y + 1;
-        nc::wmove(window, y, 0);
-        self.draw_item(window, astate, "B", Slot::Body);
-        self.draw_item(window, astate, "C", Slot::Cloak);
+        for &(string, slot) in &slots {
+            y += 1;
+            nc::wmove(window, y, 0);
+            self.draw_item(window, astate, string, slot);
+        }
 
-        let y = y + 1;
-        nc::wmove(window, y, 0);
-        self.draw_item(window, astate, "L", Slot::LHand);
-        self.draw_item(window, astate, "R", Slot::RHand);
-
-        let y = y + 1;
+        y += 1;
         nc::wmove(window, y, 0);
         self.draw_turn(window, "Turn", gstate.turn);
 
@@ -684,6 +703,8 @@ impl CursesUI {
 
         let tile_type = gstate.at(coord).tile_map_or(tile::Wall, |t| t.type_);
         let tile = gstate.at(coord).tile_map_or(None, |t| Some(t.clone()));
+        let item = gstate.at(coord).item_map_or(None, |i| Some(i.description().to_string()));
+
         let actor =
             if astate.sees(coord) || astate.is_dead() {
                 gstate.at(coord).actor_map_or(None, |a| Some(match a.behavior {
@@ -696,21 +717,24 @@ impl CursesUI {
                 None
             };
 
-        match (tile_type, actor) {
-            (tile::Wall, _) => {
+        match (tile_type, actor, item) {
+            (tile::Wall, _, _) => {
                 "a wall".to_string()
             },
-            (tile::Door(_), _) => {
+            (tile::Door(_), _, _) => {
                 "door".to_string()
             },
-            (tile::Empty, None) => {
+            (tile::Empty, None, None) => {
                 match tile.and_then(|t| t.area).and_then(|a| Some(a.type_)) {
                     Some(area::Room(_)) => "room".to_string(),
                     None => "nothing".to_string()
                 }
             },
-            (tile::Empty, Some(descr)) => {
+            (tile::Empty, Some(descr), _) => {
                 descr
+            },
+            (tile::Empty, None, Some(item)) => {
+                item
             },
             _ => {
                 "Indescribable".to_string()
@@ -718,29 +742,26 @@ impl CursesUI {
         }
     }
 
-    fn draw_examine(&self, astate : &actor::State, gstate : &game::State) {
+    fn draw_log(&mut self, astate : &actor::State, gstate : &game::State) {
         let window = self.log_window.as_ref().unwrap().window;
+        let pos = if self.mode == Mode::Examine {
+            self.examine_pos.unwrap()
+        } else {
+            astate.pos
+        };
 
-        let pos = self.examine_pos.expect("examine_pos should have not been None");
+        let head = pos.coord + pos.dir;
 
         let cpair = nc::COLOR_PAIR(self.calloc.borrow_mut().get(color::VISIBLE_FG, color::BACKGROUND_BG));
         nc::wbkgd(window, ' ' as nc::chtype | cpair as nc::chtype);
         nc::werase(window);
         nc::wmove(window, 0, 0);
 
-        let descr = self.tile_description(pos.coord, astate, gstate);
-        nc::waddstr(window, descr.as_slice());
+        let descr = self.tile_description(head, astate, gstate);
+        self.draw_label(window, "In front");
 
-        nc::wnoutrefresh(window);
-    }
-
-    fn draw_log(&mut self, _ : &actor::State, gstate : &game::State) {
-        let window = self.log_window.as_ref().unwrap().window;
-
-        let cpair = nc::COLOR_PAIR(self.calloc.borrow_mut().get(color::VISIBLE_FG, color::BACKGROUND_BG));
-        nc::wbkgd(window, ' ' as nc::chtype | cpair as nc::chtype);
-        nc::werase(window);
-        nc::wmove(window, 0, 0);
+        nc::wattron(window, self.text_color as i32);
+        nc::waddstr(window, &format!(" {}\n", descr));
 
         for i in &self.log {
 
@@ -783,11 +804,16 @@ impl CursesUI {
         nc::wmove(window, 0, 0);
 
         nc::waddstr(window, "This game have no point (yet) and is incomplete. Sorry for that.\n\n");
-        nc::waddstr(window, "Just press one of: hjklui, or o, x. Especially o because it's cool.\n\n");
+        nc::waddstr(window, "= Implemented commands = \n\n");
+        nc::waddstr(window, "Move: hjklui\n");
+        nc::waddstr(window, "Wait: .\n");
+        nc::waddstr(window, "Autoexplore: O\n");
+        nc::waddstr(window, "Examine: x\n");
+        nc::waddstr(window, "Equip: E\n");
+        nc::waddstr(window, "Inventory: I\n");
         nc::wnoutrefresh(window);
         nc::wnoutrefresh(window);
     }
-
 }
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
@@ -835,11 +861,7 @@ impl ui::UiFrontend for CursesUI {
                     self.draw_map(astate, gstate);
                 }
 
-                if self.mode == Mode::Examine {
-                    self.draw_examine(astate, gstate);
-                } else {
-                    self.draw_log(astate, gstate);
-                }
+                self.draw_log(astate, gstate);
 
                 self.draw_stats(astate, gstate);
             },
