@@ -70,6 +70,9 @@ pub struct State {
     pub item_letters: HashSet<char>,
     pub equipped : HashMap<Slot, (char, Box<Item>)>,
     pub items : HashMap<char, Box<Item>>,
+
+    pub were_hit : bool,
+    pub did_hit : bool,
 }
 
 impl State {
@@ -93,6 +96,8 @@ impl State {
             equipped: HashMap::new(),
             item_letters: HashSet::new(),
             attack_cooldown: 0,
+            were_hit: false,
+            did_hit: false,
         }
     }
 
@@ -155,6 +160,8 @@ impl State {
 
     pub fn pre_tick(&mut self, _ : &game::State) {
         self.prev_stats = self.stats;
+        self.did_hit = false;
+        self.were_hit = false;
     }
 
     pub fn post_tick(&mut self, gstate : &game::State) {
@@ -213,13 +220,20 @@ impl State {
         }
     }
 
-    pub fn attacks(&mut self) {
+    pub fn attacks(&mut self, target : Option<&mut State>) {
         self.attack_cooldown = 2;
+
+        if let Some(target) = target {
+            target.were_hit = true;
+            self.did_hit = true;
+            target.stats.hp -= 1;
+        }
     }
 
+    /*
     pub fn hit(&mut self) {
         self.stats.hp -= 1;
-    }
+    }*/
 
     pub fn can_attack(&self) -> bool {
         self.attack_cooldown == 0

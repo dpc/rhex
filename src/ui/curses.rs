@@ -240,7 +240,7 @@ impl CursesUI {
         nc::getmaxyx(nc::stdscr, &mut max_y, &mut max_x);
 
         let mid_x = max_x - 30;
-        let mid_y = 10;
+        let mid_y = 12;
 
         let map_window = Window::new(
                 mid_x, max_y, 0, 0
@@ -261,8 +261,10 @@ impl CursesUI {
         self.fs_window = Some(fs_window);
     }
 
-    pub fn log(&mut self, s : String, gstate : &game::State) {
-        self.log.push_front(LogEntry{text: s, turn: gstate.turn});
+    pub fn log(&mut self, s : &str, gstate : &game::State) {
+        self.log.push_front(LogEntry{
+            text: s.to_string(), turn: gstate.turn
+        });
     }
 
     pub fn display_intro(&mut self) {
@@ -641,6 +643,21 @@ impl CursesUI {
 
         y += 1;
         nc::wmove(window, y, 0);
+
+        let pos = if self.mode == Mode::Examine {
+            self.examine_pos.unwrap()
+        } else {
+            astate.pos
+        };
+
+        let head = pos.coord + pos.dir;
+        let descr = self.tile_description(head, astate, gstate);
+        self.draw_label(window, "In front");
+        nc::wattron(window, self.text_color as i32);
+        nc::waddstr(window, &format!(" {}", descr));
+
+        y += 1;
+        nc::wmove(window, y, 0);
         self.draw_turn(window, "Turn", gstate.turn);
 
         nc::wnoutrefresh(window);
@@ -742,27 +759,13 @@ impl CursesUI {
         }
     }
 
-    fn draw_log(&mut self, astate : &actor::State, gstate : &game::State) {
+    fn draw_log(&mut self, _ : &actor::State, gstate : &game::State) {
         let window = self.log_window.as_ref().unwrap().window;
-        let pos = if self.mode == Mode::Examine {
-            self.examine_pos.unwrap()
-        } else {
-            astate.pos
-        };
-
-        let head = pos.coord + pos.dir;
-
+       
         let cpair = nc::COLOR_PAIR(self.calloc.borrow_mut().get(color::VISIBLE_FG, color::BACKGROUND_BG));
         nc::wbkgd(window, ' ' as nc::chtype | cpair as nc::chtype);
         nc::werase(window);
         nc::wmove(window, 0, 0);
-
-        let descr = self.tile_description(head, astate, gstate);
-        self.draw_label(window, "In front");
-
-        nc::wattron(window, self.text_color as i32);
-        nc::waddstr(window, &format!(" {}\n", descr));
-
         for i in &self.log {
 
             if nc::getcury(window) == nc::getmaxy(window) - 1 {
@@ -772,8 +775,9 @@ impl CursesUI {
             if let Some(color) = self.turn_to_color(i.turn, &self.calloc, gstate) {
                 let cpair = nc::COLOR_PAIR(color);
                 nc::wattron(window, cpair as i32);
-                nc::waddstr(window, i.text.as_slice());
-                nc::waddstr(window, "\n");
+                nc::waddstr(window, &format!(
+                        "{:>2} {}\n", gstate.turn - i.turn, i.text.as_slice()
+                        ));
             }
         }
 
@@ -812,8 +816,28 @@ impl CursesUI {
         nc::waddstr(window, "Equip: E\n");
         nc::waddstr(window, "Inventory: I\n");
         nc::wnoutrefresh(window);
+    }
+
+    fn draw_quit( &mut self) {
+        let window = self.fs_window.as_ref().unwrap().window;
+        let mut calloc = self.calloc.borrow_mut();
+        let cpair = nc::COLOR_PAIR(
+            calloc.get(color::VISIBLE_FG, color::BACKGROUND_BG)
+            );
+
+        let mut max_x = 0;
+        let mut max_y = 0;
+        nc::getmaxyx(nc::stdscr, &mut max_y, &mut max_x);
+        let text = "Quit. Are you sure?";
+
+        nc::wbkgd(window, ' ' as nc::chtype | cpair as nc::chtype);
+        nc::werase(window);
+        nc::wmove(window, max_y / 2, (max_x  - text.char_len() as i32) / 2);
+
+        nc::waddstr(window, text);
         nc::wnoutrefresh(window);
     }
+
 }
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
@@ -826,6 +850,7 @@ enum InvMode {
 enum FSMode {
     Help,
     Intro,
+    Quit,
 }
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
@@ -844,7 +869,15 @@ impl ui::UiFrontend for CursesUI {
             ;
 
         if let Some(s) = self.format_areas(discoviered_areas.map(|area| area.type_)) {
-            self.log(s, gstate);
+            self.log(&s, gstate);
+        }
+
+        if astate.were_hit {
+            self.log("X hit you", gstate);
+        }
+
+        if astate.did_hit {
+            self.log("You hit X", gstate);
         }
     }
 
@@ -869,6 +902,9 @@ impl ui::UiFrontend for CursesUI {
                 FSMode::Help => {
                     self.draw_help();
                 },
+                FSMode::Quit => {
+                    self.draw_quit();
+                },
                 FSMode::Intro => {
                     self.draw_intro();
                 },
@@ -886,18 +922,31 @@ impl ui::UiFrontend for CursesUI {
                 self.resize();
                 return Some(Action::Redraw);
             }
+            if ch == -1 {
+                return None;
+            }
             match self.mode {
-                Mode::FullScreen(_) => match ch {
-                    -1 =>
-                        return None,
+                Mode::FullScreen(fs_mode) => match fs_mode {
+                    FSMode::Quit => match ch as u8 as char {
+                        'y'|'Y' => return Some(Action::Exit),
+                        _ => {
+                            self.mode = Mode::Normal;
+                            return Some(Action::Redraw);
+                        },
+                    },
                     _ => {
-                        self.mode = Mode::Normal;
-                        return Some(Action::Redraw);
-                    }
+                        match ch {
+                            -1 =>
+                                return None,
+                            _ => {
+                                self.mode = Mode::Normal;
+                                return Some(Action::Redraw);
+                            }
+                        }
+                    },
                 },
                 Mode::Normal => {
                     return Some(match (ch as u8) as char {
-                        'q' => Action::Exit,
                         'h' => Action::Game(game::Action::Turn(Angle::Left)),
                         'l' => Action::Game(game::Action::Turn(Angle::Right)),
                         'k' => Action::Game(game::Action::Move(Angle::Forward)),
@@ -909,6 +958,10 @@ impl ui::UiFrontend for CursesUI {
                         '.' => Action::Game(game::Action::Wait),
                         ',' => Action::Game(game::Action::Pick),
                         'o' => Action::AutoExplore,
+                        'q' => {
+                            self.mode = Mode::FullScreen(FSMode::Quit);
+                            return Some(Action::Redraw);
+                        },
                         'I' =>  {
                             self.mode = Mode::Inventory(InvMode::View);
                             return Some(Action::Redraw);
@@ -997,7 +1050,7 @@ impl ui::UiFrontend for CursesUI {
     fn event(&mut self, event : ui::Event, gstate : &game::State) {
         match event {
             ui::Event::Log(logev) => match logev {
-                ui::LogEvent::AutoExploreDone => self.log("Nothing else to explore.".to_string(), gstate),
+                ui::LogEvent::AutoExploreDone => self.log("Nothing else to explore.", gstate),
             }
         }
     }

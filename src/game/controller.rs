@@ -5,7 +5,7 @@ use std::old_io::Timer;
 use std::time::Duration;
 
 use actor;
-use game::{State, Action, Stage};
+use game::{State, Action};
 use error::Error;
 
 pub type Request = (Arc<actor::State>, Arc<State>);
@@ -89,12 +89,9 @@ impl Controller {
             rand::thread_rng().shuffle(&mut actions);
 
             for &(ref astate, ref action) in &actions {
-                self.state.act(Stage::ST1, astate.pos.coord, *action)
+                self.state.act(astate.pos.coord, *action)
             }
 
-            for &(ref astate, ref action) in &actions {
-                self.state.act(Stage::ST2, astate.pos.coord, *action)
-            }
             timer.recv().unwrap();
         }
     }

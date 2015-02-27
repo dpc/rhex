@@ -1,5 +1,4 @@
 use std::collections::HashMap;
-use std::collections::HashSet;
 use std::collections::hash_map::Entry;
 use std::sync::{Arc};
 
@@ -33,16 +32,10 @@ pub enum Action {
     Pick,
 }
 
-#[derive(Copy, Clone, Eq, PartialEq, Debug)]
-pub enum Stage {
-    ST1,
-    ST2,
-}
-
 #[derive(Clone, Debug)]
 pub struct State {
     pub actors: Actors,
-    pub actors_done: HashSet<Coordinate>,
+    pub actors_orig: HashMap<Coordinate, Coordinate>, // from -> to
     pub actors_dead: Vec<Arc<actor::State>>,
     pub map : Arc<Map>,
     pub items: Arc<Items>,
@@ -58,7 +51,7 @@ impl State {
 
         State {
             actors: actors,
-            actors_done: HashSet::new(),
+            actors_orig: HashMap::new(),
             actors_dead: Vec::new(),
             items: Arc::new(HashMap::new()),
             map: Arc::new(map),
@@ -144,7 +137,7 @@ impl State {
 
         State {
             actors: actors,
-            actors_done: self.actors_done.clone(),
+            actors_orig: self.actors_orig.clone(),
             actors_dead: self.actors_dead.clone(),
             items: self.items.clone(),
             map: self.map.clone(),
@@ -161,22 +154,14 @@ impl State {
         self.spawn(pos, actor::Behavior::Pony, 7)
     }
 
-    pub fn act(&mut self, stage : Stage,
-               acoord : Coordinate, action : Action) {
-
-        if self.actors_done.contains(&acoord) {
-            return;
-        }
+    pub fn act(&mut self, acoord : Coordinate, action : Action) {
 
         let astate = self.actors[acoord].clone();
 
         let new_pos = astate.pos_after_action(action);
 
         if astate.pos == new_pos {
-            if stage != Stage::ST2 {
-                return;
-            }
-            // we did nothing
+            // no movement
             match action {
                 Action::Pick => {
                     let item = self.at_mut(
@@ -200,38 +185,29 @@ impl State {
                 _ => {}
             }
         } else if astate.pos.coord != new_pos.coord &&
-            self.actors.contains_key(&new_pos.coord)
+            self.actors_orig.contains_key(&new_pos.coord)
             {
             // that is an attack!
-            if stage != Stage::ST1 {
-                return;
-            }
-
             if !astate.can_attack() {
                 return;
             }
 
-            let target = self.actors.remove(&new_pos.coord);
-            if let Some(mut target) = target {
-                let mut target = target.make_unique().clone();
-                target.hit();
+            let mut astate = self.actors.remove(&astate.pos.coord).unwrap().make_unique().clone();
+            let target_pos = self.actors_orig[new_pos.coord];
+            let mut target = self.actors.remove(&target_pos).map(|mut t| t.make_unique().clone());
+
+            astate.attacks(target.as_mut());
+            if let Some(target) = target {
                 self.actors.insert(target.pos.coord,
                                    Arc::new(target)
                                    );
             }
 
-            let mut astate = self.actors.remove(&astate.pos.coord).unwrap().make_unique().clone();
-            astate.attacks();
             let coord = astate.pos.coord;
             self.actors.insert(coord, Arc::new(astate));
-            self.actors_done.insert(coord);
         } else if self.at(new_pos.coord).tile_map_or(
             false, |t| t.type_ == tile::Door(false)
             ) {
-
-            if stage != Stage::ST2 {
-                return;
-            }
 
             let mut map = self.map.clone().make_unique().clone();
             map.insert(new_pos.coord, Tile::new(tile::Door(true)));
@@ -239,10 +215,7 @@ impl State {
 
         } else if astate.pos.coord == new_pos.coord || self.at(new_pos.coord).is_passable() {
             // we've moved
-            if stage != Stage::ST2 {
-                return;
-            }
-
+            self.actors_orig.insert(astate.pos.coord, new_pos.coord);
             let mut astate = self.actors.remove(&astate.pos.coord).unwrap().make_unique().clone();
             astate.change_position(new_pos);
             self.actors.insert(astate.pos.coord, Arc::new(astate));
@@ -253,13 +226,16 @@ impl State {
 
     pub fn pre_tick(&mut self) {
         let mut actors = HashMap::new();
+        let mut actors_orig = HashMap::new();
         for (coord, ref mut a) in self.actors.iter() {
             let mut a = a.clone().make_unique().clone();
             a.pre_tick(self);
             actors.insert(*coord, Arc::new(a));
+            actors_orig.insert(*coord, *coord);
         }
 
         self.actors = actors;
+        self.actors_orig = actors_orig;
     }
 
     /// Advance one turn (increase the turn counter) and do some maintenance
@@ -295,7 +271,6 @@ impl State {
         }
 
         self.actors = actors;
-        self.actors_done = HashSet::new();
         self.turn += 1;
     }
 
