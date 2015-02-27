@@ -32,7 +32,9 @@ mod item;
 pub fn main() {
     println!("Generating map...");
     let mut state = game::State::new();
-    state.at_mut(Coordinate::new(0, 0)).drop_item(Box::new(item::Weapon::new()));
+    state.at_mut(Coordinate::new(0, 0)).drop_item(Box::new(item::Weapon::new(item::weapon::Knife)));
+    state.at_mut(Coordinate::new(0, 0)).drop_item(Box::new(item::Weapon::new(item::weapon::Sword)));
+    state.at_mut(Coordinate::new(0, 0)).drop_item(Box::new(item::Weapon::new(item::weapon::Axe)));
     state.at_mut(Coordinate::new(0, 0)).drop_item(Box::new(item::Armor::new(item::armor::Plate)));
     state.at_mut(Coordinate::new(0, 0)).drop_item(Box::new(item::Armor::new(item::armor::Leather)));
     let state = state.spawn_player();

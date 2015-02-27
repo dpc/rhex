@@ -6,6 +6,8 @@ pub trait Item : Send+Sync+fmt::Debug {
     fn type_(&self) -> Type;
     fn slot(&self) -> Slot;
     fn clone_item<'a>(&self) -> Box<Item + 'a> where Self: 'a;
+    fn attack(&self) -> Option<(i32, i32)>;
+    fn defense(&self) -> Option<(i32, i32)>;
 }
 
 impl<'a> Clone for Box<Item+'a> {
@@ -27,21 +29,36 @@ pub mod weapon {
     use super::Item;
     use super::Type as ItemType;
     use actor::Slot;
+    pub use self::Type::*;
+
+    #[derive(Copy, Clone, Eq, PartialEq, Debug)]
+    pub enum Type {
+        Knife,
+        Sword,
+        Axe,
+    }
+
 
     #[derive(Copy, Clone, Eq, PartialEq, Debug)]
     pub struct Weapon {
-        pub base_dmg : i32,
+        type_ : Type,
     }
 
     impl Weapon {
-        pub fn new() -> Weapon {
-            Weapon { base_dmg: 1 }
+        pub fn new(type_ : Type) -> Weapon {
+            Weapon {
+                type_: type_,
+            }
         }
     }
 
     impl Item for Weapon {
         fn description(&self) -> &str {
-            "sword"
+            match self.type_ {
+                Knife => "knife",
+                Sword => "sword",
+                Axe => "axe",
+            }
         }
 
         fn type_(&self) -> ItemType {
@@ -54,6 +71,18 @@ pub mod weapon {
 
         fn slot(&self) -> Slot {
             Slot::RHand
+        }
+
+        fn defense(&self) -> Option<(i32, i32)> {
+            None
+        }
+
+        fn attack(&self) -> Option<(i32, i32)> {
+            Some(match self.type_ {
+                Knife => (2, 0),
+                Sword => (4, 1),
+                Axe => (6, 2),
+            })
         }
     }
 }
@@ -102,6 +131,17 @@ pub mod armor {
 
         fn slot(&self) -> Slot {
             Slot::Body
+        }
+
+        fn defense(&self) -> Option<(i32, i32)> {
+            Some(match self.type_ {
+               Plate => (3, -1),
+               Leather => (1, 0),
+            })
+        }
+
+        fn attack(&self) -> Option<(i32, i32)> {
+            None
         }
     }
 }

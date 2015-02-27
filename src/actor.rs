@@ -2,6 +2,7 @@ use std::collections::{HashSet,HashMap};
 use hex2d::{Coordinate, Angle, Position, ToCoordinate};
 use game::{self, Action};
 use hex2dext::algo;
+use std::cmp;
 
 use item::Item;
 
@@ -28,7 +29,7 @@ pub struct Stats {
 impl Stats {
     pub fn new(hp : i32) -> Stats {
         Stats { int: 3, dex : 3, str_ : 3,
-        max_hp: 30, max_mp: 10, mp: 10, hp: hp }
+        max_hp: hp, max_mp: 10, mp: 10, hp: hp }
     }
 }
 
@@ -78,7 +79,7 @@ pub struct State {
 impl State {
     pub fn new(behavior : Behavior, pos : Position) -> State {
         let stats = Stats::new(
-            if behavior == Behavior::Player { 30 } else { 10 }
+            if behavior == Behavior::Player { 10 } else { 5 }
             );
 
         State {
@@ -175,13 +176,27 @@ impl State {
         for ch in range('a' as u8, 'z' as u8)
             .chain(range('A' as u8, 'Z' as u8)) {
             let ch = ch as char;
-            if !self.item_letters.contains(&ch) {
+            if !self.item_letter_taken(ch) {
                 assert!(!self.items.contains_key(&ch));
                 self.item_letters.insert(ch);
                 self.items.insert(ch, item);
                 return true;
             }
         }
+        false
+    }
+
+    pub fn item_letter_taken(&self, ch : char) -> bool {
+        if self.item_letters.contains(&ch) {
+            return true;
+        }
+
+        for (&slot, &(ref item_ch, _)) in &self.equipped {
+            if item_ch == ch {
+                return true;
+            }
+        }
+
         false
     }
 
@@ -221,19 +236,24 @@ impl State {
     }
 
     pub fn attacks(&mut self, target : Option<&mut State>) {
-        self.attack_cooldown = 2;
+        let (dmg, cooldown) = self.attack();
+        self.attack_cooldown = cooldown + 1;
 
         if let Some(target) = target {
+            let (ac, _ev) = target.defense();
             target.were_hit = true;
             self.did_hit = true;
-            target.stats.hp -= 1;
+            target.stats.hp -= cmp::max(0, dmg - ac);
         }
     }
 
-    /*
-    pub fn hit(&mut self) {
-        self.stats.hp -= 1;
-    }*/
+    pub fn defense(&self) -> (i32, i32) {
+        self.equipped.get(&Slot::Body).and_then(|&(_, ref i)| i.defense()).unwrap_or((0, 0))
+    }
+
+    pub fn attack(&self) -> (i32, i32) {
+        self.equipped.get(&Slot::RHand).and_then(|&(_, ref i)| i.attack()).unwrap_or((1, 0))
+    }
 
     pub fn can_attack(&self) -> bool {
         self.attack_cooldown == 0
