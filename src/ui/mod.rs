@@ -15,7 +15,7 @@ pub mod curses;
 pub trait UiFrontend {
     fn update(&mut self, astate : &actor::State, gstate : &game::State);
     fn draw(&mut self, astate : &actor::State, gstate : &game::State);
-    fn input(&mut self) -> Option<Action>;
+    fn input(&mut self, astate : Option<&actor::State>) -> Option<Action>;
     fn event(&mut self, event : Event, gstate : &game::State);
 }
 
@@ -178,7 +178,7 @@ impl<U : UiFrontend> Ui<U> {
                 }
             }
 
-            if let Some(action) = self.frontend.input() {
+            if let Some(action) = self.frontend.input(pending_req.as_ref().map(|&(ref astate, ref _gstate)| &**astate)) {
                 match action {
                     Action::Exit => return,
                     Action::AutoExplore => {

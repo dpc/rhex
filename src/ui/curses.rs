@@ -586,6 +586,9 @@ impl CursesUI {
     fn draw_stats(&mut self, astate : &actor::State, gstate : &game::State) {
         let window = self.stats_window.as_ref().unwrap().window;
 
+        let (ac, ev) = astate.defense();
+        let (dmg, acc, cd) = astate.attack();
+
         let cpair = self.text_color;
         nc::wbkgd(window, ' ' as nc::chtype | cpair as nc::chtype);
 
@@ -599,14 +602,20 @@ impl CursesUI {
         let mut y = 0;
         nc::wmove(window, y, 0);
         self.draw_val(window, "Str", astate.stats.str_);
-        nc::wmove(window, y, 8);
-        self.draw_val(window, "AC", 2);
+        nc::wmove(window, y, 7);
+        self.draw_val(window, "DMG", dmg);
+        nc::wmove(window, y, 15);
+        self.draw_val(window, "CD", cd);
+        nc::wmove(window, y, 21);
+        self.draw_val(window, "ACC", acc);
 
         y += 1;
         nc::wmove(window, y, 0);
         self.draw_val(window, "Int", astate.stats.int);
-        nc::wmove(window, y, 8);
-        self.draw_val(window, "EV", 3);
+        nc::wmove(window, y, 7);
+        self.draw_val(window, " AC", ac);
+        nc::wmove(window, y, 15);
+        self.draw_val(window, "EV", ev);
 
         y += 1;
         nc::wmove(window, y, 0);
@@ -915,7 +924,7 @@ impl ui::UiFrontend for CursesUI {
         std::old_io::stdio::flush();
     }
 
-    fn input(&mut self) -> Option<Action> {
+    fn input(&mut self, astate : Option<&actor::State>) -> Option<Action> {
         loop {
             let ch = nc::getch();
             if ch == nc::KEY_RESIZE {
@@ -986,7 +995,12 @@ impl ui::UiFrontend for CursesUI {
                     -1 => return None,
                     ch => match ch as u8 as char {
                         'a'...'z'|'A'...'Z' => {
-                            return Some(Action::Game(game::Action::Equip(ch as u8 as char)))
+                            if let Some(astate) = astate {
+                                if astate.item_letter_taken(ch as u8 as char) {
+                                    return Some(Action::Game(game::Action::Equip(ch as u8 as char)))
+                                }
+                            }
+                            return None
                         },
                         '\x1b' => {
                             self.mode = Mode::Normal;
