@@ -65,11 +65,11 @@ impl State {
         let mut actors = self.actors.clone();
 
         for (&source_coord, a) in self.actors.iter() {
-            if a.noise > 0 {
-                source_coord.for_each_in_range(a.noise, |coord| {
+            if a.noise_emision > 0 {
+                source_coord.for_each_in_range(a.noise_emision, |coord| {
                     if let Some(mut actor) = actors.remove(&coord) {
                         let mut actor = actor.make_unique().clone();
-                        actor.hears(source_coord);
+                        actor.noise_hears(source_coord);
                         actors.insert(coord, Arc::new(actor));
                     }
                 });
@@ -111,13 +111,13 @@ impl State {
         }
 
         for (pos, astate) in &self.actors {
-            if astate.light > 0 {
+            if astate.light_emision > 0 {
                 algo::los::los(
                     &|coord| {
                         if coord == *pos {
                             0
                         } else {
-                            self.at(coord).tile_map_or(astate.light as i32, |tile| tile.opaqueness())
+                            self.at(coord).tile_map_or(astate.light_emision as i32, |tile| tile.opaqueness())
                         }
                     },
                     &mut |coord, light| {
@@ -133,8 +133,8 @@ impl State {
                             },
                         }
                     },
-                    astate.light as i32, *pos, Direction::all()
-                    );
+                    astate.light_emision as i32, *pos, Direction::all()
+                );
             }
         }
 
@@ -214,11 +214,17 @@ impl State {
                 return;
             }
 
+            let dir = match action {
+                Action::Move(dir) => astate.pos.dir + dir,
+                _ => astate.pos.dir,
+            };
+
             let mut astate = self.actors.remove(&astate.pos.coord).unwrap().make_unique().clone();
             let target_pos = self.actors_orig[new_pos.coord];
             let mut target = self.actors.remove(&target_pos).map(|mut t| t.make_unique().clone());
 
-            astate.attacks(target.as_mut());
+            astate.attacks(dir, target.as_mut());
+
             if let Some(target) = target {
                 self.actors.insert(target.pos.coord,
                                    Arc::new(target)

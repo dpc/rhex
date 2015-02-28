@@ -57,6 +57,7 @@ pub mod color {
     pub const BLACK : u8 = GRAY[0];
     pub const WHITE : u8 = GRAY[25];
     pub const YELLOW : u8 = 226;
+    pub const ORANGE : u8 = 3;
 
     pub const BACKGROUND_BG : u8 = GRAY[2];
     pub const MAP_BACKGROUND_BG : u8 = GRAY[2];
@@ -79,10 +80,10 @@ pub mod color {
     pub const LABEL_FG: u8 = 94;
     pub const GREEN_FG: u8 = 34;
     pub const RED_FG:   u8 = 124;
-    pub const NOISE_BG :   u8 = YELLOW;
+    pub const NOISE_BG : u8 = ORANGE;
     pub const TARGET_SELF_FG : u8 = 20;
     pub const TARGET_ENEMY_FG : u8 = 196;
-    pub const LIGHTSOURCE : u8 = 227;
+    pub const LIGHTSOURCE : u8 = YELLOW;
     pub const LOG_1_FG : u8 = GRAY[25];
     pub const LOG_2_FG : u8 = GRAY[21];
     pub const LOG_3_FG : u8 = GRAY[17];
@@ -410,7 +411,7 @@ impl CursesUI {
                     }
                 }
 
-                if is_proper_coord && visible && gstate.at(c).actor_map_or(0, |a| a.light) > 0u32 {
+                if is_proper_coord && visible && gstate.at(c).actor_map_or(0, |a| a.light_emision) > 0u32 {
                     bg = color::LIGHTSOURCE;
                 }
 
@@ -453,7 +454,7 @@ impl CursesUI {
                     }
                 }
 
-                if is_proper_coord && c != center && !visible && astate.hears_noise_at(c) {
+                if is_proper_coord && c != center && !visible && astate.hears(c) {
                     bg = color::NOISE_BG;
                     draw = true;
                 }
@@ -548,7 +549,7 @@ impl CursesUI {
             nc::wattron(window, self.text_color as i32);
         }
 
-        let item = if let Some(&(_, ref item)) = astate.equipped.get(&slot) {
+        let item = if let Some(&(_, ref item)) = astate.items_equipped.get(&slot) {
             item.description().to_string()
         } else {
             if slot == Slot::RHand {
@@ -570,18 +571,18 @@ impl CursesUI {
 
         nc::werase(window);
         nc::wmove(window, 0, 0);
-        if astate.equipped.iter().any(|_| true) {
+        if !astate.items_equipped.is_empty() {
             nc::waddstr(window, &format!("Equipped: \n"));
-            for (slot, &(ref ch, ref i)) in &astate.equipped {
+            for (slot, &(ref ch, ref i)) in &astate.items_equipped {
                 nc::waddstr(window, &format!(" {} - {} [{:?}]\n", ch, i.description(), slot));
             }
             nc::waddstr(window, &format!("\n"));
         }
 
-        if astate.items.iter().any(|_| true) {
+        if !astate.items_backpack.is_empty() {
             nc::waddstr(window, &format!("Inventory: \n"));
 
-            for (ch, i) in &astate.items {
+            for (ch, i) in &astate.items_backpack {
                 nc::waddstr(window, &format!(" {} - {}\n", ch, i.description()));
             }
             nc::waddstr(window, &format!("\n"));
@@ -800,8 +801,7 @@ impl CursesUI {
         nc::wnoutrefresh(window);
     }
 
-    fn draw_intro(&mut self)
-    {
+    fn draw_intro(&mut self) {
         let window = self.fs_window.as_ref().unwrap().window;
         let mut calloc = self.calloc.borrow_mut();
         let cpair = nc::COLOR_PAIR(calloc.get(color::VISIBLE_FG, color::BACKGROUND_BG));
@@ -893,12 +893,29 @@ impl ui::UiFrontend for CursesUI {
             self.log(&s, gstate);
         }
 
-        if astate.were_hit {
-            self.log("X hit you", gstate);
+        for res in &astate.was_attacked_by {
+            if res.success {
+                self.log(&format!("{} hit you for {} dmg.", res.who, res.dmg), gstate);
+            } else {
+                self.log(&format!("{} missed you.", res.who), gstate);
+            }
         }
 
-        if astate.did_hit {
-            self.log("You hit X", gstate);
+        for res in &astate.did_attack {
+            if res.success {
+                self.log(&format!("You hit {} for {} dmg.", res.who, res.dmg), gstate);
+            } else {
+                self.log(&format!("You missed {}.", res.who), gstate);
+            }
+        }
+
+        let noises = astate.heared.iter()
+            .filter(|&c| *c != astate.pos.coord)
+            .filter(|&c| !astate.sees(*c))
+            .count();
+
+        if noises > 0 {
+            self.log("You heard something.", gstate);
         }
     }
 

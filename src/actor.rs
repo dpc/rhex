@@ -1,5 +1,5 @@
 use std::collections::{HashSet,HashMap};
-use hex2d::{Coordinate, Angle, Position, ToCoordinate};
+use hex2d::{Coordinate, Angle, Position, ToCoordinate, Direction};
 use game::{self, Action};
 use hex2dext::algo;
 use std::cmp;
@@ -44,6 +44,12 @@ pub enum Slot {
     Quick,
 }
 
+#[derive(Clone, Eq, PartialEq, Debug)]
+pub struct AttackResult {
+    pub success : bool,
+    pub dmg : i32,
+    pub who : String,
+}
 
 #[derive(Clone, Debug)]
 pub struct State {
@@ -67,18 +73,18 @@ pub struct State {
     pub discovered_areas: Visibility,
 
     pub heared: Visibility,
-    pub noise: i32,
+    pub noise_emision: i32,
 
-    pub light : u32,
+    pub light_emision : u32,
 
     pub attack_cooldown : i32,
     pub action_cooldown : i32,
-    pub item_letters: HashSet<char>,
-    pub equipped : HashMap<Slot, (char, Box<Item>)>,
-    pub items : HashMap<char, Box<Item>>,
+    pub items_letters: HashSet<char>,
+    pub items_equipped : HashMap<Slot, (char, Box<Item>)>,
+    pub items_backpack : HashMap<char, Box<Item>>,
 
-    pub were_hit : bool,
-    pub did_hit : bool,
+    pub was_attacked_by : Vec<AttackResult>,
+    pub did_attack : Vec<AttackResult>,
 }
 
 impl State {
@@ -96,22 +102,22 @@ impl State {
             known: HashSet::new(),
             known_areas: HashSet::new(),
             heared: HashSet::new(),
-            noise: 0,
+            noise_emision: 0,
             discovered: HashSet::new(),
             discovered_areas: HashSet::new(),
-            light: 0,
-            items: HashMap::new(),
-            equipped: HashMap::new(),
-            item_letters: HashSet::new(),
+            light_emision: 0,
+            items_backpack: HashMap::new(),
+            items_equipped: HashMap::new(),
+            items_letters: HashSet::new(),
             attack_cooldown: 0,
             action_cooldown: 0,
-            were_hit: false,
-            did_hit: false,
+            was_attacked_by: Vec::new(),
+            did_attack: Vec::new(),
         }
     }
 
     pub fn add_light(&mut self, light : u32) {
-        self.light = light;
+        self.light_emision = light;
     }
 
     pub fn sees(&self, pos : Coordinate) -> bool {
@@ -120,6 +126,10 @@ impl State {
 
     pub fn knows(&self, pos : Coordinate) -> bool {
         self.known.contains(&pos)
+    }
+
+    pub fn hears(&self, coord : Coordinate) -> bool {
+        self.heared.contains(&coord)
     }
 
     pub fn pos_after_action(&self, action : Action) -> Position {
@@ -169,8 +179,8 @@ impl State {
 
     pub fn pre_tick(&mut self, _ : &game::State) {
         self.prev_stats = self.stats;
-        self.did_hit = false;
-        self.were_hit = false;
+        self.did_attack = Vec::new();
+        self.was_attacked_by = Vec::new();
         if self.attack_cooldown > 0 {
             self.attack_cooldown -= 1;
         }
@@ -179,14 +189,18 @@ impl State {
             self.action_cooldown -= 1;
         }
 
-        self.noise = 0;
+        self.noise_emision = 0;
         self.heared = HashSet::new();
     }
 
-    pub fn makes_noise(&mut self, noise : i32) {
-        if self.noise < noise {
-            self.noise = noise;
+    pub fn noise_makes(&mut self, noise : i32) {
+        if self.noise_emision < noise {
+            self.noise_emision = noise;
         }
+    }
+
+    pub fn noise_hears(&mut self, coord : Coordinate) {
+        self.heared.insert(coord);
     }
 
     pub fn post_tick(&mut self, gstate : &game::State) {
@@ -198,9 +212,9 @@ impl State {
             .chain(range('A' as u8, 'Z' as u8)) {
             let ch = ch as char;
             if !self.item_letter_taken(ch) {
-                assert!(!self.items.contains_key(&ch));
-                self.item_letters.insert(ch);
-                self.items.insert(ch, item);
+                assert!(!self.items_backpack.contains_key(&ch));
+                self.items_letters.insert(ch);
+                self.items_backpack.insert(ch, item);
                 return true;
             }
         }
@@ -208,11 +222,11 @@ impl State {
     }
 
     pub fn item_letter_taken(&self, ch : char) -> bool {
-        if self.item_letters.contains(&ch) {
+        if self.items_letters.contains(&ch) {
             return true;
         }
 
-        for (&_, &(ref item_ch, _)) in &self.equipped {
+        for (&_, &(ref item_ch, _)) in &self.items_equipped {
             if *item_ch == ch {
                 return true;
             }
@@ -222,7 +236,7 @@ impl State {
     }
 
     pub fn equip_switch(&mut self, ch : char) {
-        if self.items.contains_key(&ch) {
+        if self.items_backpack.contains_key(&ch) {
             self.equip(ch);
         } else {
             self.unequip(ch);
@@ -230,10 +244,10 @@ impl State {
     }
 
     pub fn equip(&mut self, ch : char) {
-        if let Some(item) = self.items.remove(&ch) {
+        if let Some(item) = self.items_backpack.remove(&ch) {
             let slot = item.slot();
             self.unequip_slot(slot);
-            self.equipped.insert(slot, (ch, item));
+            self.items_equipped.insert(slot, (ch, item));
             self.action_cooldown += if slot == Slot::Body {
                 4
             } else {
@@ -243,8 +257,8 @@ impl State {
     }
 
     pub fn unequip_slot(&mut self, slot : Slot) {
-        if let Some((ch, item)) = self.equipped.remove(&slot) {
-            self.items.insert(ch, item);
+        if let Some((ch, item)) = self.items_equipped.remove(&slot) {
+            self.items_backpack.insert(ch, item);
             self.action_cooldown += if slot == Slot::Body {
                 4
             } else {
@@ -255,7 +269,7 @@ impl State {
 
     pub fn unequip(&mut self, ch : char) {
         let mut found_slot = None;
-        for (&slot, &(ref item_ch, _)) in &self.equipped {
+        for (&slot, &(ref item_ch, _)) in &self.items_equipped {
             if ch == *item_ch {
                 found_slot = Some(slot);
                 break;
@@ -266,31 +280,53 @@ impl State {
         }
     }
 
-    pub fn attacks(&mut self, target : Option<&mut State>) {
-        let (dmg, to_hit, cooldown) = self.attack();
+    pub fn attacks(&mut self, dir : Direction, target : Option<&mut State>) {
+        let (mut dmg, mut acc, cooldown) = self.attack();
         self.attack_cooldown = cooldown;
 
         if let Some(target) = target {
             let (ac, ev) = target.defense();
 
-            let apower = self.stats.dex + to_hit;
+            let from_behind = match dir - target.pos.dir {
+                Angle::Forward|Angle::Left|Angle::Right => true,
+                _ => false,
+            };
+
+            if from_behind {
+                acc += acc;
+                dmg += dmg;
+            }
+
+            let apower = self.stats.dex + acc;
             let dpower = target.stats.dex + ev;
 
-            if util::roll(apower, dpower) {
-                target.were_hit = true;
-                self.did_hit = true;
+            let success = util::roll(apower, dpower);
+
+            if success {
                 target.stats.hp -= cmp::max(0, dmg - ac);
-                target.makes_noise(5);
+                target.noise_makes(5);
             }
+
+            target.was_attacked_by.push(AttackResult {
+                    success: success,
+                    dmg: dmg - ac,
+                    who: self.description()
+                });
+
+            self.did_attack.push(AttackResult {
+                success: success,
+                dmg: dmg - ac,
+                who: target.description()
+            });
         }
     }
 
     pub fn defense(&self) -> (i32, i32) {
-        self.equipped.get(&Slot::Body).and_then(|&(_, ref i)| i.defense()).unwrap_or((0, 0))
+        self.items_equipped.get(&Slot::Body).and_then(|&(_, ref i)| i.defense()).unwrap_or((0, 0))
     }
 
     pub fn attack(&self) -> (i32, i32, i32) {
-        self.equipped.get(&Slot::RHand).and_then(|&(_, ref i)| i.attack()).unwrap_or(self.hand_attack())
+        self.items_equipped.get(&Slot::RHand).and_then(|&(_, ref i)| i.attack()).unwrap_or(self.hand_attack())
     }
 
     pub fn hand_attack(&self) -> (i32, i32, i32) {
@@ -306,7 +342,7 @@ impl State {
 
     pub fn moved(&mut self, new_pos : Position) {
         self.pos = new_pos;
-        self.makes_noise(2);
+        self.noise_makes(2);
     }
 
     pub fn is_player(&self) -> bool {
@@ -321,12 +357,12 @@ impl State {
         !self.is_dead() && self.action_cooldown == 0
     }
 
-    pub fn hears(&mut self, coord : Coordinate) {
-        self.heared.insert(coord);
-    }
-
-    pub fn hears_noise_at(&self, coord : Coordinate) -> bool {
-        self.heared.contains(&coord)
+    pub fn description(&self) -> String {
+        match self.behavior {
+            Behavior::Grue => "Grue",
+            Behavior::Pony => "Pony",
+            Behavior::Player => "Human",
+        }.to_string()
     }
 }
 
