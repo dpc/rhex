@@ -4,17 +4,17 @@ use std::sync::{mpsc};
 
 use hex2dext::algo::bfs;
 
-use hex2d::{self, Coordinate, ToCoordinate};
-use hex2d as h2d;
+use hex2d::{Coordinate, ToCoordinate};
+use hex2d::Angle::{Left, Right, Forward, Back, LeftBack};
 use game;
 use actor;
 use error::Error;
 
 fn roam() -> game::Action {
     match rand::thread_rng().gen_range(0, 10) {
-        0 => game::Action::Turn(h2d::Angle::Right),
-        1 => game::Action::Turn(h2d::Angle::Left),
-        2 => game::Action::Move(h2d::Angle::Forward),
+        0 => game::Action::Turn(Right),
+        1 => game::Action::Turn(Left),
+        2 => game::Action::Move(Forward),
         _ => game::Action::Wait,
     }
 }
@@ -39,18 +39,33 @@ fn grue(astate : &actor::State, gstate : &game::State) -> game::Action {
         }
     }
 
+    for &coord in &astate.heared {
+        if astate.pos.coord != coord {
+            return go_to(coord, astate, gstate);
+        }
+    }
+
     roam()
 }
 
 fn go_to(c: Coordinate, astate : &actor::State, gstate : &game::State) -> game::Action {
-    let ndir = astate.pos.coord.direction_to_cw(c).expect("bfs gave me trash");
+    let ndir = match astate.pos.coord.direction_to_cw(c) {
+        None => return game::Action::Wait,
+        Some(dir) => dir,
+    };
 
     let n_pos = astate.pos + ndir.to_coordinate();
     if gstate.at(n_pos.coord).tile_map_or(false, |t| t.type_.is_passable()) {
         if ndir == astate.pos.dir {
-            return game::Action::Move(hex2d::Angle::Forward)
+            return game::Action::Move(Forward)
         } else {
-            return game::Action::Turn(ndir - astate.pos.dir)
+            let rdir = ndir - astate.pos.dir;
+            let rdir = match rdir {
+                Left|LeftBack => Left,
+                Back => if astate.pos.coord.x & 1 == 0 { Left } else { Right },
+                _ => Right,
+            };
+            return game::Action::Turn(rdir)
         }
     }
     //TODO: fallaback to A* instead of BFS
@@ -66,31 +81,30 @@ fn go_to(c: Coordinate, astate : &actor::State, gstate : &game::State) -> game::
 }
 
 fn pony_follow(astate : &actor::State, gstate : &game::State) -> game::Action {
+    let start = astate.pos.coord;
 
-        let start = astate.pos.coord;
+    let player_pos = closest_reachable(gstate, start, 10,
+                                       |pos| gstate.at(pos).actor_map_or(false, |a| a.is_player())
+                                      );
 
-        let player_pos = closest_reachable(gstate, start, 10,
-            |pos| gstate.at(pos).actor_map_or(false, |a| a.is_player())
-            );
-
-        let player_pos = if let Some((dst, _)) = player_pos {
-            let distance = dst.distance(start);
-            if distance < 3 {
-                closest_reachable(gstate, start, 10, |pos| pos.distance(dst) == 3 && gstate.at(pos).is_passable())
-            } else if distance < 5 {
-                None
-            } else {
-                player_pos
-            }
+    let player_pos = if let Some((dst, _)) = player_pos {
+        let distance = dst.distance(start);
+        if distance < 3 {
+            closest_reachable(gstate, start, 10, |pos| pos.distance(dst) == 3 && gstate.at(pos).is_passable())
+        } else if distance < 5 {
+            None
         } else {
             player_pos
-        };
-
-        if let Some((_, neigh)) = player_pos {
-            go_to(neigh, astate, gstate)
-        } else {
-            roam()
         }
+    } else {
+        player_pos
+    };
+
+    if let Some((_, neigh)) = player_pos {
+        go_to(neigh, astate, gstate)
+    } else {
+        roam()
+    }
 }
 
 pub fn run(
@@ -101,6 +115,10 @@ pub fn run(
 
     loop {
         let (ref astate, ref gstate) = try!(req.recv());
+
+        if !astate.can_perform_action() {
+            continue;
+        }
 
         let action = match astate.behavior {
             actor::Behavior::Grue => grue(&astate, &gstate),

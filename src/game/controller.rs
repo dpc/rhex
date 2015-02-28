@@ -72,6 +72,11 @@ impl Controller {
             let mut actions = vec!();
 
             for (_, astate) in &actors {
+
+                if !astate.can_perform_action() {
+                    continue;
+                }
+
                 let (acoord, action) = match astate.behavior {
                     actor::Behavior::Player => {
                         try!(pl_rep.recv())

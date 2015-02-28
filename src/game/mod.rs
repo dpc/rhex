@@ -60,6 +60,24 @@ impl State {
         }
     }
 
+    pub fn recalculate_noise(&mut self) {
+
+        let mut actors = self.actors.clone();
+
+        for (&source_coord, a) in self.actors.iter() {
+            if a.noise > 0 {
+                source_coord.for_each_in_range(a.noise, |coord| {
+                    if let Some(mut actor) = actors.remove(&coord) {
+                        let mut actor = actor.make_unique().clone();
+                        actor.hears(source_coord);
+                        actors.insert(coord, Arc::new(actor));
+                    }
+                });
+            }
+        }
+        self.actors = actors;
+    }
+
     pub fn recalculate_light_map(&mut self) {
         let mut light_map : HashMap<Coordinate, u32> = HashMap::new();
 
@@ -158,6 +176,10 @@ impl State {
 
         let astate = self.actors[acoord].clone();
 
+        if !astate.can_perform_action() {
+            return;
+        }
+
         let new_pos = astate.pos_after_action(action);
 
         if astate.pos == new_pos {
@@ -217,7 +239,7 @@ impl State {
             // we've moved
             self.actors_orig.insert(astate.pos.coord, new_pos.coord);
             let mut astate = self.actors.remove(&astate.pos.coord).unwrap().make_unique().clone();
-            astate.change_position(new_pos);
+            astate.moved(new_pos);
             self.actors.insert(astate.pos.coord, Arc::new(astate));
         } else {
             // we hit the wall or something
@@ -261,6 +283,7 @@ impl State {
         }
 
         self.recalculate_light_map();
+        self.recalculate_noise();
 
         let mut actors = HashMap::new();
 

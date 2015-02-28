@@ -66,9 +66,13 @@ pub struct State {
     /// Just discovered areas
     pub discovered_areas: Visibility,
 
+    pub heared: Visibility,
+    pub noise: i32,
+
     pub light : u32,
 
     pub attack_cooldown : i32,
+    pub action_cooldown : i32,
     pub item_letters: HashSet<char>,
     pub equipped : HashMap<Slot, (char, Box<Item>)>,
     pub items : HashMap<char, Box<Item>>,
@@ -91,6 +95,8 @@ impl State {
             visible: HashSet::new(),
             known: HashSet::new(),
             known_areas: HashSet::new(),
+            heared: HashSet::new(),
+            noise: 0,
             discovered: HashSet::new(),
             discovered_areas: HashSet::new(),
             light: 0,
@@ -98,6 +104,7 @@ impl State {
             equipped: HashMap::new(),
             item_letters: HashSet::new(),
             attack_cooldown: 0,
+            action_cooldown: 0,
             were_hit: false,
             did_hit: false,
         }
@@ -164,13 +171,26 @@ impl State {
         self.prev_stats = self.stats;
         self.did_hit = false;
         self.were_hit = false;
+        if self.attack_cooldown > 0 {
+            self.attack_cooldown -= 1;
+        }
+
+        if self.action_cooldown > 0 {
+            self.action_cooldown -= 1;
+        }
+
+        self.noise = 0;
+        self.heared = HashSet::new();
+    }
+
+    pub fn makes_noise(&mut self, noise : i32) {
+        if self.noise < noise {
+            self.noise = noise;
+        }
     }
 
     pub fn post_tick(&mut self, gstate : &game::State) {
         self.postprocess_visibile(gstate);
-        if self.attack_cooldown > 0 {
-            self.attack_cooldown -= 1;
-        }
     }
 
     pub fn add_item(&mut self, item : Box<Item>) -> bool {
@@ -214,12 +234,22 @@ impl State {
             let slot = item.slot();
             self.unequip_slot(slot);
             self.equipped.insert(slot, (ch, item));
+            self.action_cooldown += if slot == Slot::Body {
+                4
+            } else {
+                1
+            }
         }
     }
 
     pub fn unequip_slot(&mut self, slot : Slot) {
         if let Some((ch, item)) = self.equipped.remove(&slot) {
             self.items.insert(ch, item);
+            self.action_cooldown += if slot == Slot::Body {
+                4
+            } else {
+                1
+            }
         }
     }
 
@@ -238,7 +268,7 @@ impl State {
 
     pub fn attacks(&mut self, target : Option<&mut State>) {
         let (dmg, to_hit, cooldown) = self.attack();
-        self.attack_cooldown = cooldown + 1;
+        self.attack_cooldown = cooldown;
 
         if let Some(target) = target {
             let (ac, ev) = target.defense();
@@ -250,6 +280,7 @@ impl State {
                 target.were_hit = true;
                 self.did_hit = true;
                 target.stats.hp -= cmp::max(0, dmg - ac);
+                target.makes_noise(5);
             }
         }
     }
@@ -270,11 +301,12 @@ impl State {
         }
     }
     pub fn can_attack(&self) -> bool {
-        self.attack_cooldown == 0
+        self.attack_cooldown == 0 && self.action_cooldown == 0
     }
 
-    pub fn change_position(&mut self, new_pos : Position) {
+    pub fn moved(&mut self, new_pos : Position) {
         self.pos = new_pos;
+        self.makes_noise(2);
     }
 
     pub fn is_player(&self) -> bool {
@@ -283,6 +315,18 @@ impl State {
 
     pub fn is_dead(&self) -> bool {
         self.stats.hp <= 0
+    }
+
+    pub fn can_perform_action(&self) -> bool {
+        !self.is_dead() && self.action_cooldown == 0
+    }
+
+    pub fn hears(&mut self, coord : Coordinate) {
+        self.heared.insert(coord);
+    }
+
+    pub fn hears_noise_at(&self, coord : Coordinate) -> bool {
+        self.heared.contains(&coord)
     }
 }
 
@@ -295,7 +339,9 @@ fn calculate_los(pos : Position, gstate : &game::State) -> Visibility {
                 let _ = visibility.insert(coord);
             }
         },
-        10, pos.coord, &[pos.dir, pos.dir + Angle::Left, pos.dir + Angle::Right]
+        10, pos.coord,
+        //&[pos.dir, pos.dir + Angle::Left, pos.dir + Angle::Right]
+        &[pos.dir]
         );
 
     visibility

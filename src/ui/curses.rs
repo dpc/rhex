@@ -56,6 +56,7 @@ pub mod color {
     ];
     pub const BLACK : u8 = GRAY[0];
     pub const WHITE : u8 = GRAY[25];
+    pub const YELLOW : u8 = 226;
 
     pub const BACKGROUND_BG : u8 = GRAY[2];
     pub const MAP_BACKGROUND_BG : u8 = GRAY[2];
@@ -78,6 +79,7 @@ pub mod color {
     pub const LABEL_FG: u8 = 94;
     pub const GREEN_FG: u8 = 34;
     pub const RED_FG:   u8 = 124;
+    pub const NOISE_BG :   u8 = YELLOW;
     pub const TARGET_SELF_FG : u8 = 20;
     pub const TARGET_ENEMY_FG : u8 = 196;
     pub const LIGHTSOURCE : u8 = 227;
@@ -451,6 +453,11 @@ impl CursesUI {
                     }
                 }
 
+                if is_proper_coord && c != center && !visible && astate.hears_noise_at(c) {
+                    bg = color::NOISE_BG;
+                    draw = true;
+                }
+
                 if draw {
                     let cpair = nc::COLOR_PAIR(calloc.get(fg, bg));
 
@@ -770,7 +777,7 @@ impl CursesUI {
 
     fn draw_log(&mut self, _ : &actor::State, gstate : &game::State) {
         let window = self.log_window.as_ref().unwrap().window;
-       
+
         let cpair = nc::COLOR_PAIR(self.calloc.borrow_mut().get(color::VISIBLE_FG, color::BACKGROUND_BG));
         nc::wbkgd(window, ' ' as nc::chtype | cpair as nc::chtype);
         nc::werase(window);
@@ -824,6 +831,7 @@ impl CursesUI {
         nc::waddstr(window, "Examine: x\n");
         nc::waddstr(window, "Equip: E\n");
         nc::waddstr(window, "Inventory: I\n");
+        nc::waddstr(window, "Quit: q\n");
         nc::wnoutrefresh(window);
     }
 
@@ -873,6 +881,10 @@ enum Mode {
 impl ui::UiFrontend for CursesUI {
 
     fn update(&mut self, astate : &actor::State, gstate : &game::State) {
+        if astate.is_dead() {
+            return;
+        }
+
         let discoviered_areas = astate.discovered_areas.iter()
             .filter_map(|coord| gstate.at(*coord).tile_map_or(None, |t| t.area))
             ;

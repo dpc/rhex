@@ -157,16 +157,16 @@ impl<U : UiFrontend> Ui<U> {
             } else {
                 match req.try_recv() {
                     Ok(req) => {
-                        let dead = {
+                        let skip = {
                             let (ref astate, ref gstate) = req;
                             self.frontend.update(&astate, &gstate);
-                            astate.is_dead()
+                            !astate.can_perform_action()
                         };
 
                         pending_req = Some(req);
                         self.redraw(&pending_req);
 
-                        if dead {
+                        if skip {
                             // no need to respond
                             pending_req = None;
                         }
