@@ -19,8 +19,6 @@ extern crate core;
 use std::sync::mpsc;
 use std::thread;
 
-use hex2d::Coordinate;
-
 mod actor;
 mod ai;
 mod error;
@@ -32,12 +30,8 @@ mod util;
 
 pub fn main() {
     println!("Generating map...");
-    let mut state = game::State::new();
-    state.at_mut(Coordinate::new(0, 0)).drop_item(Box::new(item::Weapon::new(item::weapon::Knife)));
-    state.at_mut(Coordinate::new(0, 0)).drop_item(Box::new(item::Weapon::new(item::weapon::Sword)));
-    state.at_mut(Coordinate::new(0, 0)).drop_item(Box::new(item::Weapon::new(item::weapon::Axe)));
-    state.at_mut(Coordinate::new(0, 0)).drop_item(Box::new(item::Armor::new(item::armor::Plate)));
-    state.at_mut(Coordinate::new(0, 0)).drop_item(Box::new(item::Armor::new(item::armor::Leather)));
+    let state = game::State::new();
+
     let mut controller = game::Controller::new(state);
 
     let (pl_req_tx, pl_req_rx) = mpsc::channel();

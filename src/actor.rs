@@ -212,14 +212,7 @@ impl State {
         self.prev_stats = self.stats;
         self.did_attack = Vec::new();
         self.was_attacked_by = Vec::new();
-        if self.attack_cooldown > 0 {
-            self.attack_cooldown -= 1;
-        }
-
-        if self.action_cooldown > 0 {
-            self.action_cooldown -= 1;
-        }
-
+        
         self.noise_emision = 0;
         self.heared = HashSet::new();
     }
@@ -236,6 +229,14 @@ impl State {
 
     pub fn post_tick(&mut self, gstate : &game::State) {
         self.postprocess_visibile(gstate);
+        if self.attack_cooldown > 0 {
+            self.attack_cooldown -= 1;
+        }
+
+        if self.action_cooldown > 0 {
+            self.action_cooldown -= 1;
+        }
+
     }
 
     pub fn add_item(&mut self, item : Box<Item>) -> bool {
@@ -282,7 +283,7 @@ impl State {
             self.action_cooldown += if slot == Slot::Body {
                 4
             } else {
-                1
+                2
             }
         }
     }
@@ -293,7 +294,7 @@ impl State {
             self.action_cooldown += if slot == Slot::Body {
                 4
             } else {
-                1
+                2
             }
         }
     }
@@ -313,7 +314,7 @@ impl State {
 
     pub fn attacks(&mut self, dir : Direction, target : Option<&mut State>) {
         let (mut dmg, mut acc, cooldown) = self.attack();
-        self.attack_cooldown = cooldown;
+        self.attack_cooldown = cooldown + 1;
 
         if let Some(target) = target {
             let (ac, ev) = target.defense();

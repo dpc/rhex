@@ -894,6 +894,13 @@ impl ui::UiFrontend for CursesUI {
             self.log(&s, gstate);
         }
 
+        for item_coord in astate.discovered.iter().filter(|&coord|
+                                      gstate.at(*coord).item_map_or(false, |_| true)
+                                      ) {
+            let item_descr = gstate.at(*item_coord).item_map_or("".to_string(), |i| i.description().to_string());
+            self.log(&format!("You've found {}.", item_descr), gstate);
+        }
+
         if astate.discovered_stairs(gstate) {
             self.log("You've found stairs.", gstate);
         }

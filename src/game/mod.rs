@@ -3,6 +3,7 @@ use std::collections::hash_map::Entry;
 use std::sync::{Arc};
 
 use hex2d::{Coordinate, Direction, Angle, Position};
+use hex2d::Angle::{Left, Right, Forward};
 use actor::{self, Behavior};
 use generate;
 use hex2dext::algo;
@@ -39,24 +40,34 @@ pub struct State {
     pub actors_orig: HashMap<Coordinate, Coordinate>, // from -> to
     pub actors_dead: Vec<Arc<actor::State>>,
     pub map : Arc<Map>,
-    pub items: Arc<Items>,
+    pub items: Items,
     pub light_map: LightMap,
     pub turn : u64,
     pub descend : bool,
     pub level : i32,
 }
 
+pub fn action_could_be_attack(action : Action) -> bool {
+    match action {
+        Action::Move(angle) => match angle {
+            Left|Right|Forward => true,
+            _ => false,
+        },
+        _ => false,
+    }
+}
+
 impl State {
     pub fn new() -> State {
 
         let cp = Coordinate::new(0, 0);
-        let (map, actors, _items) = generate::DungeonGenerator::new(0).generate_map(cp, 400);
+        let (map, actors, items) = generate::DungeonGenerator::new(0).generate_map(cp, 400);
 
         let state = State {
             actors: actors,
             actors_orig: HashMap::new(),
             actors_dead: Vec::new(),
-            items: Arc::new(HashMap::new()),
+            items: items,
             map: Arc::new(map),
             turn: 0,
             level: 0,
@@ -223,14 +234,14 @@ impl State {
                 },
                 _ => {}
             }
-        } else if astate.pos.coord != new_pos.coord &&
+        } else if action_could_be_attack(action) &&
+            astate.pos.coord != new_pos.coord &&
             self.actors_orig.contains_key(&new_pos.coord)
             {
-            // that is an attack!
+            // we've tried to move into actor; attack?
             if !astate.can_attack() {
                 return;
             }
-
             let dir = match action {
                 Action::Move(dir) => astate.pos.dir + dir,
                 _ => astate.pos.dir,
@@ -253,7 +264,7 @@ impl State {
         } else if self.at(new_pos.coord).tile_map_or(
             false, |t| t.feature == Some(tile::Door(false))
             ) {
-
+            // walked into door: open it
             let mut map = self.map.clone().make_unique().clone();
             let tile = map.remove(&new_pos.coord).unwrap();
             map.insert(new_pos.coord, tile.add_feature(tile::Door(true)));
@@ -346,7 +357,7 @@ impl State {
     pub fn next_level(&self) -> State {
 
         let cp = Coordinate::new(0, 0);
-        let (map, actors, _items) = generate::DungeonGenerator::new(self.level + 1).generate_map(cp, 400);
+        let (map, actors, items) = generate::DungeonGenerator::new(self.level + 1).generate_map(cp, 400);
 
         let mut player = None;
         let mut pony = None;
@@ -370,7 +381,7 @@ impl State {
             actors: actors,
             actors_orig: HashMap::new(),
             actors_dead: Vec::new(),
-            items: Arc::new(HashMap::new()),
+            items: items,
             map: Arc::new(map),
             turn: self.turn,
             descend: false,
@@ -473,19 +484,14 @@ impl<'a> AtMut<'a> {
         match coord {
             None => { /* destroy the item :/ */ },
             Some(coord) => {
-                let mut items = self.state.items.clone().make_unique().clone();
-                items.insert(coord, item);
-                self.state.items = Arc::new(items);
+                self.state.items.insert(coord, item);
             }
         }
     }
 
     pub fn pick_item(&mut self) -> Option<Box<Item>> {
         if self.state.items.get(&self.coord).is_some() {
-            let mut items = self.state.items.clone().make_unique().clone();
-            let item = items.remove(&self.coord);
-            self.state.items = Arc::new(items);
-            item
+            self.state.items.remove(&self.coord)
         } else {
             None
         }

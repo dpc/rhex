@@ -1,5 +1,6 @@
 use std::fmt;
 use actor::Slot;
+use rand::{self, Rng};
 
 pub trait Item : Send+Sync+fmt::Debug {
     fn description(&self) -> &str;
@@ -20,6 +21,22 @@ impl<'a> Clone for Box<Item+'a> {
 pub enum Type {
     Weapon,
     Armor,
+}
+
+pub fn random(level : i32) -> Box<Item> {
+
+    let r = rand::thread_rng().gen_range(0i32, 5) +
+        rand::thread_rng().gen_range(0, 5) +
+        rand::thread_rng().gen_range(0, 5) - 9;
+
+
+    match level + r {
+        1|2 => Weapon::new(weapon::Sword).to_item(),
+        3 => Armor::new(armor::Leather).to_item(),
+        5 => Weapon::new(weapon::Sword).to_item(),
+        7 => Armor::new(armor::Plate).to_item(),
+        _ => Weapon::new(weapon::Knife).to_item(),
+    }
 }
 
 pub use self::weapon::Weapon;
@@ -49,6 +66,10 @@ pub mod weapon {
             Weapon {
                 type_: type_,
             }
+        }
+
+        pub fn to_item(self) -> Box<Item> {
+            Box::new(self)
         }
     }
 
@@ -110,6 +131,10 @@ pub mod armor {
             Armor{
                 type_: type_,
             }
+        }
+
+        pub fn to_item(self) -> Box<Item> {
+            Box::new(self)
         }
     }
 

@@ -12,6 +12,7 @@ use game::tile;
 use game::{Map, Actors, Items};
 use game::area;
 use actor;
+use item;
 
 type EndpointQueue = VecDeque<h2d::Position>;
 
@@ -23,6 +24,7 @@ pub struct DungeonGenerator {
     map: Map,
     endpoints: EndpointQueue,
     actors: Actors,
+    items: Items,
 }
 
 impl DungeonGenerator {
@@ -35,6 +37,7 @@ impl DungeonGenerator {
             map: HashMap::new(),
             endpoints:  VecDeque::new(),
             actors: HashMap::new(),
+            items: HashMap::new(),
         }
     }
 }
@@ -203,6 +206,10 @@ impl DungeonGenerator {
                 self.tile_count += 1;
             }
         });
+
+        if rand::thread_rng().gen_weighted_bool(3) {
+            self.items.insert(coord, item::random(self.level)); 
+        }
     }
 
     pub fn endpoint_push(&mut self, pos : h2d::Position) {
@@ -211,7 +218,6 @@ impl DungeonGenerator {
     }
 
     pub fn generate_map(mut self, start : h2d::Coordinate, size : u32) -> (Map, Actors, Items) {
-        let items = HashMap::new();
         let start_dir = h2d::Direction::XY;
         let start_pos = Position::new(start, start_dir);
         let first_room_r = rand::thread_rng().gen_range(0, 2) + 2;
@@ -261,6 +267,6 @@ impl DungeonGenerator {
             }
         }
 
-        return (self.map, self.actors, items);
+        return (self.map, self.actors, self.items);
     }
 }
