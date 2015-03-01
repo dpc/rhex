@@ -19,7 +19,9 @@ fn roam() -> game::Action {
     }
 }
 
-fn closest_reachable<F>(gstate : &game::State, start : Coordinate, max_distance : i32, cond : F) -> Option<(Coordinate, Coordinate)>
+fn closest_reachable<F>(
+    gstate : &game::State, start : Coordinate, max_distance : i32, cond : F
+    ) -> Option<(Coordinate, Coordinate)>
     where F : Fn(Coordinate) -> bool
 {
     let mut bfs = bfs::Traverser::new(
@@ -45,7 +47,7 @@ fn grue(astate : &actor::State, gstate : &game::State) -> game::Action {
         }
     }
 
-    roam()
+    game::Action::Wait
 }
 
 fn go_to(c: Coordinate, astate : &actor::State, gstate : &game::State) -> game::Action {

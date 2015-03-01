@@ -58,8 +58,12 @@ impl<U : UiFrontend> Ui<U> {
     }
 
     pub fn should_stop_autoexploring(&self, astate : &actor::State, gstate : &game::State) -> bool {
-        astate.discovered_areas.iter().count() > 0 ||
-            astate.visible.iter().any(|&coord| gstate.at(coord).actor_map_or(false, |a| a.behavior == actor::Behavior::Grue))
+        astate.discovered_areas.iter().any(|_| true ) ||
+            astate.visible.iter().any(|&coord| gstate.at(coord).actor_map_or(false, |a| a.behavior == actor::Behavior::Grue)) ||
+            astate.heared.iter()
+                .filter(|&c| *c != astate.pos.coord)
+                .any(|&c| !astate.sees(c)) ||
+            astate.discovered_stairs(gstate)
     }
 
     pub fn autoexplore_action(&self, astate : &actor::State, gstate : &game::State) -> AutoExploreAction {

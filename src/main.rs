@@ -38,8 +38,6 @@ pub fn main() {
     state.at_mut(Coordinate::new(0, 0)).drop_item(Box::new(item::Weapon::new(item::weapon::Axe)));
     state.at_mut(Coordinate::new(0, 0)).drop_item(Box::new(item::Armor::new(item::armor::Plate)));
     state.at_mut(Coordinate::new(0, 0)).drop_item(Box::new(item::Armor::new(item::armor::Leather)));
-    let state = state.spawn_player();
-    let state = state.spawn_pony(Coordinate::new(-1, 0));
     let mut controller = game::Controller::new(state);
 
     let (pl_req_tx, pl_req_rx) = mpsc::channel();

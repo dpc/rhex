@@ -67,6 +67,8 @@ pub mod color {
     // in light, shaded (barely visible), out of sight
     pub const EMPTY_FG : [u8; 3] = [GRAY[17], GRAY[12], GRAY[5]];
     pub const EMPTY_BG : [u8; 3] = [GRAY[24], GRAY[22], GRAY[6]];
+    pub const WATER_FG: [u8; 3] = EMPTY_FG;
+    pub const WATER_BG: [u8; 3] = [4, 74, 67];
     pub const WALL_FG : [u8; 3] = [BLACK, GRAY[1] , GRAY[2]];
     pub const WALL_BG : [u8; 3] = [GRAY[14], GRAY[8] , GRAY[4]];
     pub const CHAR_SELF_FG : [u8; 3] = [19, 18, 17];
@@ -74,8 +76,8 @@ pub mod color {
     pub const CHAR_ENEMY_FG : [u8; 3] = [124, 88, 52];
     pub const CHAR_GRAY_FG : u8= GRAY[17];
     pub const CHAR_BG : [u8; 3] = EMPTY_BG;
-    pub const TREE_FG : [u8; 3] = CHAR_ALLY_FG;
-    pub const TREE_BG : [u8; 3] = EMPTY_BG;
+    //pub const TREE_FG : [u8; 3] = CHAR_ALLY_FG;
+    //pub const TREE_BG : [u8; 3] = EMPTY_BG;
 
     pub const LABEL_FG: u8 = 94;
     pub const GREEN_FG: u8 = 34;
@@ -346,8 +348,8 @@ impl CursesUI {
                     let knows = astate.knows(c1) && astate.knows(c2);
 
                     let (e1, e2) = (
-                        gstate.at(c1).tile_map_or(tile::Wall, |t| t.type_).ascii_expand(),
-                        gstate.at(c2).tile_map_or(tile::Wall, |t| t.type_).ascii_expand()
+                        gstate.at(c1).tile_map_or(tile::Wall.base_ascii_expand(), |t| t.ascii_expand()),
+                        gstate.at(c2).tile_map_or(tile::Wall.base_ascii_expand(), |t| t.ascii_expand())
                         );
 
                     let c = Some(if e1 > e2 { c1 } else { c2 });
@@ -377,18 +379,21 @@ impl CursesUI {
                             Some(tile::Empty) => {
                                 (
                                     color::EMPTY_FG, color::EMPTY_BG,
-                                    if is_proper_coord { self.dot } else { " " }
+                                    if is_proper_coord {
+                                        match t.and_then(|t| t.feature) {
+                                            None => self.dot,
+                                            Some(tile::Door(open)) => if open { "_" } else { "+" },
+                                            Some(tile::Statue) => "&",
+                                            Some(tile::Stairs) => ">",
+                                        }
+                                    } else { " " }
                                  )
                             },
                             Some(tile::Wall) => {
                                 (color::WALL_FG, color::WALL_BG, "#")
                             },
-                            Some(tile::Door(open)) => {
-                                (color::WALL_FG, color::WALL_BG,
-                                 if open { "_" } else { "+" })
-                            },
-                            Some(tile::Tree) => {
-                                (color::TREE_FG, color::TREE_BG, "T")
+                            Some(tile::Water) => {
+                                (color::WATER_FG, color::WATER_BG, "~")
                             },
                             None => {
                                 (color::EMPTY_FG, color::EMPTY_BG, " ")
@@ -737,9 +742,10 @@ impl CursesUI {
 
         let tile_type = gstate.at(coord).tile_map_or(tile::Wall, |t| t.type_);
         let tile = gstate.at(coord).tile_map_or(None, |t| Some(t.clone()));
-        let item = gstate.at(coord).item_map_or(None, |i| Some(i.description().to_string()));
+        let feature_descr = tile.clone().and_then(|t| t.feature).map(|f| f.description());
+        let item_descr = gstate.at(coord).item_map_or(None, |i| Some(i.description().to_string()));
 
-        let actor =
+        let actor_descr =
             if astate.sees(coord) || astate.is_dead() {
                 gstate.at(coord).actor_map_or(None, |a| Some(match a.behavior {
                     Behavior::Pony => "A pony",
@@ -751,24 +757,19 @@ impl CursesUI {
                 None
             };
 
-        match (tile_type, actor, item) {
-            (tile::Wall, _, _) => {
+        match (tile_type, feature_descr, actor_descr, item_descr) {
+
+            (_, _, Some(a_descr), _) => a_descr,
+            (_, _, _, Some(i_descr)) => i_descr,
+            (_, Some(f_descr), _, _) => f_descr.to_string(),
+            (tile::Wall, _, _, _) => {
                 "a wall".to_string()
             },
-            (tile::Door(_), _, _) => {
-                "door".to_string()
-            },
-            (tile::Empty, None, None) => {
+            (tile::Empty, _, _, _) => {
                 match tile.and_then(|t| t.area).and_then(|a| Some(a.type_)) {
                     Some(area::Room(_)) => "room".to_string(),
                     None => "nothing".to_string()
                 }
-            },
-            (tile::Empty, Some(descr), _) => {
-                descr
-            },
-            (tile::Empty, None, Some(item)) => {
-                item
             },
             _ => {
                 "Indescribable".to_string()
@@ -893,9 +894,18 @@ impl ui::UiFrontend for CursesUI {
             self.log(&s, gstate);
         }
 
+        if astate.discovered_stairs(gstate) {
+            self.log("You've found stairs.", gstate);
+        }
+
         for res in &astate.was_attacked_by {
             if res.success {
-                self.log(&format!("{} hit you for {} dmg.", res.who, res.dmg), gstate);
+                self.log(&format!(
+                        "{} hit you {}for {} dmg.",
+                        res.who,
+                        if res.behind { "from behind " } else { "" },
+                        res.dmg
+                        ), gstate);
             } else {
                 self.log(&format!("{} missed you.", res.who), gstate);
             }
@@ -903,7 +913,12 @@ impl ui::UiFrontend for CursesUI {
 
         for res in &astate.did_attack {
             if res.success {
-                self.log(&format!("You hit {} for {} dmg.", res.who, res.dmg), gstate);
+                self.log(&format!(
+                        "You hit {} {}for {} dmg.",
+                        res.who,
+                        if res.behind { "from behind " } else { "" },
+                        res.dmg
+                        ), gstate);
             } else {
                 self.log(&format!("You missed {}.", res.who), gstate);
             }
@@ -995,6 +1010,7 @@ impl ui::UiFrontend for CursesUI {
                         'j' => Action::Game(game::Action::Move(Angle::Back)),
                         '.' => Action::Game(game::Action::Wait),
                         ',' => Action::Game(game::Action::Pick),
+                        '>' => Action::Game(game::Action::Descend),
                         'o' => Action::AutoExplore,
                         'q' => {
                             self.mode = Mode::FullScreen(FSMode::Quit);

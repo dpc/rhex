@@ -97,6 +97,10 @@ impl Controller {
                 self.state.act(astate.pos.coord, *action)
             }
 
+            if self.state.descend {
+                self.state = self.state.next_level();
+            }
+
             timer.recv().unwrap();
         }
     }

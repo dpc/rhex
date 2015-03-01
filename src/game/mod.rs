@@ -3,12 +3,12 @@ use std::collections::hash_map::Entry;
 use std::sync::{Arc};
 
 use hex2d::{Coordinate, Direction, Angle, Position};
-use actor::{self};
+use actor::{self, Behavior};
 use generate;
 use hex2dext::algo;
 use item::Item;
 
-use self::tile::{Tile};
+use self::tile::{Tile, Feature};
 use hex2dext::algo::bfs;
 
 pub mod area;
@@ -30,6 +30,7 @@ pub enum Action {
     Spin(Angle),
     Equip(char),
     Pick,
+    Descend,
 }
 
 #[derive(Clone, Debug)]
@@ -41,23 +42,32 @@ pub struct State {
     pub items: Arc<Items>,
     pub light_map: LightMap,
     pub turn : u64,
+    pub descend : bool,
+    pub level : i32,
 }
 
 impl State {
     pub fn new() -> State {
 
         let cp = Coordinate::new(0, 0);
-        let (map, actors, _items) = generate::DungeonGenerator.generate_map(cp, 400);
+        let (map, actors, _items) = generate::DungeonGenerator::new(0).generate_map(cp, 400);
 
-        State {
+        let state = State {
             actors: actors,
             actors_orig: HashMap::new(),
             actors_dead: Vec::new(),
             items: Arc::new(HashMap::new()),
             map: Arc::new(map),
             turn: 0,
+            level: 0,
+            descend: false,
             light_map: HashMap::new(),
-        }
+        };
+
+        let state = state.spawn_player();
+        let state = state.spawn_pony(Coordinate::new(-1, 0));
+
+        state
     }
 
     pub fn recalculate_noise(&mut self) {
@@ -160,6 +170,8 @@ impl State {
             items: self.items.clone(),
             map: self.map.clone(),
             turn: self.turn,
+            descend: self.descend,
+            level: self.level,
             light_map: self.light_map.clone(),
         }
     }
@@ -204,6 +216,11 @@ impl State {
                     astate.equip_switch(ch);
                     self.actors.insert(astate.pos.coord, Arc::new(astate));
                 },
+                Action::Descend => {
+                    if self.at(astate.pos.coord).tile_map_or(false, |t| t.feature == Some(Feature::Stairs)) {
+                        self.descend = true;
+                    }
+                },
                 _ => {}
             }
         } else if astate.pos.coord != new_pos.coord &&
@@ -234,11 +251,12 @@ impl State {
             let coord = astate.pos.coord;
             self.actors.insert(coord, Arc::new(astate));
         } else if self.at(new_pos.coord).tile_map_or(
-            false, |t| t.type_ == tile::Door(false)
+            false, |t| t.feature == Some(tile::Door(false))
             ) {
 
             let mut map = self.map.clone().make_unique().clone();
-            map.insert(new_pos.coord, Tile::new(tile::Door(true)));
+            let tile = map.remove(&new_pos.coord).unwrap();
+            map.insert(new_pos.coord, tile.add_feature(tile::Door(true)));
             self.map = Arc::new(map);
 
         } else if astate.pos.coord == new_pos.coord || self.at(new_pos.coord).is_passable() {
@@ -315,6 +333,62 @@ impl State {
             coord: coord,
             state: self
         }
+    }
+
+    pub fn next_level(&self) -> State {
+
+        let cp = Coordinate::new(0, 0);
+        let (map, actors, _items) = generate::DungeonGenerator::new(self.level + 1).generate_map(cp, 400);
+
+        let mut player = None;
+        let mut pony = None;
+
+        for (_, astate) in self.actors.iter() {
+            if astate.behavior == Behavior::Player {
+                player = Some(astate);
+                break;
+            }
+        }
+
+        for (_, astate) in self.actors.iter() {
+            if astate.behavior == Behavior::Pony {
+                pony = Some(astate);
+                break;
+            }
+        }
+
+
+        let mut state = State {
+            actors: actors,
+            actors_orig: HashMap::new(),
+            actors_dead: Vec::new(),
+            items: Arc::new(HashMap::new()),
+            map: Arc::new(map),
+            turn: self.turn,
+            descend: false,
+            level: self.level + 1,
+            light_map: HashMap::new(),
+        };
+
+        if let Some(player) = player {
+            let coord = Coordinate::new(0, 0);
+            let pos = Position::new(coord, Direction::XY);
+            let mut player = player.clone().make_unique().clone();
+            player.moved(pos);
+            player.changed_level();
+            state.actors.insert(player.pos.coord, Arc::new(player));
+        }
+
+        if let Some(pony) = pony {
+            let coord = Coordinate::new(0, -1);
+            let pos = Position::new(coord, Direction::XY);
+            let mut pony = pony.clone().make_unique().clone();
+            pony.moved(pos);
+            pony.changed_level();
+            state.actors.insert(pony.pos.coord, Arc::new(pony));
+        }
+
+        state
     }
 }
 

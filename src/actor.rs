@@ -1,6 +1,7 @@
 use std::collections::{HashSet,HashMap};
 use hex2d::{Coordinate, Angle, Position, ToCoordinate, Direction};
 use game::{self, Action};
+use game::tile::{Feature};
 use hex2dext::algo;
 use std::cmp;
 use util;
@@ -24,12 +25,18 @@ pub struct Stats {
     pub max_mp : i32,
     pub hp: i32,
     pub mp: i32,
+    pub base_ac: i32,
+    pub base_ev: i32,
 }
 
 impl Stats {
     pub fn new(hp : i32) -> Stats {
-        Stats { int: 3, dex : 3, str_ : 3,
-        max_hp: hp, max_mp: 10, mp: 10, hp: hp }
+        Stats {
+            int: 3, dex : 3, str_ : 3,
+            max_hp: hp, hp: hp,
+            max_mp: 10, mp: 10,
+            base_ac: 0, base_ev: 0,
+        }
     }
 }
 
@@ -49,10 +56,13 @@ pub struct AttackResult {
     pub success : bool,
     pub dmg : i32,
     pub who : String,
+    pub behind : bool,
 }
 
 #[derive(Clone, Debug)]
 pub struct State {
+
+    pub pre_pos : Position,
     pub pos : Position,
 
     pub behavior : Behavior,
@@ -95,7 +105,7 @@ impl State {
 
         State {
             behavior : behavior,
-            pos: pos,
+            pos: pos, pre_pos: pos,
             stats: stats,
             prev_stats: stats,
             visible: HashSet::new(),
@@ -116,6 +126,22 @@ impl State {
         }
     }
 
+    pub fn new_grue(level : i32, pos : Position) -> State {
+        let mut ret = State::new(Behavior::Grue, pos);
+
+        ret.stats.hp += level / 2;
+        ret.stats.max_hp += level / 2;
+
+        ret.stats.dex += level / 6;
+        ret.stats.str_ += (2 + level) / 5;
+
+        ret.stats.base_ev += (2 + level) / 3;
+        ret.stats.base_ac += (2 + level) / 4;
+        ret
+
+    }
+
+
     pub fn add_light(&mut self, light : u32) {
         self.light_emision = light;
     }
@@ -135,7 +161,7 @@ impl State {
     pub fn pos_after_action(&self, action : Action) -> Position {
         let pos = self.pos;
         match action {
-            Action::Wait|Action::Pick|Action::Equip(_) => pos,
+            Action::Wait|Action::Pick|Action::Equip(_)|Action::Descend => pos,
             Action::Turn(a) => pos + a,
             Action::Move(a) => pos + (pos.dir + a).to_coordinate(),
             Action::Spin(a) => pos + (pos.dir + a).to_coordinate() +
@@ -178,6 +204,7 @@ impl State {
     }
 
     pub fn pre_tick(&mut self, _ : &game::State) {
+        self.pre_pos = self.pos;
         self.prev_stats = self.stats;
         self.did_attack = Vec::new();
         self.was_attacked_by = Vec::new();
@@ -287,7 +314,7 @@ impl State {
         if let Some(target) = target {
             let (ac, ev) = target.defense();
 
-            let from_behind = match dir - target.pos.dir {
+            let from_behind = match dir - target.pre_pos.dir {
                 Angle::Forward|Angle::Left|Angle::Right => true,
                 _ => false,
             };
@@ -302,31 +329,46 @@ impl State {
 
             let success = util::roll(apower, dpower);
 
+            let dmg = cmp::max(0, dmg - ac);
             if success {
-                target.stats.hp -= cmp::max(0, dmg - ac);
-                target.noise_makes(5);
+                target.stats.hp -= dmg;
+                target.noise_makes(7);
             }
 
             target.was_attacked_by.push(AttackResult {
                     success: success,
-                    dmg: dmg - ac,
-                    who: self.description()
+                    dmg: dmg,
+                    who: self.description(),
+                    behind: from_behind,
                 });
 
             self.did_attack.push(AttackResult {
                 success: success,
-                dmg: dmg - ac,
-                who: target.description()
+                dmg: dmg,
+                who: target.description(),
+                behind: from_behind,
             });
         }
     }
 
     pub fn defense(&self) -> (i32, i32) {
-        self.items_equipped.get(&Slot::Body).and_then(|&(_, ref i)| i.defense()).unwrap_or((0, 0))
+        let (ac, ev) = self.items_equipped.get(&Slot::Body).and_then(|&(_, ref i)| i.defense()).unwrap_or((0, 0));
+
+        (ac + self.stats.base_ac + self.stats.str_ / 3, ev + self.stats.dex / 2 + self.stats.base_ev)
     }
 
     pub fn attack(&self) -> (i32, i32, i32) {
-        self.items_equipped.get(&Slot::RHand).and_then(|&(_, ref i)| i.attack()).unwrap_or(self.hand_attack())
+        let (dmg, acc, cooldown) = self.items_equipped.get(&Slot::RHand).and_then(|&(_, ref i)| i.attack()).unwrap_or(self.hand_attack());
+
+        (dmg + (1 + self.stats.str_) / 2, acc + (1 + self.stats.dex) / 2, cooldown)
+    }
+
+    pub fn discovered_stairs(&self, gstate : &game::State) -> bool {
+        self.discovered.iter().any(
+            |c| gstate.at(*c).tile_map_or(
+                false, |t| t.feature == Some(Feature::Stairs)
+                )
+            )
     }
 
     pub fn hand_attack(&self) -> (i32, i32, i32) {
@@ -343,6 +385,11 @@ impl State {
     pub fn moved(&mut self, new_pos : Position) {
         self.pos = new_pos;
         self.noise_makes(2);
+    }
+
+    pub fn changed_level(&mut self) {
+        self.known = HashSet::new();
+        self.known_areas = HashSet::new();
     }
 
     pub fn is_player(&self) -> bool {

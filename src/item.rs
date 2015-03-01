@@ -135,7 +135,7 @@ pub mod armor {
 
         fn defense(&self) -> Option<(i32, i32)> {
             Some(match self.type_ {
-               Plate => (3, -1),
+               Plate => (4, -1),
                Leather => (1, 0),
             })
         }
