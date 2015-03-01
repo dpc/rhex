@@ -748,8 +748,8 @@ impl CursesUI {
         let actor_descr =
             if astate.sees(coord) || astate.is_dead() {
                 gstate.at(coord).actor_map_or(None, |a| Some(match a.behavior {
-                    Behavior::Pony => "A pony",
-                    Behavior::Grue => "Toothless Grue",
+                    Behavior::Pony => "A Pony",
+                    Behavior::Grue => "A Grue",
                     Behavior::Player => "Yourself",
                 }.to_string())
                 )

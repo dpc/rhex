@@ -41,13 +41,30 @@ fn grue(astate : &actor::State, gstate : &game::State) -> game::Action {
         }
     }
 
+    if gstate.at(astate.head()).item_map_or(false, |_| true) {
+        return game::Action::Pick
+    }
+
+    if gstate.at(astate.pos.coord).item_map_or(false, |_| true) {
+        return game::Action::Move(Back)
+    }
+
+    for &visible_coord in &astate.visible {
+        if gstate.at(visible_coord).item_map_or(false, |_| true) {
+            return go_to(visible_coord, astate, gstate);
+        }
+    }
+
     for &coord in &astate.heared {
         if astate.pos.coord != coord {
             return go_to(coord, astate, gstate);
         }
     }
 
-    game::Action::Wait
+    match rand::thread_rng().gen_range(0, 10) {
+        0 => roam(),
+        _ => game::Action::Wait,
+    }
 }
 
 fn go_to(c: Coordinate, astate : &actor::State, gstate : &game::State) -> game::Action {

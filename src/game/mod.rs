@@ -290,10 +290,18 @@ impl State {
         let mut left_actors = HashMap::new();
         let mut new_dead_actors = Vec::new();
 
-        for (&coord, a) in self.actors.iter() {
+        for (&coord, a) in self.actors.clone().iter() {
             if a.is_dead() {
+                let mut a = a.clone().make_unique().clone();
+                for (_, item) in a.items_backpack.drain() {
+                    self.at_mut(a.pos.coord).drop_item(item);
+                }
+
+                for (_, (_, item)) in a.items_equipped.drain() {
+                    self.at_mut(a.pos.coord).drop_item(item);
+                }
                 if a.behavior == actor::Behavior::Player {
-                    new_dead_actors.push(a.clone());
+                    new_dead_actors.push(Arc::new(a));
                 }
             } else {
                 left_actors.insert(coord, a.clone());
@@ -455,7 +463,7 @@ impl<'a> AtMut<'a> {
         let coord = {
             let mut bfs = bfs::Traverser::new(
                 |coord| self.state.at(coord).tile_map_or(false, |t| t.is_passable()),
-                |coord| self.state.items.get(&coord).is_none(),
+                |coord| self.state.at(coord).tile_map_or(false, |t| t.is_passable()) && self.state.items.get(&coord).is_none(),
                 self.coord
                 );
 

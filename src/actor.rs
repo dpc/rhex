@@ -158,6 +158,10 @@ impl State {
         self.heared.contains(&coord)
     }
 
+    pub fn head(&self) -> Coordinate {
+        self.pos.coord + self.pos.dir.to_coordinate()
+    }
+
     pub fn pos_after_action(&self, action : Action) -> Position {
         let pos = self.pos;
         match action {
