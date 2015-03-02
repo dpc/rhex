@@ -2,10 +2,15 @@ use std::fmt;
 use actor::{self, Slot};
 use rand::{self, Rng};
 
+pub use self::weapon::Weapon;
+pub use self::armor::Armor;
+pub use self::misc::Misc;
+
+
 pub trait Item : Send+Sync+fmt::Debug {
     fn description(&self) -> &str;
     fn type_(&self) -> Type;
-    fn slot(&self) -> Slot;
+    fn slot(&self) -> Option<Slot>;
     fn clone_item<'a>(&self) -> Box<Item + 'a> where Self: 'a;
     fn stats(&self) -> actor::Stats;
 }
@@ -20,27 +25,32 @@ impl<'a> Clone for Box<Item+'a> {
 pub enum Type {
     Weapon,
     Armor,
+    Misc,
 }
 
 pub fn random(level : i32) -> Box<Item> {
 
-    let r = rand::thread_rng().gen_range(0i32, 5) +
-        rand::thread_rng().gen_range(0, 5) +
-        rand::thread_rng().gen_range(0, 5) - 9;
+    let a = -level;
+    let b = level + 1;
+    let r = rand::thread_rng().gen_range(a, b) +
+        rand::thread_rng().gen_range(a, b) +
+        rand::thread_rng().gen_range(a, b) +
+        rand::thread_rng().gen_range(-2, 3);
 
 
-    match level + r {
-        1|2 => Weapon::new(weapon::Sword).to_item(),
-        3 => Armor::new(armor::Leather).to_item(),
-        5 => Weapon::new(weapon::Sword).to_item(),
-        7 => Armor::new(armor::Plate).to_item(),
-        _ => Weapon::new(weapon::Knife).to_item(),
+    match r {
+        1 => Weapon::new(weapon::Knife).to_item(),
+        2 => Armor::new(armor::Cloak).to_item(),
+        3 => Weapon::new(weapon::Sword).to_item(),
+        4 => Armor::new(armor::Helmet).to_item(),
+        5 => Armor::new(armor::Leather).to_item(),
+        6 => Armor::new(armor::Boots).to_item(),
+        7 => Weapon::new(weapon::Axe).to_item(),
+        8 => Armor::new(armor::Buckler).to_item(),
+        9 => Armor::new(armor::Plate).to_item(),
+        _ => Misc::new(misc::Junk).to_item(),
     }
 }
-
-pub use self::weapon::Weapon;
-pub use self::armor::Armor;
-
 pub mod weapon {
     use super::Item;
     use super::Type as ItemType;
@@ -53,7 +63,6 @@ pub mod weapon {
         Sword,
         Axe,
     }
-
 
     #[derive(Copy, Clone, Eq, PartialEq, Debug)]
     pub struct Weapon {
@@ -89,8 +98,8 @@ pub mod weapon {
             Box::new(self.clone())
         }
 
-        fn slot(&self) -> Slot {
-            Slot::RHand
+        fn slot(&self) -> Option<Slot> {
+            Some(Slot::RHand)
         }
 
         fn stats(&self) -> actor::Stats {
@@ -126,6 +135,10 @@ pub mod armor {
     pub enum Type {
         Leather,
         Plate,
+        Helmet,
+        Boots,
+        Buckler,
+        Cloak,
     }
 
     #[derive(Copy, Clone, Eq, PartialEq, Debug)]
@@ -148,8 +161,12 @@ pub mod armor {
     impl Item for Armor {
         fn description(&self) -> &str {
             match self.type_ {
-                Type::Plate => "plate armor",
-                Type::Leather => "leather armor",
+                Plate => "plate armor",
+                Leather => "leather armor",
+                Helmet => "helmet",
+                Boots => "boots",
+                Buckler => "buckler",
+                Cloak => "cloak",
             }
         }
 
@@ -161,24 +178,90 @@ pub mod armor {
             Box::new(self.clone())
         }
 
-        fn slot(&self) -> Slot {
-            Slot::Body
+        fn slot(&self) -> Option<Slot> {
+            match self.type_ {
+                Leather|Plate => Some(Slot::Body),
+                Helmet => Some(Slot::Head),
+                Boots => Some(Slot::Feet),
+                Buckler => Some(Slot::LHand),
+                Cloak => Some(Slot::Cloak),
+            }
         }
 
         fn stats(&self) -> actor::Stats {
-            let mut stats = actor::Stats::zero();
+            let mut s = actor::Stats::zero();
 
             match self.type_ {
                 Plate => {
-                    stats.ac += 4;
-                    stats.ev -= 2;
+                    s.ac += 4;
+                    s.ev -= 2;
                 },
                 Leather => {
-                    stats.ac += 1;
+                    s.ac += 1;
                 },
+                Helmet => s.ac += 1,
+                Boots => s.ev += 1,
+                Buckler => { s.ev += 1; s.ac += 1 }
+                Cloak => { s.ev += 1; }
             }
 
-            stats
+            s
+        }
+    }
+}
+
+
+pub mod misc {
+    use super::Item;
+    use super::Type as ItemType;
+    use actor::{self, Slot};
+
+    pub use self::Type::*;
+
+    #[derive(Copy, Clone, Eq, PartialEq, Debug)]
+    pub enum Type {
+        Junk,
+    }
+
+
+    #[derive(Copy, Clone, Eq, PartialEq, Debug)]
+    pub struct Misc {
+        type_ : Type,
+    }
+
+    impl Misc {
+        pub fn new(type_ : Type) -> Misc {
+            Misc {
+                type_: type_,
+            }
+        }
+
+        pub fn to_item(self) -> Box<Item> {
+            Box::new(self)
+        }
+    }
+
+    impl Item for Misc {
+        fn description(&self) -> &str {
+            match self.type_ {
+                Junk => "junk",
+            }
+        }
+
+        fn type_(&self) -> ItemType {
+            ItemType::Misc
+        }
+
+        fn clone_item<'a>(&self) -> Box<Item + 'a> where Self: 'a {
+            Box::new(self.clone())
+        }
+
+        fn slot(&self) -> Option<Slot> {
+            None
+        }
+
+        fn stats(&self) -> actor::Stats {
+            actor::Stats::zero()
         }
     }
 }

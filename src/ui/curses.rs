@@ -42,6 +42,7 @@ pub fn item_to_str(t : item::Type) -> &'static str {
     match t {
         item::Type::Weapon => ")",
         item::Type::Armor => "[",
+        item::Type::Misc => "\"",
     }
 }
 
@@ -563,11 +564,7 @@ impl CursesUI {
         let item = if let Some(&(_, ref item)) = astate.items_equipped.get(&slot) {
             item.description().to_string()
         } else {
-            if slot == Slot::RHand {
-                "fist".to_string()
-            } else {
-                "-".to_string()
-            }
+            "-".to_string()
         };
 
         let item = item.slice_chars(0, cmp::min(item.char_len(), 13));
@@ -660,14 +657,23 @@ impl CursesUI {
                             astate.stats.max_sp);
 
         let slots = [
-            ("L", Slot::LHand),
             ("R", Slot::RHand),
+            ("L", Slot::LHand),
+            ("F", Slot::Feet),
+            ("B", Slot::Body),
+            ("H", Slot::Head),
+            ("C", Slot::Cloak),
             ("Q", Slot::Quick),
         ];
 
-        for &(string, slot) in &slots {
-            y += 1;
-            nc::wmove(window, y, 0);
+        for (i, &(string, slot)) in slots.iter().enumerate() {
+            if i & 1 == 0 {
+                y += 1;
+                nc::wmove(window, y, 0);
+            } else {
+                nc::wmove(window, y, 14);
+            }
+
             self.draw_item(window, astate, string, slot);
         }
 
@@ -940,12 +946,11 @@ impl ui::UiFrontend for CursesUI {
         }
 
         let noises = astate.heared.iter()
-            .filter(|&c| *c != astate.pos.coord)
-            .filter(|&c| !astate.sees(*c))
-            .count();
+            .filter(|&(c, _) | *c != astate.pos.coord)
+            .filter(|&(c, _) | !astate.sees(*c));
 
-        if noises > 0 {
-            self.log("You heard something.", gstate);
+        for (_, &noise) in noises {
+            self.log(&format!("You hear {}.", noise.description()), gstate);
         }
     }
 
@@ -1089,7 +1094,7 @@ impl ui::UiFrontend for CursesUI {
                     let pos = self.examine_pos.unwrap();
 
                     match ch as u8 as char {
-                        'x' | 'q' => {
+                        '\x1b' | 'x' | 'q' => {
                             self.examine_pos = None;
                             self.mode = Mode::Normal;
                         },

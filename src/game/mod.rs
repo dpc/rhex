@@ -6,7 +6,7 @@ use hex2dext::algo::bfs;
 use hex2d::{Coordinate, Direction, Angle, Position};
 use hex2d::Angle::{Left, Right, Forward};
 
-use actor::{self, Race};
+use actor::{self, Race, NoiseType};
 use generate;
 use hex2dext::algo;
 use item::Item;
@@ -87,12 +87,12 @@ impl State {
 
         let mut actors = self.actors.clone();
 
-        for (&source_coord, a) in self.actors.iter() {
-            if a.noise_emision > 0 {
-                source_coord.for_each_in_range(a.noise_emision, |coord| {
+        for (&source_coord, source) in self.actors.iter() {
+            if source.noise_emision > 0 {
+                source_coord.for_each_in_range(source.noise_emision, |coord| {
                     if let Some(mut actor) = actors.remove(&coord) {
                         let mut actor = actor.make_unique().clone();
-                        actor.noise_hears(source_coord);
+                        actor.noise_hears(source_coord, NoiseType::Creature(source.race));
                         actors.insert(coord, Arc::new(actor));
                     }
                 });

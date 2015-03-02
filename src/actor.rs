@@ -11,12 +11,38 @@ use util;
 use item::Item;
 
 type Visibility = HashSet<Coordinate>;
+type NoiseMap = HashMap<Coordinate, NoiseType>;
+
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
+pub enum NoiseType {
+    Creature(Race),
+    Door,
+}
+
+impl NoiseType {
+    pub fn description(&self) -> String {
+        match *self {
+            NoiseType::Creature(cr) => cr.description(),
+            NoiseType::Door => "Door opening".to_string(),
+        }
+    }
+}
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub enum Race {
     Human,
     Pony,
     Grue,
+}
+
+impl Race {
+    pub fn description(&self) -> String {
+        match *self {
+            Race::Grue => "Grue",
+            Race::Pony => "Pony",
+            Race::Human => "Human",
+        }.to_string()
+    }
 }
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
@@ -154,7 +180,7 @@ pub struct State {
     /// Just discovered areas
     pub discovered_areas: Visibility,
 
-    pub heared: Visibility,
+    pub heared: NoiseMap,
     pub noise_emision: i32,
 
     pub light_emision : u32,
@@ -184,7 +210,7 @@ impl State {
             visible: HashSet::new(),
             known: HashSet::new(),
             known_areas: HashSet::new(),
-            heared: HashSet::new(),
+            heared: HashMap::new(),
             noise_emision: 0,
             discovered: HashSet::new(),
             discovered_areas: HashSet::new(),
@@ -215,8 +241,8 @@ impl State {
 
         ret.base_stats.max_hp += level / 2;
 
-        ret.base_stats.dex += level / 6;
-        ret.base_stats.str_ += (2 + level) / 5;
+        ret.base_stats.dex += level / 2;
+        ret.base_stats.str_ += (2 + level) / 3;
 
         ret.base_stats.ev += (2 + level) / 3;
         ret.base_stats.ac += (2 + level) / 4;
@@ -238,7 +264,7 @@ impl State {
     }
 
     pub fn hears(&self, coord : Coordinate) -> bool {
-        self.heared.contains(&coord)
+        self.heared.contains_key(&coord)
     }
 
     pub fn head(&self) -> Coordinate {
@@ -299,7 +325,7 @@ impl State {
         self.was_attacked_by = Vec::new();
 
         self.noise_emision = 0;
-        self.heared = HashSet::new();
+        self.heared = HashMap::new();
     }
 
     pub fn noise_makes(&mut self, noise : i32) {
@@ -308,8 +334,8 @@ impl State {
         }
     }
 
-    pub fn noise_hears(&mut self, coord : Coordinate) {
-        self.heared.insert(coord);
+    pub fn noise_hears(&mut self, coord : Coordinate, type_ : NoiseType) {
+        self.heared.insert(coord, type_);
     }
 
     pub fn post_tick(&mut self, gstate : &game::State) {
@@ -363,14 +389,17 @@ impl State {
 
     pub fn equip(&mut self, ch : char) {
         if let Some(item) = self.items_backpack.remove(&ch) {
-            let slot = item.slot();
-            self.unequip_slot(slot);
-            self.mod_stats = self.mod_stats + item.stats();
-            self.items_equipped.insert(slot, (ch, item));
-            self.action_cd += if slot == Slot::Body {
-                4
+            if let Some(slot) = item.slot() {
+                self.unequip_slot(slot);
+                self.mod_stats = self.mod_stats + item.stats();
+                self.items_equipped.insert(slot, (ch, item));
+                self.action_cd += if slot == Slot::Body {
+                    4
+                } else {
+                    2
+                }
             } else {
-                2
+                self.items_backpack.insert(ch, item);
             }
         }
     }
@@ -495,11 +524,8 @@ impl State {
     }
 
     pub fn description(&self) -> String {
-        match self.race {
-            Race::Grue => "Grue",
-            Race::Pony => "Pony",
-            Race::Human => "Human",
-        }.to_string()
+        self.race.description()
+
     }
 }
 
