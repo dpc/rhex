@@ -1,17 +1,20 @@
 use std::collections::{HashSet,HashMap};
+use std::ops::{Add, Sub};
+use std::cmp;
+
 use hex2d::{Coordinate, Angle, Position, ToCoordinate, Direction};
+use hex2dext::algo;
+
 use game::{self, Action};
 use game::tile::{Feature};
-use hex2dext::algo;
-use std::cmp;
 use util;
 use item::Item;
 
 type Visibility = HashSet<Coordinate>;
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
-pub enum Behavior {
-    Player,
+pub enum Race {
+    Human,
     Pony,
     Grue,
 }
@@ -23,19 +26,79 @@ pub struct Stats {
     pub str_ : i32,
     pub max_hp : i32,
     pub max_mp : i32,
-    pub hp: i32,
-    pub mp: i32,
-    pub base_ac: i32,
-    pub base_ev: i32,
+    pub max_sp : i32,
+    pub ac: i32,
+    pub ev: i32,
+    pub melee_dmg: i32,
+    pub melee_acc: i32,
+    pub melee_cd: i32, // attack cooldown
 }
 
 impl Stats {
-    pub fn new(hp : i32) -> Stats {
+    pub fn new(race : Race) -> Stats {
+        let mut s = Stats {
+            int: 2, dex : 2, str_ : 2,
+            max_hp: 10, max_mp: 5, max_sp: 5,
+            ac: 0, ev: 0,
+            melee_cd: 0, melee_dmg: 1, melee_acc: 1,
+        };
+
+        match race {
+            Race::Grue => {
+                s.int = 1; s.dex = 1; s.str_ = 1; s.max_hp = 5;
+            },
+            _ => {}
+        }
+
+        s
+    }
+
+    pub fn zero() -> Stats {
         Stats {
-            int: 3, dex : 3, str_ : 3,
-            max_hp: hp, hp: hp,
-            max_mp: 10, mp: 10,
-            base_ac: 0, base_ev: 0,
+            int: 0, dex: 0, str_: 0,
+            max_hp: 0, max_mp: 0, max_sp: 0,
+            ac: 0, ev: 0,
+            melee_cd: 0, melee_dmg: 0, melee_acc: 0,
+        }
+    }
+}
+
+impl Add for Stats {
+    type Output = Stats;
+
+    fn add(self, s : Stats) -> Stats {
+        Stats {
+            int: self.int + s.int,
+            dex: self.dex + s.dex,
+            str_: self.str_ + s.str_,
+            max_hp: self.max_hp + s.max_hp,
+            max_mp: self.max_mp + s.max_mp,
+            max_sp:  self.max_sp + s.max_sp,
+            ac: self.ac + s.ac,
+            ev: self.ev + s.ev,
+            melee_cd: self.melee_cd + s.melee_cd,
+            melee_dmg: self.melee_dmg + s.melee_dmg,
+            melee_acc: self.melee_acc + s.melee_acc,
+        }
+    }
+}
+
+impl Sub for Stats {
+    type Output = Stats;
+
+    fn sub (self, s : Stats) -> Stats {
+        Stats {
+            int: self.int - s.int,
+            dex: self.dex - s.dex,
+            str_: self.str_ - s.str_,
+            max_hp: self.max_hp - s.max_hp,
+            max_mp: self.max_mp - s.max_mp,
+            max_sp:  self.max_sp - s.max_sp,
+            ac: self.ac - s.ac,
+            ev: self.ev - s.ev,
+            melee_cd: self.melee_cd - s.melee_cd,
+            melee_dmg: self.melee_dmg - s.melee_dmg,
+            melee_acc: self.melee_acc - s.melee_acc,
         }
     }
 }
@@ -62,12 +125,21 @@ pub struct AttackResult {
 #[derive(Clone, Debug)]
 pub struct State {
 
+    pub hp: i32,
+    pub mp: i32,
+    pub sp: i32,
+    pub prev_hp: i32,
+    pub prev_mp: i32,
+    pub prev_sp: i32,
+
+    pub player : bool,
     pub pre_pos : Position,
     pub pos : Position,
 
-    pub behavior : Behavior,
+    pub race : Race,
+    pub base_stats : Stats,
+    pub mod_stats : Stats,
     pub stats : Stats,
-    pub prev_stats : Stats,
 
     /// Currently visible
     pub visible: Visibility,
@@ -87,8 +159,9 @@ pub struct State {
 
     pub light_emision : u32,
 
-    pub attack_cooldown : i32,
-    pub action_cooldown : i32,
+    pub melee_cd : i32,
+    pub action_cd : i32,
+
     pub items_letters: HashSet<char>,
     pub items_equipped : HashMap<Slot, (char, Box<Item>)>,
     pub items_backpack : HashMap<char, Box<Item>>,
@@ -98,16 +171,16 @@ pub struct State {
 }
 
 impl State {
-    pub fn new(behavior : Behavior, pos : Position) -> State {
-        let stats = Stats::new(
-            if behavior == Behavior::Player { 10 } else { 5 }
-            );
+    pub fn new(race : Race, pos : Position) -> State {
+        let stats = Stats::new(race);
 
         State {
-            behavior : behavior,
+            race: race,
+            player: false,
             pos: pos, pre_pos: pos,
-            stats: stats,
-            prev_stats: stats,
+            base_stats: stats,        // base stats
+            mod_stats: Stats::zero(), // from items etc.
+            stats: Stats::zero(),     // effective stats
             visible: HashSet::new(),
             known: HashSet::new(),
             known_areas: HashSet::new(),
@@ -119,24 +192,34 @@ impl State {
             items_backpack: HashMap::new(),
             items_equipped: HashMap::new(),
             items_letters: HashSet::new(),
-            attack_cooldown: 0,
-            action_cooldown: 0,
+            melee_cd: 0,
+            action_cd: 0,
             was_attacked_by: Vec::new(),
             did_attack: Vec::new(),
+            hp: stats.max_hp,
+            mp: stats.max_mp,
+            sp: stats.max_sp,
+            prev_hp: stats.max_hp,
+            prev_mp: stats.max_mp,
+            prev_sp: stats.max_sp,
         }
     }
 
+    // TODO: Remove this, make more general etc.
     pub fn new_grue(level : i32, pos : Position) -> State {
-        let mut ret = State::new(Behavior::Grue, pos);
+        let mut ret = State::new(Race::Grue, pos);
 
-        ret.stats.hp += level / 2;
-        ret.stats.max_hp += level / 2;
+        ret.base_stats.int = 1;
+        ret.base_stats.dex = 1;
+        ret.base_stats.str_ = 1;
 
-        ret.stats.dex += level / 6;
-        ret.stats.str_ += (2 + level) / 5;
+        ret.base_stats.max_hp += level / 2;
 
-        ret.stats.base_ev += (2 + level) / 3;
-        ret.stats.base_ac += (2 + level) / 4;
+        ret.base_stats.dex += level / 6;
+        ret.base_stats.str_ += (2 + level) / 5;
+
+        ret.base_stats.ev += (2 + level) / 3;
+        ret.base_stats.ac += (2 + level) / 4;
         ret
 
     }
@@ -209,10 +292,12 @@ impl State {
 
     pub fn pre_tick(&mut self, _ : &game::State) {
         self.pre_pos = self.pos;
-        self.prev_stats = self.stats;
+        self.prev_hp = self.hp;
+        self.prev_mp = self.mp;
+        self.prev_sp = self.sp;
         self.did_attack = Vec::new();
         self.was_attacked_by = Vec::new();
-        
+
         self.noise_emision = 0;
         self.heared = HashSet::new();
     }
@@ -229,14 +314,15 @@ impl State {
 
     pub fn post_tick(&mut self, gstate : &game::State) {
         self.postprocess_visibile(gstate);
-        if self.attack_cooldown > 0 {
-            self.attack_cooldown -= 1;
+        if self.melee_cd > 0 {
+            self.melee_cd -= 1;
         }
 
-        if self.action_cooldown > 0 {
-            self.action_cooldown -= 1;
+        if self.action_cd > 0 {
+            self.action_cd -= 1;
         }
 
+        self.recalculate_stats();
     }
 
     pub fn add_item(&mut self, item : Box<Item>) -> bool {
@@ -279,8 +365,9 @@ impl State {
         if let Some(item) = self.items_backpack.remove(&ch) {
             let slot = item.slot();
             self.unequip_slot(slot);
+            self.mod_stats = self.mod_stats + item.stats();
             self.items_equipped.insert(slot, (ch, item));
-            self.action_cooldown += if slot == Slot::Body {
+            self.action_cd += if slot == Slot::Body {
                 4
             } else {
                 2
@@ -290,8 +377,9 @@ impl State {
 
     pub fn unequip_slot(&mut self, slot : Slot) {
         if let Some((ch, item)) = self.items_equipped.remove(&slot) {
+            self.mod_stats = self.mod_stats - item.stats();
             self.items_backpack.insert(ch, item);
-            self.action_cooldown += if slot == Slot::Body {
+            self.action_cd += if slot == Slot::Body {
                 4
             } else {
                 2
@@ -312,12 +400,26 @@ impl State {
         }
     }
 
+    pub fn recalculate_stats(&mut self) {
+        self.stats = self.base_stats + self.mod_stats;
+
+        // Add attributes to derived stats
+        self.stats.melee_dmg += (self.stats.str_ + 1) / 2;
+        self.stats.ac += self.stats.str_ / 2;
+        self.stats.melee_acc += (self.stats.dex + 1) / 2;
+        self.stats.ev += self.stats.dex / 2;
+        self.stats.max_sp += self.stats.str_;
+        self.stats.max_mp += self.stats.int;
+    }
+
     pub fn attacks(&mut self, dir : Direction, target : Option<&mut State>) {
-        let (mut dmg, mut acc, cooldown) = self.attack();
-        self.attack_cooldown = cooldown + 1;
+        self.melee_cd = self.stats.melee_cd + 1;
+
+        let mut acc = self.stats.melee_acc;
+        let mut dmg = self.stats.melee_dmg;
 
         if let Some(target) = target {
-            let (ac, ev) = target.defense();
+            let (ac, ev) = (target.stats.ac, target.stats.ev);
 
             let from_behind = match dir - target.pre_pos.dir {
                 Angle::Forward|Angle::Left|Angle::Right => true,
@@ -325,18 +427,16 @@ impl State {
             };
 
             if from_behind {
-                acc += acc;
-                dmg += dmg;
+                acc *= 2;
+                dmg *= 2;
             }
 
-            let apower = self.stats.dex + acc;
-            let dpower = target.stats.dex + ev;
-
-            let success = util::roll(apower, dpower);
+            let success = util::roll(acc, ev);
 
             let dmg = cmp::max(0, dmg - ac);
+
             if success {
-                target.stats.hp -= dmg;
+                target.hp -= dmg;
                 target.noise_makes(7);
             }
 
@@ -356,18 +456,6 @@ impl State {
         }
     }
 
-    pub fn defense(&self) -> (i32, i32) {
-        let (ac, ev) = self.items_equipped.get(&Slot::Body).and_then(|&(_, ref i)| i.defense()).unwrap_or((0, 0));
-
-        (ac + self.stats.base_ac + self.stats.str_ / 3, ev + self.stats.dex / 2 + self.stats.base_ev)
-    }
-
-    pub fn attack(&self) -> (i32, i32, i32) {
-        let (dmg, acc, cooldown) = self.items_equipped.get(&Slot::RHand).and_then(|&(_, ref i)| i.attack()).unwrap_or(self.hand_attack());
-
-        (dmg + (1 + self.stats.str_) / 2, acc + (1 + self.stats.dex) / 2, cooldown)
-    }
-
     pub fn discovered_stairs(&self, gstate : &game::State) -> bool {
         self.discovered.iter().any(
             |c| gstate.at(*c).tile_map_or(
@@ -376,15 +464,12 @@ impl State {
             )
     }
 
-    pub fn hand_attack(&self) -> (i32, i32, i32) {
-        match self.behavior {
-            Behavior::Grue => (2, 1, 0),
-            Behavior::Player => (1, 0, 0),
-            Behavior::Pony => (1, -1, 0),
-        }
+    pub fn set_player(&mut self) {
+        self.player = true;
     }
+
     pub fn can_attack(&self) -> bool {
-        self.attack_cooldown == 0 && self.action_cooldown == 0
+        self.melee_cd == 0 && self.action_cd == 0
     }
 
     pub fn moved(&mut self, new_pos : Position) {
@@ -398,22 +483,22 @@ impl State {
     }
 
     pub fn is_player(&self) -> bool {
-        self.behavior == Behavior::Player
+        self.player
     }
 
     pub fn is_dead(&self) -> bool {
-        self.stats.hp <= 0
+        self.hp <= 0
     }
 
     pub fn can_perform_action(&self) -> bool {
-        !self.is_dead() && self.action_cooldown == 0
+        !self.is_dead() && self.action_cd == 0
     }
 
     pub fn description(&self) -> String {
-        match self.behavior {
-            Behavior::Grue => "Grue",
-            Behavior::Pony => "Pony",
-            Behavior::Player => "Human",
+        match self.race {
+            Race::Grue => "Grue",
+            Race::Pony => "Pony",
+            Race::Human => "Human",
         }.to_string()
     }
 }

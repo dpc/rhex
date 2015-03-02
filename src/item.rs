@@ -1,5 +1,5 @@
 use std::fmt;
-use actor::Slot;
+use actor::{self, Slot};
 use rand::{self, Rng};
 
 pub trait Item : Send+Sync+fmt::Debug {
@@ -7,8 +7,7 @@ pub trait Item : Send+Sync+fmt::Debug {
     fn type_(&self) -> Type;
     fn slot(&self) -> Slot;
     fn clone_item<'a>(&self) -> Box<Item + 'a> where Self: 'a;
-    fn attack(&self) -> Option<(i32, i32, i32)>;
-    fn defense(&self) -> Option<(i32, i32)>;
+    fn stats(&self) -> actor::Stats;
 }
 
 impl<'a> Clone for Box<Item+'a> {
@@ -45,7 +44,7 @@ pub use self::armor::Armor;
 pub mod weapon {
     use super::Item;
     use super::Type as ItemType;
-    use actor::Slot;
+    use actor::{self, Slot};
     pub use self::Type::*;
 
     #[derive(Copy, Clone, Eq, PartialEq, Debug)]
@@ -94,16 +93,24 @@ pub mod weapon {
             Slot::RHand
         }
 
-        fn defense(&self) -> Option<(i32, i32)> {
-            None
-        }
+        fn stats(&self) -> actor::Stats {
+            let mut stats = actor::Stats::zero();
 
-        fn attack(&self) -> Option<(i32, i32, i32)> {
-            Some(match self.type_ {
-                Knife => (2, 0, 0),
-                Sword => (4, 0, 1),
-                Axe => (6, -1, 2),
-            })
+            match self.type_ {
+                Knife => {
+                    stats.melee_dmg += 1;
+                },
+                Sword => {
+                    stats.melee_dmg += 3;
+                    stats.melee_cd += 1;
+                },
+                Axe => {
+                    stats.melee_dmg += 4;
+                    stats.melee_cd += 2;
+                },
+            }
+
+            stats
         }
     }
 }
@@ -111,7 +118,7 @@ pub mod weapon {
 pub mod armor {
     use super::Item;
     use super::Type as ItemType;
-    use actor::Slot;
+    use actor::{self, Slot};
 
     pub use self::Type::*;
 
@@ -158,15 +165,20 @@ pub mod armor {
             Slot::Body
         }
 
-        fn defense(&self) -> Option<(i32, i32)> {
-            Some(match self.type_ {
-               Plate => (4, -1),
-               Leather => (1, 0),
-            })
-        }
+        fn stats(&self) -> actor::Stats {
+            let mut stats = actor::Stats::zero();
 
-        fn attack(&self) -> Option<(i32, i32, i32)> {
-            None
+            match self.type_ {
+                Plate => {
+                    stats.ac += 4;
+                    stats.ev -= 2;
+                },
+                Leather => {
+                    stats.ac += 1;
+                },
+            }
+
+            stats
         }
     }
 }

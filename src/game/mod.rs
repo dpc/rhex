@@ -2,15 +2,17 @@ use std::collections::HashMap;
 use std::collections::hash_map::Entry;
 use std::sync::{Arc};
 
+use hex2dext::algo::bfs;
 use hex2d::{Coordinate, Direction, Angle, Position};
 use hex2d::Angle::{Left, Right, Forward};
-use actor::{self, Behavior};
+
+use actor::{self, Race};
 use generate;
 use hex2dext::algo;
 use item::Item;
+use util::random_pos;
 
 use self::tile::{Tile, Feature};
-use hex2dext::algo::bfs;
 
 pub mod area;
 pub mod tile;
@@ -63,7 +65,7 @@ impl State {
         let cp = Coordinate::new(0, 0);
         let (map, actors, items) = generate::DungeonGenerator::new(0).generate_map(cp, 400);
 
-        let state = State {
+        let mut state = State {
             actors: actors,
             actors_orig: HashMap::new(),
             actors_dead: Vec::new(),
@@ -75,8 +77,8 @@ impl State {
             light_map: HashMap::new(),
         };
 
-        let state = state.spawn_player();
-        let state = state.spawn_pony(Coordinate::new(-1, 0));
+        state.spawn_player(random_pos(0, 0));
+        state.spawn_pony(random_pos(-1, 0));
 
         state
     }
@@ -162,37 +164,20 @@ impl State {
         self.light_map = light_map;
     }
 
-    pub fn spawn(&self, coord : Coordinate,
-                 behavior : actor::Behavior, light : u32) -> State {
-
-        let mut actors = self.actors.clone();
-
-        let pos = Position::new(coord, Direction::XY);
-
-        let mut actor = actor::State::new(behavior, pos);
-        actor.add_light(light);
-
-        actors.insert(pos.coord, Arc::new(actor));
-
-        State {
-            actors: actors,
-            actors_orig: self.actors_orig.clone(),
-            actors_dead: self.actors_dead.clone(),
-            items: self.items.clone(),
-            map: self.map.clone(),
-            turn: self.turn,
-            descend: self.descend,
-            level: self.level,
-            light_map: self.light_map.clone(),
-        }
+    pub fn spawn(&mut self, astate : actor::State) {
+        self.actors.insert(astate.pos.coord, Arc::new(astate));
     }
 
-    pub fn spawn_player(&self) -> State {
-        self.spawn(Coordinate::new(0, 0), actor::Behavior::Player, 0)
+    pub fn spawn_player(&mut self, pos : Position) {
+        let mut actor = actor::State::new(actor::Race::Human, pos);
+        actor.set_player();
+        self.spawn(actor)
     }
 
-    pub fn spawn_pony(&self, pos : Coordinate) -> State {
-        self.spawn(pos, actor::Behavior::Pony, 7)
+    pub fn spawn_pony(&mut self, pos : Position ) {
+        let mut actor = actor::State::new(actor::Race::Pony, pos);
+        actor.add_light(7);
+        self.spawn(actor)
     }
 
     pub fn act(&mut self, acoord : Coordinate, action : Action) {
@@ -311,7 +296,7 @@ impl State {
                 for (_, (_, item)) in a.items_equipped.drain() {
                     self.at_mut(a.pos.coord).drop_item(item);
                 }
-                if a.behavior == actor::Behavior::Player {
+                if a.is_player() {
                     new_dead_actors.push(Arc::new(a));
                 }
             } else {
@@ -363,14 +348,14 @@ impl State {
         let mut pony = None;
 
         for (_, astate) in self.actors.iter() {
-            if astate.behavior == Behavior::Player {
+            if astate.is_player() {
                 player = Some(astate);
                 break;
             }
         }
 
         for (_, astate) in self.actors.iter() {
-            if astate.behavior == Behavior::Pony {
+            if astate.race == Race::Pony {
                 pony = Some(astate);
                 break;
             }
@@ -390,8 +375,7 @@ impl State {
         };
 
         if let Some(player) = player {
-            let coord = Coordinate::new(0, 0);
-            let pos = Position::new(coord, Direction::XY);
+            let pos = random_pos(0, 0);
             let mut player = player.clone().make_unique().clone();
             player.moved(pos);
             player.changed_level();
@@ -399,8 +383,7 @@ impl State {
         }
 
         if let Some(pony) = pony {
-            let coord = Coordinate::new(0, -1);
-            let pos = Position::new(coord, Direction::XY);
+            let pos = random_pos(-1, 0);
             let mut pony = pony.clone().make_unique().clone();
             pony.moved(pos);
             pony.changed_level();

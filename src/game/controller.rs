@@ -44,29 +44,23 @@ impl Controller {
             let actors = self.state.actors.clone();
 
             for (&acoord, actor) in &actors {
-                match actor.behavior {
-                    actor::Behavior::Player => {
+                if actor.is_player() {
                         try!(pl_req.send(
                                 (rc_state.actors[acoord].clone(), rc_state.clone())
                                 ));
-                    },
-                    actor::Behavior::Grue|actor::Behavior::Pony => {
+                } else {
                         try!(ai_req.send(
                                 (rc_state.actors[acoord].clone(), rc_state.clone())
                                 ));
-                    },
                 }
             }
 
             for astate in &rc_state.actors_dead {
-                match astate.behavior {
-                    actor::Behavior::Player => {
+                if astate.is_player() {
                         try!(pl_req.send(
                                 (astate.clone(), rc_state.clone())
                                 ));
-                    },
-                    _ => {},
-                };
+                }
             }
 
             let mut actions = vec!();
@@ -77,13 +71,10 @@ impl Controller {
                     continue;
                 }
 
-                let (acoord, action) = match astate.behavior {
-                    actor::Behavior::Player => {
-                        try!(pl_rep.recv())
-                    },
-                    actor::Behavior::Grue|actor::Behavior::Pony => {
-                        try!(ai_rep.recv())
-                    },
+                let (acoord, action) = if astate.is_player() {
+                    try!(pl_rep.recv())
+                } else {
+                    try!(ai_rep.recv())
                 };
 
                 actions.push((acoord, action));

@@ -139,10 +139,9 @@ pub fn run(
             continue;
         }
 
-        let action = match astate.behavior {
-            actor::Behavior::Grue => grue(&astate, &gstate),
-            actor::Behavior::Pony => pony_follow(&astate, &gstate),
-            _ => panic!(),
+        let action = match astate.race {
+            actor::Race::Pony => pony_follow(&astate, &gstate),
+            _ => grue(&astate, &gstate),
         };
 
         try!(rep.send((astate.clone(), action)));

@@ -60,7 +60,7 @@ impl<U : UiFrontend> Ui<U> {
     pub fn should_stop_autoexploring(&self, astate : &actor::State, gstate : &game::State) -> bool {
         astate.discovered_areas.iter().any(|_| true ) ||
             astate.visible.iter().any(|&coord|
-                                      gstate.at(coord).actor_map_or(false, |a| a.behavior == actor::Behavior::Grue)
+                                      gstate.at(coord).actor_map_or(false, |a| a.race == actor::Race::Grue)
                                       ) ||
             astate.discovered.iter().any(|&coord|
                                       gstate.at(coord).item_map_or(false, |_| true)

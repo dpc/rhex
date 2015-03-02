@@ -9,7 +9,7 @@ use ncurses as nc;
 use super::Action;
 use game;
 use game::area;
-use actor::{self, Behavior, Slot};
+use actor::{self, Race, Slot};
 use ui;
 use item;
 
@@ -64,12 +64,13 @@ pub mod color {
 
     pub const VISIBLE_FG : u8 = WHITE;
 
+    pub const STONE_FG : [u8; 3] = [BLACK, GRAY[1] , GRAY[2]];
     // in light, shaded (barely visible), out of sight
     pub const EMPTY_FG : [u8; 3] = [GRAY[17], GRAY[12], GRAY[5]];
     pub const EMPTY_BG : [u8; 3] = [GRAY[24], GRAY[22], GRAY[6]];
     pub const WATER_FG: [u8; 3] = EMPTY_FG;
     pub const WATER_BG: [u8; 3] = [4, 74, 67];
-    pub const WALL_FG : [u8; 3] = [BLACK, GRAY[1] , GRAY[2]];
+    pub const WALL_FG : [u8; 3] = STONE_FG;
     pub const WALL_BG : [u8; 3] = [GRAY[14], GRAY[8] , GRAY[4]];
     pub const CHAR_SELF_FG : [u8; 3] = [19, 18, 17];
     pub const CHAR_ALLY_FG : [u8; 3] = [28, 22, 23];
@@ -365,10 +366,10 @@ impl CursesUI {
                 let occupied = gstate.at(c).is_occupied();
                 let (fg, bg, mut glyph) =
                     if is_proper_coord && visible && occupied {
-                        let fg = match gstate.at(c).actor_map_or(Behavior::Grue, |a| a.behavior) {
-                            Behavior::Player => color::CHAR_SELF_FG,
-                            Behavior::Pony => color::CHAR_ALLY_FG,
-                            Behavior::Grue => color::CHAR_ENEMY_FG,
+                        let fg = match gstate.at(c).actor_map_or(Race::Grue, |a| a.race) {
+                            Race::Human => color::CHAR_SELF_FG,
+                            Race::Pony => color::CHAR_ALLY_FG,
+                            Race::Grue => color::CHAR_ENEMY_FG,
                         };
                         (fg, color::CHAR_BG, "@")
                     } else if is_proper_coord && visible && gstate.at(c).item().is_some() {
@@ -377,17 +378,22 @@ impl CursesUI {
                     } else {
                         match tt {
                             Some(tile::Empty) => {
-                                (
-                                    color::EMPTY_FG, color::EMPTY_BG,
-                                    if is_proper_coord {
-                                        match t.and_then(|t| t.feature) {
-                                            None => self.dot,
-                                            Some(tile::Door(open)) => if open { "_" } else { "+" },
-                                            Some(tile::Statue) => "&",
-                                            Some(tile::Stairs) => ">",
+                                let mut fg = color::STONE_FG;
+                                let mut bg = color::EMPTY_BG;
+                                let mut glyph = " ";
+
+                                if is_proper_coord {
+                                    match t.and_then(|t| t.feature) {
+                                        None => {
+                                            glyph = self.dot; fg = color::EMPTY_FG; bg = color::EMPTY_BG;
                                         }
-                                    } else { " " }
-                                 )
+                                        Some(tile::Door(open)) => glyph = if open { "_" } else { "+" },
+                                        Some(tile::Statue) => glyph = "&",
+                                        Some(tile::Stairs) => glyph = ">",
+                                    }
+                                }
+
+                                (fg, bg, glyph)
                             },
                             Some(tile::Wall) => {
                                 (color::WALL_FG, color::WALL_BG, "#")
@@ -548,7 +554,7 @@ impl CursesUI {
     fn draw_item(&self, window : nc::WINDOW, astate : &actor::State, label: &str, slot : actor::Slot) {
         self.draw_label(window, label);
 
-        if slot == Slot::RHand && astate.attack_cooldown > 0 {
+        if slot == Slot::RHand && astate.melee_cd > 0 {
             nc::wattron(window, self.text_gray_color as i32);
         } else {
             nc::wattron(window, self.text_color as i32);
@@ -599,8 +605,8 @@ impl CursesUI {
     fn draw_stats(&mut self, astate : &actor::State, gstate : &game::State) {
         let window = self.stats_window.as_ref().unwrap().window;
 
-        let (ac, ev) = astate.defense();
-        let (dmg, acc, cd) = astate.attack();
+        let (ac, ev) = (astate.stats.ac, astate.stats.ev);
+        let (dmg, acc, cd) = (astate.stats.melee_dmg, astate.stats.melee_acc, astate.stats.melee_cd);
 
         let cpair = self.text_color;
         nc::wbkgd(window, ' ' as nc::chtype | cpair as nc::chtype);
@@ -638,18 +644,20 @@ impl CursesUI {
         nc::wmove(window, y, 0);
 
         self.draw_stats_bar(window, "HP",
-                            astate.stats.hp, astate.prev_stats.hp,
+                            astate.hp, astate.prev_hp,
                             astate.stats.max_hp);
 
         y += 1;
         nc::wmove(window, y, 0);
         self.draw_stats_bar(window, "MP",
-                            astate.stats.mp, astate.prev_stats.mp,
+                            astate.mp, astate.prev_mp,
                             astate.stats.max_mp);
 
         y += 1;
         nc::wmove(window, y, 0);
-        self.draw_stats_bar(window, "XP", 50, 50, 100);
+        self.draw_stats_bar(window, "SP",
+                            astate.sp, astate.prev_sp,
+                            astate.stats.max_sp);
 
         let slots = [
             ("L", Slot::LHand),
@@ -747,10 +755,10 @@ impl CursesUI {
 
         let actor_descr =
             if astate.sees(coord) || astate.is_dead() {
-                gstate.at(coord).actor_map_or(None, |a| Some(match a.behavior {
-                    Behavior::Pony => "A Pony",
-                    Behavior::Grue => "A Grue",
-                    Behavior::Player => "Yourself",
+                gstate.at(coord).actor_map_or(None, |a| Some(match a.race{
+                    Race::Pony => "A Pony",
+                    Race::Grue => "A Grue",
+                    Race::Human => "Human",
                 }.to_string())
                 )
             } else {

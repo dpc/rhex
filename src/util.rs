@@ -1,6 +1,16 @@
 use std::{cmp};
 use rand::{self, Rng};
 
+use hex2d::{Position, Direction, Coordinate};
+
+pub fn random_pos(x : i32, y : i32) -> Position {
+
+    let dir = Direction::from_int(rand::thread_rng().gen_range(0, 6));
+
+    Position::new(Coordinate::new(x, y), dir)
+}
+
+
 /// Roll a against b
 pub fn roll(a : i32, b : i32) -> bool {
 
