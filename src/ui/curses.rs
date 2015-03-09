@@ -802,7 +802,15 @@ impl CursesUI {
         nc::wbkgd(window, ' ' as nc::chtype | cpair as nc::chtype);
         nc::werase(window);
         nc::wmove(window, 0, 0);
+        let mut last_turn = None;
+
         for i in &self.log {
+            if let Some(last_turn) = last_turn {
+                if last_turn != i.turn && nc::getcurx(window) != 0 {
+                    nc::waddstr(window, "\n");
+                }
+            }
+            last_turn = Some(i.turn);
 
             if nc::getcury(window) == nc::getmaxy(window) - 1 {
                 break;
@@ -812,7 +820,7 @@ impl CursesUI {
                 let cpair = nc::COLOR_PAIR(color);
                 nc::wattron(window, cpair as i32);
                 nc::waddstr(window, &format!(
-                        "{:>2} {}\n", gstate.turn - i.turn, i.text.as_slice()
+                        "{} ", i.text.as_slice()
                         ));
             }
         }
