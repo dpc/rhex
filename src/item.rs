@@ -5,7 +5,7 @@ use rand::{self, Rng};
 pub use self::weapon::Weapon;
 pub use self::armor::Armor;
 pub use self::misc::Misc;
-
+pub use self::consumable::Consumable;
 
 pub trait Item : Send+Sync+fmt::Debug {
     fn description(&self) -> &str;
@@ -13,6 +13,13 @@ pub trait Item : Send+Sync+fmt::Debug {
     fn slot(&self) -> Option<Slot>;
     fn clone_item<'a>(&self) -> Box<Item + 'a> where Self: 'a;
     fn stats(&self) -> actor::Stats;
+    fn is_usable(&self) -> bool {
+        self.type_() == Type::Consumable
+    }
+
+    fn use_(&self, &mut actor::State) -> bool {
+        false
+    }
 }
 
 impl<'a> Clone for Box<Item+'a> {
@@ -26,6 +33,7 @@ pub enum Type {
     Weapon,
     Armor,
     Misc,
+    Consumable,
 }
 
 pub fn random(level : i32) -> Box<Item> {
@@ -35,10 +43,12 @@ pub fn random(level : i32) -> Box<Item> {
     let r = rand::thread_rng().gen_range(a, b) +
         rand::thread_rng().gen_range(a, b) +
         rand::thread_rng().gen_range(a, b) +
-        rand::thread_rng().gen_range(-2, 3);
+        rand::thread_rng().gen_range(-2, 3) +
+        level / 2;
 
 
     match r {
+        0 => Consumable::new(consumable::HealthPotion).to_item(),
         1 => Weapon::new(weapon::Knife).to_item(),
         2 => Armor::new(armor::Cloak).to_item(),
         3 => Weapon::new(weapon::Sword).to_item(),
@@ -210,7 +220,6 @@ pub mod armor {
     }
 }
 
-
 pub mod misc {
     use super::Item;
     use super::Type as ItemType;
@@ -262,6 +271,68 @@ pub mod misc {
 
         fn stats(&self) -> actor::Stats {
             actor::Stats::zero()
+        }
+    }
+}
+
+pub mod consumable {
+    use std::cmp;
+    use super::Item;
+    use super::Type as ItemType;
+    use actor::{self, Slot};
+
+    pub use self::Type::*;
+
+    #[derive(Copy, Clone, Eq, PartialEq, Debug)]
+    pub enum Type {
+        HealthPotion,
+    }
+
+
+    #[derive(Copy, Clone, Eq, PartialEq, Debug)]
+    pub struct Consumable {
+        type_ : Type,
+    }
+
+    impl Consumable {
+        pub fn new(type_ : Type) -> Consumable {
+            Consumable {
+                type_: type_,
+            }
+        }
+
+        pub fn to_item(self) -> Box<Item> {
+            Box::new(self)
+        }
+    }
+
+    impl Item for Consumable {
+        fn description(&self) -> &str {
+            match self.type_ {
+                HealthPotion => "health potion",
+            }
+        }
+
+        fn type_(&self) -> ItemType {
+            ItemType::Consumable
+        }
+
+        fn clone_item<'a>(&self) -> Box<Item + 'a> where Self: 'a {
+            Box::new(self.clone())
+        }
+
+        fn slot(&self) -> Option<Slot> {
+            None
+        }
+
+        fn stats(&self) -> actor::Stats {
+            actor::Stats::zero()
+        }
+
+        fn use_(&self, astate : &mut actor::State) -> bool {
+            astate.hp += 5;
+            astate.hp = cmp::min(astate.hp, astate.stats.max_hp);
+            true
         }
     }
 }

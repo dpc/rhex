@@ -191,7 +191,9 @@ impl<U : UiFrontend> Ui<U> {
                 match action {
                     Action::Exit => return,
                     Action::AutoExplore => {
-                        pending_action.push_back(action);
+                        if pending_action.is_empty() {
+                            pending_action.push_back(action);
+                        }
                     },
                     Action::Redraw => {
                         self.redraw(&pending_req);

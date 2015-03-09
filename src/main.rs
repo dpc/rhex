@@ -2,8 +2,6 @@
 #![feature(std_misc)]
 #![feature(libc)]
 #![feature(alloc)]
-#![feature(env)]
-#![feature(os)]
 #![feature(old_io)]
 
 extern crate ncurses;

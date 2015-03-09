@@ -43,6 +43,7 @@ pub fn item_to_str(t : item::Type) -> &'static str {
         item::Type::Weapon => ")",
         item::Type::Armor => "[",
         item::Type::Misc => "\"",
+        item::Type::Consumable => "%",
     }
 }
 
@@ -65,7 +66,6 @@ pub mod color {
 
     pub const VISIBLE_FG : u8 = WHITE;
 
-    pub const STONE_FG : [u8; 3] = [BLACK, GRAY[1] , GRAY[2]];
     // in light, shaded (barely visible), out of sight
     pub const EMPTY_FG : [u8; 3] = [GRAY[17], GRAY[12], GRAY[5]];
     pub const EMPTY_BG : [u8; 3] = [GRAY[24], GRAY[22], GRAY[6]];
@@ -73,13 +73,12 @@ pub mod color {
     pub const WATER_BG: [u8; 3] = [4, 74, 67];
     pub const WALL_FG : [u8; 3] = STONE_FG;
     pub const WALL_BG : [u8; 3] = [GRAY[14], GRAY[8] , GRAY[4]];
+    pub const STONE_FG : [u8; 3] = [BLACK, GRAY[1] , GRAY[2]];
     pub const CHAR_SELF_FG : [u8; 3] = [19, 18, 17];
     pub const CHAR_ALLY_FG : [u8; 3] = [28, 22, 23];
     pub const CHAR_ENEMY_FG : [u8; 3] = [124, 88, 52];
     pub const CHAR_GRAY_FG : u8= GRAY[17];
     pub const CHAR_BG : [u8; 3] = EMPTY_BG;
-    //pub const TREE_FG : [u8; 3] = CHAR_ALLY_FG;
-    //pub const TREE_BG : [u8; 3] = EMPTY_BG;
 
     pub const LABEL_FG: u8 = 94;
     pub const GREEN_FG: u8 = 34;
@@ -360,7 +359,7 @@ impl CursesUI {
 
                     let visible = (astate.sees(c1) && astate.sees(c2)) || astate.is_dead();
 
-                    (visible, knows, tt, None, (gstate.at(c1).light() + gstate.at(c2).light()) / 2)
+                    (visible, knows, tt, None, cmp::min(gstate.at(c1).light(), gstate.at(c2).light()))
                 };
 
                 let mut bold = false;
@@ -375,7 +374,11 @@ impl CursesUI {
                         (fg, color::CHAR_BG, "@")
                     } else if is_proper_coord && visible && gstate.at(c).item().is_some() {
                         let item = gstate.at(c).item().unwrap();
-                        (color::WALL_FG, color::EMPTY_BG, item_to_str(item.type_()))
+                        let s = item_to_str(item.type_());
+                        if astate.discovered.contains(&c) {
+                            bold = true;
+                        }
+                        (color::WALL_FG, color::EMPTY_BG, s)
                     } else {
                         match tt {
                             Some(tile::Empty) => {
@@ -695,6 +698,7 @@ impl CursesUI {
         y += 1;
         nc::wmove(window, y, 0);
         self.draw_turn(window, "Turn", gstate.turn);
+        self.draw_turn(window, "Level", gstate.level);
 
         nc::wnoutrefresh(window);
     }

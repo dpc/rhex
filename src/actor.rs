@@ -242,10 +242,10 @@ impl State {
         ret.base_stats.max_hp += level / 2;
 
         ret.base_stats.dex += level / 2;
-        ret.base_stats.str_ += (2 + level) / 3;
+        ret.base_stats.str_ += (2 + level) / 4;
 
-        ret.base_stats.ev += (2 + level) / 3;
-        ret.base_stats.ac += (2 + level) / 4;
+        ret.base_stats.ev += (1 + level) / 5;
+        ret.base_stats.ac += (2 + level) / 6;
         ret
 
     }
@@ -381,26 +381,34 @@ impl State {
 
     pub fn equip_switch(&mut self, ch : char) {
         if self.items_backpack.contains_key(&ch) {
-            self.equip(ch);
+            if let Some(item) = self.items_backpack.remove(&ch) {
+                if item.is_usable() {
+                    if !item.use_(self) {
+                        self.items_backpack.insert(ch, item);
+                    }
+                    self.action_cd += 2;
+                } else {
+                    self.equip(item, ch);
+                }
+            }
+
         } else {
             self.unequip(ch);
         }
     }
 
-    pub fn equip(&mut self, ch : char) {
-        if let Some(item) = self.items_backpack.remove(&ch) {
-            if let Some(slot) = item.slot() {
-                self.unequip_slot(slot);
-                self.mod_stats = self.mod_stats + item.stats();
-                self.items_equipped.insert(slot, (ch, item));
-                self.action_cd += if slot == Slot::Body {
-                    4
-                } else {
-                    2
-                }
+    pub fn equip(&mut self, item : Box<Item>, ch : char) {
+        if let Some(slot) = item.slot() {
+            self.unequip_slot(slot);
+            self.mod_stats = self.mod_stats + item.stats();
+            self.items_equipped.insert(slot, (ch, item));
+            self.action_cd += if slot == Slot::Body {
+                4
             } else {
-                self.items_backpack.insert(ch, item);
+                2
             }
+        } else {
+            self.items_backpack.insert(ch, item);
         }
     }
 

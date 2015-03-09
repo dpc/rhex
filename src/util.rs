@@ -14,7 +14,7 @@ pub fn random_pos(x : i32, y : i32) -> Position {
 /// Roll a against b
 pub fn roll(a : i32, b : i32) -> bool {
 
-    let base = cmp::max(a, b) / 3;
+    let base = cmp::max(a, b) / 4;
 
     let a = cmp::max(a - base, 0);
     let b = cmp::max(b - base, 0);
