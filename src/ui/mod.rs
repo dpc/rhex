@@ -196,7 +196,7 @@ impl<U : UiFrontend> Ui<U> {
                 match action {
                     Action::Exit => return,
                     Action::AutoExplore => {
-                        if pending_action.is_empty() {
+                        if self.autoexploring.is_none() {
                             pending_action.push_back(action);
                         }
                     },
