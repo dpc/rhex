@@ -287,7 +287,8 @@ impl CursesUI {
         let window = self.map_window.as_ref().unwrap().window;
 
         let actors_aheads : HashMap<Coordinate, Coordinate> =
-            gstate.actors.iter().map(|(_, a)| (a.pos.coord + a.pos.dir, a.pos.coord)).collect();
+            gstate.actors.iter().filter(|&(_, a)| !a.is_dead())
+            .map(|(_, a)| (a.pos.coord + a.pos.dir, a.pos.coord)).collect();
         let astate_ahead = astate.pos.coord + astate.pos.dir;
 
         /* Get the screen bounds. */
