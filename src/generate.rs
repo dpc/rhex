@@ -3,7 +3,6 @@ use rand;
 use rand::Rng;
 use std::collections::VecDeque;
 use std::collections::HashMap;
-use std::sync::Arc;
 
 use hex2d as h2d;
 use hex2d::Angle::*;
@@ -162,9 +161,9 @@ impl DungeonGenerator {
             match rand::thread_rng().gen_range(0, 6) {
                 0|1 => {
                     let pos = Position::new(coord, Direction::XY);
-                    self.actors.insert(coord, Arc::new(
+                    self.actors.insert(coord,
                             actor::State::new_grue(self.level, pos)
-                            ));
+                            );
                 },
                 2 => {
                     if self.stairs.is_none() {

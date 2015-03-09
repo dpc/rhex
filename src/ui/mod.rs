@@ -103,7 +103,7 @@ impl<U : UiFrontend> Ui<U> {
     }
 
     pub fn redraw(&mut self, req : &Option<Request>) {
-        if let &Some((ref astate, ref gstate)) = req {
+        if let &Some((id, ref gstate)) = req {
             let now = time::precise_time_ns();
 
             if self.autoexploring.is_some() && self.last_redraw_ns + 50 * 1000 * 1000 > now {
@@ -112,6 +112,7 @@ impl<U : UiFrontend> Ui<U> {
 
             self.last_redraw_ns = now;
 
+            let astate = &gstate.actors[id];
             self.frontend.draw(&astate, &gstate);
         }
     }
@@ -127,7 +128,8 @@ impl<U : UiFrontend> Ui<U> {
         let mut timer = Timer::new().unwrap();
 
         loop {
-            if let Some((astate, gstate)) = pending_req.clone() {
+            if let Some((id, gstate)) = pending_req.clone() {
+                let astate = &gstate.actors[id];
                 if let Some(start_turn) = self.autoexploring {
                     if start_turn != gstate.turn && self.should_stop_autoexploring(&astate, &gstate) {
                         self.autoexploring = None;
@@ -139,7 +141,7 @@ impl<U : UiFrontend> Ui<U> {
                                 self.redraw(&pending_req);
                             },
                             AutoExploreAction::Action(action) => {
-                                rep.send((astate, action)).unwrap();
+                                rep.send((id, action)).unwrap();
                                 pending_req = None;
                                 timer.sleep(Duration::milliseconds(10));
                             },
@@ -155,7 +157,7 @@ impl<U : UiFrontend> Ui<U> {
                         match action {
                             Action::Exit => return, // Shouldn't really be there, but whatever...
                             Action::Game(action) => {
-                                rep.send((astate, action)).unwrap();
+                                rep.send((id, action)).unwrap();
                                 pending_req = None;
                             },
                             Action::Redraw => { },
@@ -167,7 +169,8 @@ impl<U : UiFrontend> Ui<U> {
                 match req.try_recv() {
                     Ok(req) => {
                         let skip = {
-                            let (ref astate, ref gstate) = req;
+                            let (id, ref gstate) = req;
+                            let astate = &gstate.actors[id];
                             self.frontend.update(&astate, &gstate);
                             !astate.can_perform_action()
                         };
@@ -187,7 +190,9 @@ impl<U : UiFrontend> Ui<U> {
                 }
             }
 
-            if let Some(action) = self.frontend.input(pending_req.as_ref().map(|&(ref astate, ref _gstate)| &**astate)) {
+            if let Some(action) = self.frontend.input(
+                pending_req.as_ref().map(|&(id, ref gstate)| &gstate.actors[id])
+                ) {
                 match action {
                     Action::Exit => return,
                     Action::AutoExplore => {

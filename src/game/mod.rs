@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::collections::hash_map::Entry;
 use std::sync::{Arc};
 
@@ -21,7 +21,7 @@ pub mod controller;
 pub use self::controller::Controller;
 
 pub type Map = HashMap<Coordinate, tile::Tile>;
-pub type Actors = HashMap<Coordinate, Arc<actor::State>>;
+pub type Actors = HashMap<Coordinate, actor::State>;
 pub type Items = HashMap<Coordinate, Box<Item>>;
 pub type LightMap = HashMap<Coordinate, u32>;
 
@@ -38,9 +38,10 @@ pub enum Action {
 
 #[derive(Clone, Debug)]
 pub struct State {
-    pub actors: Actors,
-    pub actors_orig: HashMap<Coordinate, Coordinate>, // from -> to
-    pub actors_dead: Vec<Arc<actor::State>>,
+    pub actors: HashMap<u32, actor::State>, // id -> State
+    pub actors_pos: HashMap<Coordinate, u32>, // coord -> id
+    pub actors_dead : HashSet<u32>,
+    pub actors_counter : u32,
     pub map : Arc<Map>,
     pub items: Items,
     pub light_map: LightMap,
@@ -63,12 +64,24 @@ impl State {
     pub fn new() -> State {
 
         let cp = Coordinate::new(0, 0);
-        let (map, actors, items) = generate::DungeonGenerator::new(0).generate_map(cp, 400);
+        let (map, gen_actors, items) = generate::DungeonGenerator::new(0).generate_map(cp, 400);
+
+        let mut actors = HashMap::new();
+        let mut actors_pos = HashMap::new();
+
+        let mut actors_counter = 0;
+
+        for (coord, astate) in gen_actors {
+            actors_pos.insert(coord, actors_counter);
+            actors.insert(actors_counter, astate);
+            actors_counter += 1;
+        }
 
         let mut state = State {
             actors: actors,
-            actors_orig: HashMap::new(),
-            actors_dead: Vec::new(),
+            actors_pos: actors_pos,
+            actors_counter: actors_counter,
+            actors_dead: HashSet::new(),
             items: items,
             map: Arc::new(map),
             turn: 0,
@@ -83,22 +96,90 @@ impl State {
         state
     }
 
+    pub fn next_level(&self) -> State {
+        let cp = Coordinate::new(0, 0);
+        let (map, gen_actors, items) = generate::DungeonGenerator::new(self.level + 1).generate_map(cp, 400);
+
+        let mut actors = HashMap::new();
+        let mut actors_pos = HashMap::new();
+
+        let mut actors_counter = 0;
+
+        for (coord, astate) in gen_actors {
+            actors_pos.insert(coord, actors_counter);
+            actors.insert(actors_counter, astate);
+            actors_counter += 1;
+        }
+
+        let mut player = None;
+        let mut pony = None;
+
+        for (_, astate) in self.actors.iter() {
+            if astate.is_player() {
+                player = Some(astate.clone());
+                break;
+            }
+        }
+
+        for (_, astate) in self.actors.iter() {
+            if astate.race == Race::Pony {
+                pony = Some(astate.clone());
+                break;
+            }
+        }
+
+        let mut state = State {
+            actors: actors,
+            actors_pos: actors_pos,
+            actors_counter: actors_counter,
+            actors_dead: HashSet::new(),
+            items: items,
+            map: Arc::new(map),
+            turn: self.turn,
+            descend: false,
+            level: self.level + 1,
+            light_map: HashMap::new(),
+        };
+
+        {
+            let mut player = player.unwrap();
+            let pos = random_pos(0, 0);
+            player.moved(pos);
+            player.changed_level();
+            state.spawn(player);
+        }
+
+        if let Some(mut pony) = pony {
+            let pos = random_pos(-1, 0);
+            pony.moved(pos);
+            pony.changed_level();
+            state.spawn(pony);
+        }
+
+        state
+    }
+
     pub fn recalculate_noise(&mut self) {
-
-        let mut actors = self.actors.clone();
-
-        for (&source_coord, source) in self.actors.iter() {
-            if source.noise_emision > 0 {
-                source_coord.for_each_in_range(source.noise_emision, |coord| {
-                    if let Some(mut actor) = actors.remove(&coord) {
-                        let mut actor = actor.make_unique().clone();
-                        actor.noise_hears(source_coord, NoiseType::Creature(source.race));
-                        actors.insert(coord, Arc::new(actor));
+        for id in self.actors_alive_ids() {
+            let source_emission = self.actors[id].noise_emision;
+            if source_emission > 0 {
+                let source_race = self.actors[id].race;
+                let source_coord = self.actors[id].pos.coord;
+                source_coord.for_each_in_range(source_emission, |coord| {
+                    if let Some(&target_id) = self.actors_pos.get(&coord) {
+                        self.actors[target_id].noise_hears(source_coord, NoiseType::Creature(source_race));
                     }
                 });
             }
         }
-        self.actors = actors;
+    }
+
+    pub fn actors_ids(&self) -> Vec<u32> {
+        self.actors.keys().cloned().collect()
+    }
+
+    pub fn actors_alive_ids(&self) -> Vec<u32> {
+        self.actors.keys().filter(|&id| !self.actors[*id].is_dead()).cloned().collect()
     }
 
     pub fn recalculate_light_map(&mut self) {
@@ -133,11 +214,12 @@ impl State {
             }
         }
 
-        for (pos, astate) in &self.actors {
+        for (_id, astate) in &self.actors {
+            let pos = astate.pos.coord;
             if astate.light_emision > 0 {
                 algo::los::los(
                     &|coord| {
-                        if coord == *pos {
+                        if coord == pos {
                             0
                         } else {
                             self.at(coord).tile_map_or(astate.light_emision as i32, |tile| tile.opaqueness())
@@ -156,7 +238,7 @@ impl State {
                             },
                         }
                     },
-                    astate.light_emision as i32, *pos, Direction::all()
+                    astate.light_emision as i32, pos, Direction::all()
                 );
             }
         }
@@ -165,7 +247,11 @@ impl State {
     }
 
     pub fn spawn(&mut self, astate : actor::State) {
-        self.actors.insert(astate.pos.coord, Arc::new(astate));
+        let id = self.actors_counter;
+        self.actors_counter += 1;
+
+        self.actors_pos.insert(astate.pos.coord, id);
+        self.actors.insert(id, astate);
     }
 
     pub fn spawn_player(&mut self, pos : Position) {
@@ -180,72 +266,58 @@ impl State {
         self.spawn(actor)
     }
 
-    pub fn act(&mut self, acoord : Coordinate, action : Action) {
+    pub fn act(&mut self, id : u32, action : Action) {
 
-        let astate = self.actors[acoord].clone();
-
-        if !astate.can_perform_action() {
+        if !self.actors[id].can_perform_action() {
             return;
         }
 
-        let new_pos = astate.pos_after_action(action);
+        let old_pos = self.actors[id].pos;
+        let new_pos = self.actors[id].pos_after_action(action);
 
-        if astate.pos == new_pos {
+        if self.actors[id].pos == new_pos {
             // no movement
             match action {
                 Action::Pick => {
-                    let item = self.at_mut(
-                        astate.pos.coord + astate.pos.dir
-                        ).pick_item();
+                    let head = self.actors[id].head();
+                    let item = self.at_mut(head).pick_item();
 
                     match item {
                         Some(item) => {
-                            let mut astate = self.actors.remove(&astate.pos.coord).unwrap().make_unique().clone();
-                            astate.add_item(item);
-                            self.actors.insert(astate.pos.coord, Arc::new(astate));
+                            self.actors[id].add_item(item);
                         },
                         None => {},
                     }
                 },
                 Action::Equip(ch) => {
-                    let mut astate = self.actors.remove(&astate.pos.coord).unwrap().make_unique().clone();
-                    astate.equip_switch(ch);
-                    self.actors.insert(astate.pos.coord, Arc::new(astate));
+                    self.actors[id].equip_switch(ch);
                 },
                 Action::Descend => {
-                    if self.at(astate.pos.coord).tile_map_or(false, |t| t.feature == Some(Feature::Stairs)) {
+                    if self.at(self.actors[id].coord()).tile_map_or(false, |t| t.feature == Some(Feature::Stairs)) {
                         self.descend = true;
                     }
                 },
                 _ => {}
             }
         } else if action_could_be_attack(action) &&
-            astate.pos.coord != new_pos.coord &&
-            self.actors_orig.contains_key(&new_pos.coord)
+            old_pos.coord != new_pos.coord &&
+            self.actors_pos.contains_key(&new_pos.coord)
             {
             // we've tried to move into actor; attack?
-            if !astate.can_attack() {
+            if !self.actors[id].can_attack() {
                 return;
             }
             let dir = match action {
-                Action::Move(dir) => astate.pos.dir + dir,
-                _ => astate.pos.dir,
+                Action::Move(dir) => old_pos.dir + dir,
+                _ => old_pos.dir,
             };
 
-            let mut astate = self.actors.remove(&astate.pos.coord).unwrap().make_unique().clone();
-            let target_pos = self.actors_orig[new_pos.coord];
-            let mut target = self.actors.remove(&target_pos).map(|mut t| t.make_unique().clone());
+            let target_id = self.actors_pos[new_pos.coord];
 
-            astate.attacks(dir, target.as_mut());
+            let mut target = self.actors.remove(&target_id).unwrap();
+            self.actors[id].attacks(dir, &mut target);
+            self.actors.insert(target_id, target);
 
-            if let Some(target) = target {
-                self.actors.insert(target.pos.coord,
-                                   Arc::new(target)
-                                   );
-            }
-
-            let coord = astate.pos.coord;
-            self.actors.insert(coord, Arc::new(astate));
         } else if self.at(new_pos.coord).tile_map_or(
             false, |t| t.feature == Some(tile::Door(false))
             ) {
@@ -255,40 +327,33 @@ impl State {
             map.insert(new_pos.coord, tile.add_feature(tile::Door(true)));
             self.map = Arc::new(map);
 
-        } else if astate.pos.coord == new_pos.coord || self.at(new_pos.coord).is_passable() {
+        } else if old_pos.coord == new_pos.coord || self.at(new_pos.coord).is_passable() {
             // we've moved
-            self.actors_orig.insert(astate.pos.coord, new_pos.coord);
-            let mut astate = self.actors.remove(&astate.pos.coord).unwrap().make_unique().clone();
-            astate.moved(new_pos);
-            self.actors.insert(astate.pos.coord, Arc::new(astate));
+            self.actors[id].moved(new_pos);
+            // we will remove the previous position on post_tick, so that
+            // for the rest of this turn this actor can be found through both new
+            // and old coor
+            self.actors_pos.insert(new_pos.coord, id);
         } else {
             // we hit the wall or something
         }
     }
 
     pub fn pre_tick(&mut self) {
-        let mut actors = HashMap::new();
-        let mut actors_orig = HashMap::new();
-        for (coord, ref mut a) in self.actors.iter() {
-            let mut a = a.clone().make_unique().clone();
-            a.pre_tick(self);
-            actors.insert(*coord, Arc::new(a));
-            actors_orig.insert(*coord, *coord);
+        for id in self.actors_alive_ids() {
+            let mut actor = self.actors.remove(&id).unwrap();
+            actor.pre_tick(self);
+            self.actors.insert(id, actor);
         }
-
-        self.actors = actors;
-        self.actors_orig = actors_orig;
     }
 
     /// Advance one turn (increase the turn counter) and do some maintenance
     pub fn post_tick(&mut self) {
-        // filter out the dead
-        let mut left_actors = HashMap::new();
-        let mut new_dead_actors = Vec::new();
 
-        for (&coord, a) in self.actors.clone().iter() {
-            if a.is_dead() {
-                let mut a = a.clone().make_unique().clone();
+        for id in self.actors_ids() {
+            if self.actors[id].is_dead() && !self.actors_dead.contains(&id){
+                let mut a = self.actors.remove(&id).unwrap();
+
                 for (_, item) in a.items_backpack.drain() {
                     self.at_mut(a.pos.coord).drop_item(item);
                 }
@@ -296,32 +361,25 @@ impl State {
                 for (_, (_, item)) in a.items_equipped.drain() {
                     self.at_mut(a.pos.coord).drop_item(item);
                 }
-                if a.is_player() {
-                    new_dead_actors.push(Arc::new(a));
-                }
-            } else {
-                left_actors.insert(coord, a.clone());
+                self.actors.insert(id, a);
+
+                self.actors_dead.insert(id);
             }
         }
 
-        self.actors = left_actors;
-
-        for a in new_dead_actors.iter() {
-            self.actors_dead.push(a.clone());
-        }
+        self.actors_pos = self.actors_pos.iter().filter(|&(coord, ref id)|
+                                                 !self.actors[**id].is_dead() && (self.actors[**id].coord() == *coord)
+                                                ).map(|(coord, id)| (*coord, *id)).collect();
 
         self.recalculate_light_map();
         self.recalculate_noise();
 
-        let mut actors = HashMap::new();
-
-        for (&coord, a) in self.actors.iter() {
-            let mut a = a.clone().make_unique().clone();
-            a.post_tick(self);
-            actors.insert(coord, Arc::new(a));
+        for id in self.actors_alive_ids() {
+            let mut actor = self.actors.remove(&id).unwrap();
+            actor.post_tick(self);
+            self.actors.insert(id, actor);
         }
 
-        self.actors = actors;
         self.turn += 1;
     }
 
@@ -339,59 +397,7 @@ impl State {
         }
     }
 
-    pub fn next_level(&self) -> State {
 
-        let cp = Coordinate::new(0, 0);
-        let (map, actors, items) = generate::DungeonGenerator::new(self.level + 1).generate_map(cp, 400);
-
-        let mut player = None;
-        let mut pony = None;
-
-        for (_, astate) in self.actors.iter() {
-            if astate.is_player() {
-                player = Some(astate);
-                break;
-            }
-        }
-
-        for (_, astate) in self.actors.iter() {
-            if astate.race == Race::Pony {
-                pony = Some(astate);
-                break;
-            }
-        }
-
-
-        let mut state = State {
-            actors: actors,
-            actors_orig: HashMap::new(),
-            actors_dead: Vec::new(),
-            items: items,
-            map: Arc::new(map),
-            turn: self.turn,
-            descend: false,
-            level: self.level + 1,
-            light_map: HashMap::new(),
-        };
-
-        if let Some(player) = player {
-            let pos = random_pos(0, 0);
-            let mut player = player.clone().make_unique().clone();
-            player.moved(pos);
-            player.changed_level();
-            state.actors.insert(player.pos.coord, Arc::new(player));
-        }
-
-        if let Some(pony) = pony {
-            let pos = random_pos(-1, 0);
-            let mut pony = pony.clone().make_unique().clone();
-            pony.moved(pos);
-            pony.changed_level();
-            state.actors.insert(pony.pos.coord, Arc::new(pony));
-        }
-
-        state
-    }
 }
 
 pub struct At<'a> {
@@ -413,7 +419,7 @@ impl<'a> At<'a> {
     pub fn actor_map_or<R, F : Fn(&actor::State) -> R>
         (&self, def: R, cond : F) -> R
     {
-        self.state.actors.get(&self.coord).map_or(def, |a| cond(a))
+        self.state.actors_pos.get(&self.coord).map(|&id| &self.state.actors[id]).map_or(def, |a| cond(&a))
     }
 
     pub fn item_map_or<R, F : Fn(&Box<Item>) -> R>
@@ -423,7 +429,7 @@ impl<'a> At<'a> {
     }
 
     pub fn is_occupied(&self) -> bool {
-        self.state.actors.contains_key(&self.coord)
+        self.state.actors_pos.contains_key(&self.coord)
     }
 
     pub fn is_passable(&self) -> bool {

@@ -267,6 +267,11 @@ impl State {
         self.heared.contains_key(&coord)
     }
 
+    pub fn coord(&self) -> Coordinate {
+        self.pos.coord
+    }
+
+    /// "head" - The coordinate that is in front of an actor
     pub fn head(&self) -> Coordinate {
         self.pos.coord + self.pos.dir.to_coordinate()
     }
@@ -449,48 +454,46 @@ impl State {
         self.stats.max_mp += self.stats.int;
     }
 
-    pub fn attacks(&mut self, dir : Direction, target : Option<&mut State>) {
+    pub fn attacks(&mut self, dir : Direction, target : &mut State) {
         self.melee_cd = self.stats.melee_cd + 1;
 
         let mut acc = self.stats.melee_acc;
         let mut dmg = self.stats.melee_dmg;
 
-        if let Some(target) = target {
-            let (ac, ev) = (target.stats.ac, target.stats.ev);
+        let (ac, ev) = (target.stats.ac, target.stats.ev);
 
-            let from_behind = match dir - target.pre_pos.dir {
-                Angle::Forward|Angle::Left|Angle::Right => true,
-                _ => false,
-            };
+        let from_behind = match dir - target.pre_pos.dir {
+            Angle::Forward|Angle::Left|Angle::Right => true,
+            _ => false,
+        };
 
-            if from_behind {
-                acc *= 2;
-                dmg *= 2;
-            }
-
-            let success = util::roll(acc, ev);
-
-            let dmg = cmp::max(0, dmg - ac);
-
-            if success {
-                target.hp -= dmg;
-                target.noise_makes(7);
-            }
-
-            target.was_attacked_by.push(AttackResult {
-                    success: success,
-                    dmg: dmg,
-                    who: self.description(),
-                    behind: from_behind,
-                });
-
-            self.did_attack.push(AttackResult {
-                success: success,
-                dmg: dmg,
-                who: target.description(),
-                behind: from_behind,
-            });
+        if from_behind {
+            acc *= 2;
+            dmg *= 2;
         }
+
+        let success = util::roll(acc, ev);
+
+        let dmg = cmp::max(0, dmg - ac);
+
+        if success {
+            target.hp -= dmg;
+            target.noise_makes(7);
+        }
+
+        target.was_attacked_by.push(AttackResult {
+            success: success,
+            dmg: dmg,
+            who: self.description(),
+            behind: from_behind,
+        });
+
+        self.did_attack.push(AttackResult {
+            success: success,
+            dmg: dmg,
+            who: target.description(),
+            behind: from_behind,
+        });
     }
 
     pub fn discovered_stairs(&self, gstate : &game::State) -> bool {

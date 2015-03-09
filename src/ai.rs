@@ -133,8 +133,9 @@ pub fn run(
 {
 
     loop {
-        let (ref astate, ref gstate) = try!(req.recv());
+        let (id, ref gstate) = try!(req.recv());
 
+        let astate = &gstate.actors[id];
         if !astate.can_perform_action() {
             continue;
         }
@@ -144,6 +145,6 @@ pub fn run(
             _ => grue(&astate, &gstate),
         };
 
-        try!(rep.send((astate.clone(), action)));
+        try!(rep.send((id, action)));
     }
 }
