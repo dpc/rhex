@@ -167,7 +167,10 @@ pub struct State {
     pub mod_stats : Stats,
     pub stats : Stats,
 
-    /// Currently visible
+    /// Currently in LoS
+    pub in_los: Visibility,
+
+    /// Currently visible: los + light
     pub visible: Visibility,
 
     /// Known coordinates
@@ -207,6 +210,7 @@ impl State {
             base_stats: stats,        // base stats
             mod_stats: Stats::zero(), // from items etc.
             stats: Stats::zero(),     // effective stats
+            in_los: HashSet::new(),
             visible: HashSet::new(),
             known: HashSet::new(),
             known_areas: HashSet::new(),
@@ -293,7 +297,11 @@ impl State {
 
     fn postprocess_visibile(&mut self, gstate : &game::State) {
 
-        let visible = calculate_los(self.pos, gstate);
+        let los = calculate_los(self.pos, gstate);
+
+        let visible = los.iter().filter(
+            |&coord| self.pos.coord.distance(*coord) < 2 || gstate.light_map.contains_key(coord)
+            ).cloned().collect();
 
         let mut discovered = HashSet::new();
         let mut discovered_areas = HashSet::new();
@@ -316,6 +324,7 @@ impl State {
             }
         }
 
+        self.in_los = los;
         self.visible = visible;
         self.discovered_areas = discovered_areas;
         self.discovered = discovered;
@@ -545,12 +554,9 @@ fn calculate_los(pos : Position, gstate : &game::State) -> Visibility {
     algo::los::los(
         &|coord| gstate.at(coord).tile_map_or(10000, |tile| tile.opaqueness()),
         &mut |coord, _ | {
-            if pos.coord.distance(coord) < 2 || gstate.light_map.contains_key(&coord) {
-                let _ = visibility.insert(coord);
-            }
+            let _ = visibility.insert(coord);
         },
         10, pos.coord,
-        //&[pos.dir, pos.dir + Angle::Left, pos.dir + Angle::Right]
         &[pos.dir]
         );
 
