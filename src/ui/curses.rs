@@ -1,10 +1,12 @@
 use std::cell::RefCell;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::collections::VecDeque;
 use std::{self, cmp, num, env};
 use std::ffi::AsOsStr;
 use core::str::StrExt;
 use ncurses as nc;
+
+use util::circular_move;
 
 use super::Action;
 use game;
@@ -155,6 +157,7 @@ pub struct CursesUI {
     mode : Mode,
     log : VecDeque<LogEntry>,
     examine_pos : Option<Position>,
+    target_pos : Option<Position>,
     dot : &'static str,
 
     label_color: u64,
@@ -224,10 +227,11 @@ impl CursesUI {
             stats_window: None,
             log_window: None,
             fs_window: None,
-            mode : Mode::Normal,
-            examine_pos : None,
+            mode: Mode::Normal,
+            examine_pos: None,
+            target_pos: None,
             dot: if term_putty { NORMAL_DOT } else { UNICODE_DOT },
-            log : VecDeque::new(),
+            log: VecDeque::new(),
             label_color: label_color,
             text_color: text_color,
             text_gray_color: text_gray_color,
@@ -315,10 +319,28 @@ impl CursesUI {
                     },
                 }
             },
+            Mode::Target => {
+                match self.target_pos {
+                    None => {
+                        self.target_pos = Some(astate.pos);
+                        (astate.pos.coord, astate.pos.coord + astate.pos.dir)
+                    },
+                    Some(pos) => {
+                        (astate.pos.coord, pos.coord)
+                    },
+                }
+            },
             _ => {
                 (astate.pos.coord, astate.pos.coord + astate.pos.dir)
             }
         };
+
+        let mut target_line = HashSet::new();
+        if self.mode == Mode::Target {
+            center.for_each_in_line_to(head, |c| {
+                target_line.insert(c);
+            });
+        }
 
         let (vpx, vpy) = center.to_pixel_integer(SPACING);
 
@@ -445,6 +467,11 @@ impl CursesUI {
                             glyph = " ";
                             bg = color::TARGET_SELF_FG;
                         }
+                    }
+                } else if self.mode == Mode::Target {
+                    if is_proper_coord && target_line.contains(&c) {
+                        glyph = "*";
+                        draw = true;
                     }
                 } else {
                     if is_proper_coord && actors_aheads.contains_key(&c) &&
@@ -902,6 +929,7 @@ enum FSMode {
 enum Mode {
     Normal,
     Examine,
+    Target,
     FullScreen(FSMode),
     Inventory(InvMode),
 }
@@ -973,7 +1001,7 @@ impl ui::UiFrontend for CursesUI {
         nc::getmaxyx(nc::stdscr, &mut max_y, &mut max_x);
 
         match self.mode {
-            Mode::Normal|Mode::Examine|Mode::Inventory(_) => {
+            Mode::Normal|Mode::Examine|Mode::Inventory(_)|Mode::Target=> {
                 if let Mode::Inventory(_) = self.mode {
                     self.draw_inventory(astate, gstate);
                 } else {
@@ -1062,6 +1090,11 @@ impl ui::UiFrontend for CursesUI {
                             self.mode = Mode::Examine;
                             return Some(Action::Redraw);
                         },
+                        'f' =>  {
+                            self.target_pos = None;
+                            self.mode = Mode::Target;
+                            return Some(Action::Redraw);
+                        },
                         '?' => {
                             self.mode = Mode::FullScreen(FSMode::Help);
                             return Some(Action::Redraw);
@@ -1128,6 +1161,46 @@ impl ui::UiFrontend for CursesUI {
                         },
                         'J' => {
                             self.examine_pos = Some(pos + (pos.dir + Angle::Back).to_coordinate().scale(5));
+                        },
+                        _ => {
+                            return None;
+                        }
+                    }
+                    return Some(Action::Redraw);
+                },
+                Mode::Target => {
+                    if ch == -1 {
+                        return None;
+                    }
+
+                    let pos = self.target_pos.unwrap();
+                    let astate = astate.unwrap();
+                    let center = astate.pos;
+
+                    match ch as u8 as char {
+                        '\x1b' | 'x' | 'q' => {
+                            self.target_pos = None;
+                            self.mode = Mode::Normal;
+                        },
+                        'h' => {
+                            self.target_pos = Some(
+                                circular_move(center, pos, Angle::Left)
+                                );
+                        },
+                        'l' => {
+                            self.target_pos = Some(
+                                circular_move(center, pos, Angle::Right)
+                                );
+                        },
+                        'j' => {
+                            self.target_pos = Some(
+                                circular_move(center, pos, Angle::Back)
+                                );
+                        },
+                        'k' => {
+                            self.target_pos = Some(
+                                circular_move(center, pos, Angle::Forward)
+                                );
                         },
                         _ => {
                             return None;
