@@ -214,7 +214,8 @@ impl State {
             }
         }
 
-        for (_id, astate) in &self.actors {
+        for (_, &id) in &self.actors_pos {
+            let astate = &self.actors[id];
             let pos = astate.pos.coord;
             if astate.light_emision > 0 {
                 algo::los::los(
