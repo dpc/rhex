@@ -551,7 +551,7 @@ impl State {
 
 fn calculate_los(pos : Position, gstate : &game::State) -> Visibility {
     let mut visibility = HashSet::new();
-    algo::los::los(
+    algo::los2::los(
         &|coord| gstate.at(coord).tile_map_or(10000, |tile| tile.opaqueness()),
         &mut |coord, _ | {
             let _ = visibility.insert(coord);

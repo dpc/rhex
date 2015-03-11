@@ -69,7 +69,7 @@ impl Tile {
 
     pub fn opaqueness(&self) -> i32 {
         match self.feature {
-            Some(Statue) => return 4,
+            Some(Statue) => return 3,
             Some(Door(false)) => return 1000,
             _ => {},
         }
