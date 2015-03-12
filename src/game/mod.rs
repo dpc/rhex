@@ -91,7 +91,7 @@ impl State {
         };
 
         state.spawn_player(random_pos(0, 0));
-        state.spawn_pony(random_pos(-1, 0));
+        //state.spawn_pony(random_pos(-1, 0));
 
         state
     }

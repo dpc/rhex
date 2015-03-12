@@ -63,24 +63,27 @@ pub mod color {
     pub const YELLOW : u8 = 226;
     pub const ORANGE : u8 = 3;
 
-    pub const BACKGROUND_BG : u8 = GRAY[2];
-    pub const MAP_BACKGROUND_BG : u8 = GRAY[2];
+    pub const BACKGROUND_BG : u8 = GRAY[1];
+    pub const MAP_BACKGROUND_BG : u8 = GRAY[1];
 
     pub const VISIBLE_FG : u8 = WHITE;
 
-    // in light, shaded (barely visible), out of sight
-    pub const EMPTY_FG : [u8; 3] = [GRAY[17], GRAY[12], GRAY[5]];
-    pub const EMPTY_BG : [u8; 3] = [GRAY[24], GRAY[22], GRAY[6]];
-    pub const WATER_FG: [u8; 3] = EMPTY_FG;
-    pub const WATER_BG: [u8; 3] = [4, 74, 67];
-    pub const WALL_FG : [u8; 3] = STONE_FG;
-    pub const WALL_BG : [u8; 3] = [GRAY[14], GRAY[8] , GRAY[4]];
-    pub const STONE_FG : [u8; 3] = [BLACK, GRAY[1] , GRAY[2]];
-    pub const CHAR_SELF_FG : [u8; 3] = [19, 18, 17];
-    pub const CHAR_ALLY_FG : [u8; 3] = [28, 22, 23];
-    pub const CHAR_ENEMY_FG : [u8; 3] = [124, 88, 52];
+    pub const NOT_IN_LOS_FG : u8 = GRAY[16];
+    pub const NOT_IN_LOS_BG : u8 = GRAY[1];
+
+    // in light, shaded (barely visible), in LoS but not visible (dark), not in LoS
+    pub const EMPTY_FG : [u8; 4] = [GRAY[17], GRAY[10], NOT_IN_LOS_FG, NOT_IN_LOS_FG];
+    pub const EMPTY_BG : [u8; 4] = [GRAY[24], GRAY[16], GRAY[4], NOT_IN_LOS_BG];
+    pub const WATER_FG: [u8; 4] = EMPTY_FG;
+    pub const WATER_BG: [u8; 4] = [4, 74, 67, 67];
+    pub const STONE_FG : [u8; 4] = [BLACK, GRAY[1] , NOT_IN_LOS_FG, NOT_IN_LOS_FG];
+    pub const WALL_FG : [u8; 4] = STONE_FG;
+    pub const WALL_BG : [u8; 4] = [GRAY[14], GRAY[8] , GRAY[4], NOT_IN_LOS_BG];
+    pub const CHAR_SELF_FG : [u8; 4] = [19, 18, NOT_IN_LOS_FG, NOT_IN_LOS_FG];
+    pub const CHAR_ALLY_FG : [u8; 4] = [28, 22, NOT_IN_LOS_FG, NOT_IN_LOS_FG];
+    pub const CHAR_ENEMY_FG : [u8; 4] = [124, 88, NOT_IN_LOS_FG, NOT_IN_LOS_FG];
     pub const CHAR_GRAY_FG : u8= GRAY[17];
-    pub const CHAR_BG : [u8; 3] = EMPTY_BG;
+    pub const CHAR_BG : [u8; 4] = EMPTY_BG;
 
     pub const LABEL_FG: u8 = 94;
     pub const GREEN_FG: u8 = 34;
@@ -352,7 +355,8 @@ impl CursesUI {
 
                 let is_proper_coord = off == (0, 0);
 
-                let (visible, mut draw, tt, t, light) = if is_proper_coord {
+
+                let (visible, in_los, knows, tt, t, light) = if is_proper_coord {
 
                     let t = gstate.map.get(&c);
 
@@ -361,7 +365,13 @@ impl CursesUI {
                         None => tile::Wall,
                     };
 
-                    (astate.sees(c) || astate.is_dead(), astate.knows(c), Some(tt), t, gstate.at(c).light())
+                    (
+                        astate.sees(c) || astate.is_dead(),
+                        astate.in_los(c) || astate.is_dead(),
+                        astate.knows(c),
+                        Some(tt), t,
+                        gstate.at(c).light()
+                    )
                 } else {
                     // Paint a glue characters between two real characters
                     let c1 = c;
@@ -370,18 +380,31 @@ impl CursesUI {
                     let knows = astate.knows(c1) && astate.knows(c2);
 
                     let (e1, e2) = (
-                        gstate.at(c1).tile_map_or(tile::Wall.base_ascii_expand(), |t| t.ascii_expand()),
-                        gstate.at(c2).tile_map_or(tile::Wall.base_ascii_expand(), |t| t.ascii_expand())
+                        gstate.at(c1).tile_map_or(
+                            tile::Wall.base_ascii_expand(), |t| t.ascii_expand()
+                            ),
+                        gstate.at(c2).tile_map_or(
+                            tile::Wall.base_ascii_expand(), |t| t.ascii_expand()
+                            )
                         );
 
                     let c = Some(if e1 > e2 { c1 } else { c2 });
 
                     let tt = c.map_or(None, |c| gstate.at(c).tile_map_or(Some(tile::Wall), |t| Some(t.type_)));
 
-                    let visible = (astate.sees(c1) && astate.sees(c2)) || astate.is_dead();
+                    let visible = (astate.sees(c1) && astate.sees(c2)) ||
+                        astate.is_dead();
+                    let in_los = (astate.in_los(c1) && astate.in_los(c2))
+                        || astate.is_dead();
 
-                    (visible, knows, tt, None, cmp::min(gstate.at(c1).light(), gstate.at(c2).light()))
+                    (
+                        visible, in_los, knows,
+                        tt, None,
+                        cmp::min(gstate.at(c1).light(), gstate.at(c2).light())
+                    )
                 };
+
+                let mut draw = knows;
 
                 let mut bold = false;
                 let occupied = gstate.at(c).is_occupied();
@@ -400,7 +423,7 @@ impl CursesUI {
                             bold = true;
                         }
                         (color::WALL_FG, color::EMPTY_BG, s)
-                    } else {
+                    } else if knows {
                         match tt {
                             Some(tile::Empty) => {
                                 let mut fg = color::STONE_FG;
@@ -410,9 +433,12 @@ impl CursesUI {
                                 if is_proper_coord {
                                     match t.and_then(|t| t.feature) {
                                         None => {
-                                            glyph = self.dot; fg = color::EMPTY_FG; bg = color::EMPTY_BG;
+                                            glyph = self.dot;
+                                            fg = color::EMPTY_FG;
+                                            bg = color::EMPTY_BG;
                                         }
-                                        Some(tile::Door(open)) => glyph = if open { "_" } else { "+" },
+                                        Some(tile::Door(open)) =>
+                                            glyph = if open { "_" } else { "+" },
                                         Some(tile::Statue) => glyph = "&",
                                         Some(tile::Stairs) => glyph = ">",
                                     }
@@ -427,14 +453,20 @@ impl CursesUI {
                                 (color::WATER_FG, color::WATER_BG, "~")
                             },
                             None => {
-                                (color::EMPTY_FG, color::EMPTY_BG, " ")
+                                (color::EMPTY_FG, color::EMPTY_BG, "?")
                             },
                         }
+                    } else {
+                        (color::EMPTY_FG, color::EMPTY_BG, " ")
                     };
 
 
                 let (mut fg, mut bg) = if !visible || light == 0 {
-                    (fg[2], bg[2])
+                    if in_los {
+                        (fg[2], bg[2])
+                    } else {
+                        (fg[3], bg[3])
+                    }
                 } else if light < 3 {
                     (fg[1], bg[1])
                 } else {

@@ -263,6 +263,10 @@ impl State {
         self.visible.contains(&pos)
     }
 
+    pub fn in_los(&self, pos : Coordinate) -> bool {
+        self.in_los.contains(&pos)
+    }
+
     pub fn knows(&self, pos : Coordinate) -> bool {
         self.known.contains(&pos)
     }
