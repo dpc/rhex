@@ -85,6 +85,8 @@ pub mod color {
     pub const CHAR_GRAY_FG : u8= GRAY[17];
     pub const CHAR_BG : [u8; 4] = EMPTY_BG;
 
+    pub const BLOCKED_BG :   u8 = 124;
+
     pub const LABEL_FG: u8 = 94;
     pub const GREEN_FG: u8 = 34;
     pub const RED_FG:   u8 = 124;
@@ -502,6 +504,12 @@ impl CursesUI {
                     if is_proper_coord && target_line.contains(&c) {
                         glyph = "*";
                         draw = true;
+                        if c == head {
+                            fg = color::TARGET_SELF_FG;
+                        }
+                        if !gstate.at(c).tile_map_or(false, |t| t.is_passable()) {
+                            bg = color::BLOCKED_BG;
+                        }
                     }
                 } else {
                     if is_proper_coord && actors_aheads.contains_key(&c) &&
@@ -908,10 +916,12 @@ impl CursesUI {
         nc::werase(window);
         nc::wmove(window, 0, 0);
 
-        nc::waddstr(window, "This game have no point (yet) and is incomplete. Sorry for that.\n\n");
-        nc::waddstr(window, "= Implemented commands = \n\n");
+        nc::waddstr(window, "This game is still incomplete. Sorry for that.\n\n");
+        nc::waddstr(window, "= (more or less) Implemented actions = \n\n");
         nc::waddstr(window, "Move: hjklui\n");
         nc::waddstr(window, "Wait: .\n");
+        nc::waddstr(window, "Pick: ,\n");
+        nc::waddstr(window, "Fire/Throw: f\n");
         nc::waddstr(window, "Autoexplore: O\n");
         nc::waddstr(window, "Examine: x\n");
         nc::waddstr(window, "Equip: E\n");
