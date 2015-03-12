@@ -57,21 +57,28 @@ impl<U : UiFrontend> Ui<U> {
         }
     }
 
-    pub fn should_stop_autoexploring(&self, astate : &actor::State, gstate : &game::State) -> bool {
+    pub fn should_stop_autoexploring(
+        &self, astate : &actor::State, gstate : &game::State) -> bool {
+
+        !astate.was_attacked_by.is_empty() ||
         astate.discovered_areas.iter().any(|_| true ) ||
-            astate.visible.iter().any(|&coord|
-                                      gstate.at(coord).actor_map_or(false, |a| a.race == actor::Race::Grue)
-                                      ) ||
-            astate.discovered.iter().any(|&coord|
-                                      gstate.at(coord).item_map_or(false, |_| true)
-                                      ) ||
-            astate.heared.iter()
-                .filter(|&(c, t)| *c != astate.pos.coord && *t != NoiseType::Creature(Race::Pony))
-                .any(|(c, _)| !astate.sees(*c)) ||
-            astate.discovered_stairs(gstate)
+        astate.visible.iter().any(|&coord|
+                                  gstate.at(coord)
+                                  .actor_map_or(false, |a| a.race == actor::Race::Grue)
+                                 ) ||
+        astate.discovered.iter().any(|&coord|
+                                     gstate.at(coord)
+                                     .item_map_or(false, |_| true)
+                                    ) ||
+        astate.heared.iter()
+        .filter(|&(c, t)| *c != astate.pos.coord && *t != NoiseType::Creature(Race::Pony))
+        .any(|(c, _)| !astate.sees(*c)) ||
+        astate.discovered_stairs(gstate)
     }
 
-    pub fn autoexplore_action(&self, astate : &actor::State, gstate : &game::State) -> AutoExploreAction {
+    pub fn autoexplore_action(
+        &self, astate : &actor::State, gstate : &game::State
+        ) -> AutoExploreAction {
 
         let start = astate.pos.coord;
 

@@ -156,7 +156,6 @@ pub struct CursesUI {
     fs_window : Option<Window>,
     mode : Mode,
     log : VecDeque<LogEntry>,
-    examine_pos : Option<Position>,
     target_pos : Option<Position>,
     dot : &'static str,
 
@@ -228,7 +227,6 @@ impl CursesUI {
             log_window: None,
             fs_window: None,
             mode: Mode::Normal,
-            examine_pos: None,
             target_pos: None,
             dot: if term_putty { NORMAL_DOT } else { UNICODE_DOT },
             log: VecDeque::new(),
@@ -309,9 +307,9 @@ impl CursesUI {
 
         let (center, head) = match self.mode {
             Mode::Examine => {
-                match self.examine_pos {
+                match self.target_pos {
                     None => {
-                        self.examine_pos = Some(astate.pos);
+                        self.target_pos = Some(astate.pos);
                         (astate.pos.coord, astate.pos.coord + astate.pos.dir)
                     },
                     Some(pos) => {
@@ -712,7 +710,7 @@ impl CursesUI {
         nc::wmove(window, y, 0);
 
         let pos = if self.mode == Mode::Examine {
-            self.examine_pos.unwrap()
+            self.target_pos.unwrap()
         } else {
             astate.pos
         };
@@ -1086,7 +1084,7 @@ impl ui::UiFrontend for CursesUI {
                             return Some(Action::Redraw);
                         },
                         'x' =>  {
-                            self.examine_pos = None;
+                            self.target_pos = None;
                             self.mode = Mode::Examine;
                             return Some(Action::Redraw);
                         },
@@ -1137,30 +1135,30 @@ impl ui::UiFrontend for CursesUI {
                         return None;
                     }
 
-                    let pos = self.examine_pos.unwrap();
+                    let pos = self.target_pos.unwrap();
 
                     match ch as u8 as char {
                         '\x1b' | 'x' | 'q' => {
-                            self.examine_pos = None;
+                            self.target_pos = None;
                             self.mode = Mode::Normal;
                         },
                         'h' => {
-                            self.examine_pos = Some(pos + Angle::Left);
+                            self.target_pos = Some(pos + Angle::Left);
                         },
                         'l' => {
-                            self.examine_pos = Some(pos + Angle::Right);
+                            self.target_pos = Some(pos + Angle::Right);
                         },
                         'j' => {
-                            self.examine_pos = Some(pos + (pos.dir + Angle::Back).to_coordinate());
+                            self.target_pos = Some(pos + (pos.dir + Angle::Back).to_coordinate());
                         },
                         'k' => {
-                            self.examine_pos = Some(pos + pos.dir.to_coordinate());
+                            self.target_pos = Some(pos + pos.dir.to_coordinate());
                         },
                         'K' => {
-                            self.examine_pos = Some(pos + pos.dir.to_coordinate().scale(5));
+                            self.target_pos = Some(pos + pos.dir.to_coordinate().scale(5));
                         },
                         'J' => {
-                            self.examine_pos = Some(pos + (pos.dir + Angle::Back).to_coordinate().scale(5));
+                            self.target_pos = Some(pos + (pos.dir + Angle::Back).to_coordinate().scale(5));
                         },
                         _ => {
                             return None;
