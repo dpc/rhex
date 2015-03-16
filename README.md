@@ -26,7 +26,7 @@ This project is based on more general and useful: [hex2d-rs - Hexagonal grid map
 
 ![RustyHex screenshot][ss]
 
-[ss]: http://i.imgur.com/LI0FOPF.png
+[ss]: http://i.imgur.com/gb2TZlj.png
 
 [Watch rhex demo video][screencast]
 

@@ -13,10 +13,14 @@ pub trait Item : Send+Sync+fmt::Debug {
     fn slot(&self) -> Option<Slot>;
     fn clone_item<'a>(&self) -> Box<Item + 'a> where Self: 'a;
     fn stats(&self) -> actor::Stats;
+
     fn is_usable(&self) -> bool {
         self.type_() == Type::Consumable
     }
 
+    /// Use item
+    ///
+    /// Returns: true if the item was consumed in the process.
     fn use_(&self, &mut actor::State) -> bool {
         false
     }
