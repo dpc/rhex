@@ -41,6 +41,31 @@ static SPACING: IntegerSpacing<i32> = IntegerSpacing::PointyTop(2, 1);
 const NORMAL_DOT : &'static str = ".";
 const UNICODE_DOT : &'static str = "·";
 
+const KEY_ESC : i32 = 0x1b;
+const KEY_ENTER: i32 = '\n' as i32;
+const KEY_LOWX : i32 = 'x' as i32;
+const KEY_LOWY : i32 = 'y' as i32;
+const KEY_LOWH : i32 = 'h' as i32;
+const KEY_LOWL : i32 = 'l' as i32;
+const KEY_LOWK : i32 = 'k' as i32;
+const KEY_LOWU : i32 = 'u' as i32;
+const KEY_LOWI : i32 = 'i' as i32;
+const KEY_LOWO : i32 = 'o' as i32;
+const KEY_LOWQ : i32 = 'q' as i32;
+const KEY_LOWJ : i32 = 'j' as i32;
+const KEY_LOWF : i32 = 'f' as i32;
+const KEY_CAPY : i32 = 'Y' as i32;
+const KEY_CAPH : i32 = 'H' as i32;
+const KEY_CAPL : i32 = 'L' as i32;
+const KEY_CAPE : i32 = 'E' as i32;
+const KEY_CAPI : i32 = 'I' as i32;
+const KEY_CAPK : i32 = 'K' as i32;
+const KEY_CAPJ : i32 = 'J' as i32;
+const KEY_DOT  : i32 = '.' as i32;
+const KEY_COMMA   : i32 = ',' as i32;
+const KEY_HELP    : i32 = '?' as i32;
+const KEY_DESCEND : i32 = '>' as i32;
+
 pub fn item_to_str(t : item::Type) -> &'static str {
     match t {
         item::Type::Weapon => ")",
@@ -323,7 +348,7 @@ impl CursesUI {
                     },
                 }
             },
-            Mode::Target => {
+            Mode::Target(_) => {
                 match self.target_pos {
                     None => {
                         self.target_pos = Some(astate.pos);
@@ -340,7 +365,7 @@ impl CursesUI {
         };
 
         let mut target_line = HashSet::new();
-        if self.mode == Mode::Target {
+        if let Mode::Target(_) = self.mode {
             center.for_each_in_line_to(head, |c| {
                 target_line.insert(c);
             });
@@ -359,7 +384,7 @@ impl CursesUI {
                 let is_proper_coord = off == (0, 0);
 
 
-                let (visible, in_los, knows, tt, t, light) = if is_proper_coord {
+                let (visible, _in_los, knows, tt, t, light) = if is_proper_coord {
 
                     let t = gstate.map.get(&c);
 
@@ -465,7 +490,7 @@ impl CursesUI {
 
 
                 let (mut fg, mut bg) = if !visible || light == 0 {
-                    if in_los {
+                    if visible /* change to in_los for los debug */ {
                         (fg[2], bg[2])
                     } else {
                         (fg[3], bg[3])
@@ -501,7 +526,7 @@ impl CursesUI {
                             bg = color::TARGET_SELF_FG;
                         }
                     }
-                } else if self.mode == Mode::Target {
+                } else if let Mode::Target(_) = self.mode {
                     if is_proper_coord && target_line.contains(&c) {
                         glyph = "*";
                         draw = true;
@@ -904,7 +929,7 @@ impl CursesUI {
         nc::wmove(window, 0, 0);
 
         nc::waddstr(window, "Long, long ago in a galaxy far, far away...\n\n");
-        nc::waddstr(window, "You can press '?' in the game for help.\n\n");
+        nc::waddstr(window, &format!("You can press {} in the game for help.\n\n",  KEY_HELP as u8 as char));
         nc::waddstr(window, "Press anything to start.");
         nc::wnoutrefresh(window);
     }
@@ -965,12 +990,16 @@ enum FSMode {
     Intro,
     Quit,
 }
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
+enum TargetMode {
+    Fire,
+}
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
 enum Mode {
     Normal,
     Examine,
-    Target,
+    Target(TargetMode),
     FullScreen(FSMode),
     Inventory(InvMode),
 }
@@ -1042,7 +1071,7 @@ impl ui::UiFrontend for CursesUI {
         nc::getmaxyx(nc::stdscr, &mut max_y, &mut max_x);
 
         match self.mode {
-            Mode::Normal|Mode::Examine|Mode::Inventory(_)|Mode::Target=> {
+            Mode::Normal|Mode::Examine|Mode::Inventory(_)|Mode::Target(_) => {
                 if let Mode::Inventory(_) = self.mode {
                     self.draw_inventory(astate, gstate);
                 } else {
@@ -1082,8 +1111,8 @@ impl ui::UiFrontend for CursesUI {
             }
             match self.mode {
                 Mode::FullScreen(fs_mode) => match fs_mode {
-                    FSMode::Quit => match ch as u8 as char {
-                        'y'|'Y' => return Some(Action::Exit),
+                    FSMode::Quit => match ch {
+                        KEY_LOWY|KEY_CAPY => return Some(Action::Exit),
                         _ => {
                             self.mode = Mode::Normal;
                             return Some(Action::Redraw);
@@ -1091,8 +1120,6 @@ impl ui::UiFrontend for CursesUI {
                     },
                     _ => {
                         match ch {
-                            -1 =>
-                                return None,
                             _ => {
                                 self.mode = Mode::Normal;
                                 return Some(Action::Redraw);
@@ -1101,42 +1128,42 @@ impl ui::UiFrontend for CursesUI {
                     },
                 },
                 Mode::Normal => {
-                    return Some(match (ch as u8) as char {
-                        'h' => Action::Game(game::Action::Turn(Angle::Left)),
-                        'l' => Action::Game(game::Action::Turn(Angle::Right)),
-                        'k' => Action::Game(game::Action::Move(Angle::Forward)),
-                        'u' => Action::Game(game::Action::Spin(Angle::Left)),
-                        'i' => Action::Game(game::Action::Spin(Angle::Right)),
-                        'H' => Action::Game(game::Action::Move(Angle::Left)),
-                        'L' => Action::Game(game::Action::Move(Angle::Right)),
-                        'j' => Action::Game(game::Action::Move(Angle::Back)),
-                        '.' => Action::Game(game::Action::Wait),
-                        ',' => Action::Game(game::Action::Pick),
-                        '>' => Action::Game(game::Action::Descend),
-                        'o' => Action::AutoExplore,
-                        'q' => {
+                    return Some(match ch {
+                        KEY_LOWH => Action::Game(game::Action::Turn(Angle::Left)),
+                        KEY_LOWL => Action::Game(game::Action::Turn(Angle::Right)),
+                        KEY_LOWK => Action::Game(game::Action::Move(Angle::Forward)),
+                        KEY_LOWU => Action::Game(game::Action::Spin(Angle::Left)),
+                        KEY_LOWI => Action::Game(game::Action::Spin(Angle::Right)),
+                        KEY_CAPH => Action::Game(game::Action::Move(Angle::Left)),
+                        KEY_CAPL => Action::Game(game::Action::Move(Angle::Right)),
+                        KEY_LOWJ => Action::Game(game::Action::Move(Angle::Back)),
+                        KEY_DOT => Action::Game(game::Action::Wait),
+                        KEY_COMMA => Action::Game(game::Action::Pick),
+                        KEY_DESCEND => Action::Game(game::Action::Descend),
+                        KEY_LOWO => Action::AutoExplore,
+                        KEY_LOWQ => {
                             self.mode = Mode::FullScreen(FSMode::Quit);
                             return Some(Action::Redraw);
                         },
-                        'I' =>  {
+                        KEY_CAPI =>  {
                             self.mode = Mode::Inventory(InvMode::View);
                             return Some(Action::Redraw);
                         },
-                        'E' =>  {
+                        KEY_CAPE =>  {
                             self.mode = Mode::Inventory(InvMode::Equip);
                             return Some(Action::Redraw);
                         },
-                        'x' =>  {
+                        KEY_LOWX =>  {
                             self.target_pos = None;
                             self.mode = Mode::Examine;
                             return Some(Action::Redraw);
                         },
-                        'f' =>  {
+                        KEY_LOWF =>  {
                             self.target_pos = None;
-                            self.mode = Mode::Target;
+                            self.mode = Mode::Target(TargetMode::Fire);
                             return Some(Action::Redraw);
                         },
-                        '?' => {
+                        KEY_HELP => {
                             self.mode = Mode::FullScreen(FSMode::Help);
                             return Some(Action::Redraw);
                         },
@@ -1144,7 +1171,6 @@ impl ui::UiFrontend for CursesUI {
                     })
                 },
                 Mode::Inventory(InvMode::Equip) => match ch {
-                    -1 => return None,
                     ch => match ch as u8 as char {
                         'a'...'z'|'A'...'Z' => {
                             if let Some(astate) = astate {
@@ -1162,7 +1188,6 @@ impl ui::UiFrontend for CursesUI {
                     }
                 },
                 Mode::Inventory(InvMode::View) => match ch {
-                    -1 => return None,
                     ch => match ch as u8 as char {
                         'a'...'z'|'A'...'Z' => {
                         },
@@ -1174,33 +1199,29 @@ impl ui::UiFrontend for CursesUI {
                     }
                 },
                 Mode::Examine => {
-                    if ch == -1 {
-                        return None;
-                    }
-
                     let pos = self.target_pos.unwrap();
 
-                    match ch as u8 as char {
-                        '\x1b' | 'x' | 'q' => {
+                    match ch {
+                        KEY_ESC | KEY_LOWX | KEY_LOWQ => {
                             self.target_pos = None;
                             self.mode = Mode::Normal;
                         },
-                        'h' => {
+                        KEY_LOWH => {
                             self.target_pos = Some(pos + Angle::Left);
                         },
-                        'l' => {
+                        KEY_LOWL => {
                             self.target_pos = Some(pos + Angle::Right);
                         },
-                        'j' => {
+                        KEY_LOWJ => {
                             self.target_pos = Some(pos + (pos.dir + Angle::Back).to_coordinate());
                         },
-                        'k' => {
+                        KEY_LOWK => {
                             self.target_pos = Some(pos + pos.dir.to_coordinate());
                         },
-                        'K' => {
+                        KEY_CAPK => {
                             self.target_pos = Some(pos + pos.dir.to_coordinate().scale(5));
                         },
-                        'J' => {
+                        KEY_CAPJ => {
                             self.target_pos = Some(pos + (pos.dir + Angle::Back).to_coordinate().scale(5));
                         },
                         _ => {
@@ -1209,36 +1230,38 @@ impl ui::UiFrontend for CursesUI {
                     }
                     return Some(Action::Redraw);
                 },
-                Mode::Target => {
-                    if ch == -1 {
-                        return None;
-                    }
-
+                Mode::Target(_) => {
                     let pos = self.target_pos.unwrap();
                     let astate = astate.unwrap();
                     let center = astate.pos;
 
-                    match ch as u8 as char {
-                        '\x1b' | 'x' | 'q' => {
+                    match ch  {
+                        KEY_ESC | KEY_LOWX | KEY_LOWQ => {
                             self.target_pos = None;
                             self.mode = Mode::Normal;
                         },
-                        'h' => {
+                        KEY_ENTER | KEY_LOWF => {
+                            let target = self.target_pos.unwrap();
+                            self.target_pos = None;
+                            self.mode = Mode::Normal;
+                            return Some(Action::Game(game::Action::Fire(target.coord)));
+                        },
+                        KEY_LOWH => {
                             self.target_pos = Some(
                                 circular_move(center, pos, Angle::Left)
                                 );
                         },
-                        'l' => {
+                        KEY_LOWL => {
                             self.target_pos = Some(
                                 circular_move(center, pos, Angle::Right)
                                 );
                         },
-                        'j' => {
+                        KEY_LOWJ => {
                             self.target_pos = Some(
                                 circular_move(center, pos, Angle::Back)
                                 );
                         },
-                        'k' => {
+                        KEY_LOWK => {
                             self.target_pos = Some(
                                 circular_move(center, pos, Angle::Forward)
                                 );

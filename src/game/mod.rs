@@ -32,6 +32,7 @@ pub enum Action {
     Move(Angle),
     Spin(Angle),
     Equip(char),
+    Fire(Coordinate),
     Pick,
     Descend,
 }

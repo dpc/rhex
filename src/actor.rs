@@ -282,7 +282,7 @@ impl State {
     pub fn pos_after_action(&self, action : Action) -> Position {
         let pos = self.pos;
         match action {
-            Action::Wait|Action::Pick|Action::Equip(_)|Action::Descend => pos,
+            Action::Wait|Action::Pick|Action::Equip(_)|Action::Descend|Action::Fire(_) => pos,
             Action::Turn(a) => pos + a,
             Action::Move(a) => pos + (pos.dir + a).to_coordinate(),
             Action::Spin(a) => pos + (pos.dir + a).to_coordinate() +
