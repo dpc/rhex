@@ -4,16 +4,16 @@ version = "0.0.1"
 dependencies = [
  "hex2d 0.0.10 (registry+https://github.com/rust-lang/crates.io-index)",
  "hex2d-dpcext 0.0.5 (registry+https://github.com/rust-lang/crates.io-index)",
- "log 0.2.5 (registry+https://github.com/rust-lang/crates.io-index)",
+ "log 0.2.6 (registry+https://github.com/rust-lang/crates.io-index)",
  "ncurses 5.71.1 (git+https://github.com/jeaye/ncurses-rs.git)",
- "num 0.1.15 (registry+https://github.com/rust-lang/crates.io-index)",
- "rand 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "time 0.1.19 (registry+https://github.com/rust-lang/crates.io-index)",
+ "num 0.1.17 (registry+https://github.com/rust-lang/crates.io-index)",
+ "rand 0.2.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "time 0.1.21 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
 name = "gcc"
-version = "0.3.1"
+version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
@@ -21,8 +21,8 @@ name = "hex2d"
 version = "0.0.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
- "num 0.1.15 (registry+https://github.com/rust-lang/crates.io-index)",
- "rand 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "num 0.1.17 (registry+https://github.com/rust-lang/crates.io-index)",
+ "rand 0.2.1 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -31,63 +31,57 @@ version = "0.0.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "hex2d 0.0.10 (registry+https://github.com/rust-lang/crates.io-index)",
- "num 0.1.15 (registry+https://github.com/rust-lang/crates.io-index)",
- "rand 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "num 0.1.17 (registry+https://github.com/rust-lang/crates.io-index)",
+ "rand 0.2.1 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
 name = "libc"
-version = "0.1.2"
+version = "0.1.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
 name = "log"
-version = "0.2.5"
+version = "0.2.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
+dependencies = [
+ "libc 0.1.3 (registry+https://github.com/rust-lang/crates.io-index)",
+]
 
 [[package]]
 name = "ncurses"
 version = "5.71.1"
-source = "git+https://github.com/jeaye/ncurses-rs.git#bcedb3d6346b82af475a62695fde9b84b3bc365f"
+source = "git+https://github.com/jeaye/ncurses-rs.git#0d8b1ec9f93438179d4ad09e6aef7810444b4e9a"
 
 [[package]]
 name = "num"
-version = "0.1.15"
+version = "0.1.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
- "rand 0.1.4 (registry+https://github.com/rust-lang/crates.io-index)",
- "rustc-serialize 0.2.15 (registry+https://github.com/rust-lang/crates.io-index)",
+ "rand 0.2.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "rustc-serialize 0.3.6 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
 name = "rand"
-version = "0.1.4"
+version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
- "libc 0.1.2 (registry+https://github.com/rust-lang/crates.io-index)",
- "log 0.2.5 (registry+https://github.com/rust-lang/crates.io-index)",
-]
-
-[[package]]
-name = "rand"
-version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-dependencies = [
- "libc 0.1.2 (registry+https://github.com/rust-lang/crates.io-index)",
- "log 0.2.5 (registry+https://github.com/rust-lang/crates.io-index)",
+ "libc 0.1.3 (registry+https://github.com/rust-lang/crates.io-index)",
+ "log 0.2.6 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
 name = "rustc-serialize"
-version = "0.2.15"
+version = "0.3.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
 name = "time"
-version = "0.1.19"
+version = "0.1.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
- "gcc 0.3.1 (registry+https://github.com/rust-lang/crates.io-index)",
- "libc 0.1.2 (registry+https://github.com/rust-lang/crates.io-index)",
+ "gcc 0.3.2 (registry+https://github.com/rust-lang/crates.io-index)",
+ "libc 0.1.3 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 

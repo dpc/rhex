@@ -3,6 +3,7 @@ use std::collections::{HashMap, HashSet};
 use std::collections::VecDeque;
 use std::{self, cmp, num, env};
 use std::ffi::AsOsStr;
+use std::io::Write;
 use core::str::StrExt;
 use ncurses as nc;
 
@@ -20,7 +21,7 @@ use hex2d::{Angle, IntegerSpacing, Coordinate, ToCoordinate, Position};
 use game::tile;
 
 use std::fmt;
-use std::fmt::Write;
+use std::fmt::Write as FmtWrite;
 
 mod locale {
     use libc::{c_int, c_char};
@@ -347,8 +348,8 @@ impl CursesUI {
 
         let (vpx, vpy) = center.to_pixel_integer(SPACING);
 
-        for vy in range(0, max_y) {
-            for vx in range(0, max_x) {
+        for vy in 0..max_y {
+            for vx in 0..max_x {
                 let (rvx, rvy) = (vx - mid_x, vy - mid_y);
 
                 let (cvx, cvy) = (rvx + vpx, rvy + vpy);
@@ -582,7 +583,7 @@ impl CursesUI {
 
         nc::wattron(window, self.text_color as i32);
         nc::waddstr(window, "[");
-        for i in range(0, width) {
+        for i in 0..width {
             let (color, s) = match (i < cur_w, i < prev_w) {
                 (true, true) => (self.text_color, "="),
                 (false, true) => (self.red_color, "-"),
@@ -1066,7 +1067,7 @@ impl ui::UiFrontend for CursesUI {
         }
 
         nc::mv(max_y - 1, max_x - 1);
-        std::old_io::stdio::flush();
+        let _ = std::io::stdout().flush();
     }
 
     fn input(&mut self, astate : Option<&actor::State>) -> Option<Action> {

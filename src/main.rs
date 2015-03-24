@@ -3,6 +3,8 @@
 #![feature(libc)]
 #![feature(alloc)]
 #![feature(old_io)]
+#![feature(collections)]
+#![allow(deprecated)]
 
 extern crate ncurses;
 extern crate hex2d;

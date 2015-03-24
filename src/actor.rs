@@ -10,8 +10,8 @@ use game::tile::{Feature};
 use util;
 use item::Item;
 
-type Visibility = HashSet<Coordinate>;
-type NoiseMap = HashMap<Coordinate, NoiseType>;
+pub type Visibility = HashSet<Coordinate>;
+pub type NoiseMap = HashMap<Coordinate, NoiseType>;
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub enum NoiseType {
@@ -254,11 +254,6 @@ impl State {
 
     }
 
-
-    pub fn add_light(&mut self, light : u32) {
-        self.light_emision = light;
-    }
-
     pub fn sees(&self, pos : Coordinate) -> bool {
         self.visible.contains(&pos)
     }
@@ -370,8 +365,8 @@ impl State {
     }
 
     pub fn add_item(&mut self, item : Box<Item>) -> bool {
-        for ch in range('a' as u8, 'z' as u8)
-            .chain(range('A' as u8, 'Z' as u8)) {
+        for ch in ('a' as u8..'z' as u8)
+            .chain('A' as u8..'Z' as u8) {
             let ch = ch as char;
             if !self.item_letter_taken(ch) {
                 assert!(!self.items_backpack.contains_key(&ch));

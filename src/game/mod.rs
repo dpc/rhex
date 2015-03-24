@@ -261,11 +261,6 @@ impl State {
         self.spawn(actor)
     }
 
-    pub fn spawn_pony(&mut self, pos : Position ) {
-        let mut actor = actor::State::new(actor::Race::Pony, pos);
-        actor.add_light(7);
-        self.spawn(actor)
-    }
 
     pub fn act(&mut self, id : u32, action : Action) {
 
