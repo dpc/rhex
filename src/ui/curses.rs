@@ -66,12 +66,12 @@ const KEY_COMMA   : i32 = ',' as i32;
 const KEY_HELP    : i32 = '?' as i32;
 const KEY_DESCEND : i32 = '>' as i32;
 
-pub fn item_to_str(t : item::Type) -> &'static str {
+pub fn item_to_str(t : item::Category) -> &'static str {
     match t {
-        item::Type::Weapon => ")",
-        item::Type::Armor => "[",
-        item::Type::Misc => "\"",
-        item::Type::Consumable => "%",
+        item::Category::Weapon => ")",
+        item::Category::Armor => "[",
+        item::Category::Misc => "\"",
+        item::Category::Consumable => "%",
     }
 }
 
@@ -446,7 +446,7 @@ impl CursesUI {
                         (fg, color::CHAR_BG, "@")
                     } else if is_proper_coord && visible && gstate.at(c).item().is_some() {
                         let item = gstate.at(c).item().unwrap();
-                        let s = item_to_str(item.type_());
+                        let s = item_to_str(item.category());
                         if astate.discovered.contains(&c) {
                             bold = true;
                         }

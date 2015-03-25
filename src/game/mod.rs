@@ -168,7 +168,7 @@ impl State {
                 let source_coord = self.actors[id].pos.coord;
                 source_coord.for_each_in_range(source_emission, |coord| {
                     if let Some(&target_id) = self.actors_pos.get(&coord) {
-                        self.actors[target_id].noise_hears(source_coord, NoiseType::Creature(source_race));
+                        self.actors.get_mut(&target_id).unwrap().noise_hears(source_coord, NoiseType::Creature(source_race));
                     }
                 });
             }
@@ -281,13 +281,13 @@ impl State {
 
                     match item {
                         Some(item) => {
-                            self.actors[id].add_item(item);
+                            self.actors.get_mut(&id).unwrap().add_item(item);
                         },
                         None => {},
                     }
                 },
                 Action::Equip(ch) => {
-                    self.actors[id].equip_switch(ch);
+                    self.actors.get_mut(&id).unwrap().equip_switch(ch);
                 },
                 Action::Descend => {
                     if self.at(self.actors[id].coord()).tile_map_or(false, |t| t.feature == Some(Feature::Stairs)) {
@@ -312,7 +312,7 @@ impl State {
             let target_id = self.actors_pos[new_pos.coord];
 
             let mut target = self.actors.remove(&target_id).unwrap();
-            self.actors[id].attacks(dir, &mut target);
+            self.actors.get_mut(&id).unwrap().attacks(dir, &mut target);
             self.actors.insert(target_id, target);
 
         } else if self.at(new_pos.coord).tile_map_or(
@@ -326,7 +326,7 @@ impl State {
 
         } else if old_pos.coord == new_pos.coord || self.at(new_pos.coord).is_passable() {
             // we've moved
-            self.actors[id].moved(new_pos);
+            self.actors.get_mut(&id).unwrap().moved(new_pos);
             // we will remove the previous position on post_tick, so that
             // for the rest of this turn this actor can be found through both new
             // and old coor
