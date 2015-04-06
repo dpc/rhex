@@ -28,9 +28,9 @@ This project is based on more general and useful: [hex2d-rs - Hexagonal grid map
 
 [ss]: http://i.imgur.com/gb2TZlj.png
 
-[Watch rhex demo video][screencast]
+Watch rhex demo video:
 
-[screencast]: https://asciinema.org/a/16712
+[![asciicast](https://asciinema.org/a/16712.png)](https://asciinema.org/a/16712)
 
 ## Building
 
