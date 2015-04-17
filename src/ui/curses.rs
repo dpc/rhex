@@ -398,7 +398,7 @@ impl CursesUI {
                         astate.in_los(c) || astate.is_dead(),
                         astate.knows(c),
                         Some(tt), t,
-                        gstate.at(c).light()
+                        gstate.at(c).light_as_seen_by(astate)
                     )
                 } else {
                     // Paint a glue characters between two real characters
@@ -428,7 +428,10 @@ impl CursesUI {
                     (
                         visible, in_los, knows,
                         tt, None,
-                        cmp::min(gstate.at(c1).light(), gstate.at(c2).light())
+                        cmp::min(
+                            gstate.at(c1).light_as_seen_by(astate),
+                            gstate.at(c2).light_as_seen_by(astate)
+                            )
                     )
                 };
 
@@ -912,7 +915,7 @@ impl CursesUI {
                 let cpair = nc::COLOR_PAIR(color);
                 nc::wattron(window, cpair as i32);
                 nc::waddstr(window, &format!(
-                        "{} ", i.text.as_slice()
+                        "{} ", i.text.as_str()
                         ));
             }
         }

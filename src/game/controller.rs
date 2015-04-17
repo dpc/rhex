@@ -1,8 +1,7 @@
 use std::sync::{Arc, mpsc};
 use rand;
+use schedule_recv;
 use rand::Rng;
-use std::old_io::Timer;
-use std::time::Duration;
 
 use game::{State, Action};
 use error::Error;
@@ -32,8 +31,7 @@ impl Controller {
                ai_rep : mpsc::Receiver<Reply>,
                ) -> Result<(), Error<Request>>
     {
-        let mut timer = Timer::new().unwrap();
-        let timer = timer.periodic(Duration::milliseconds(100));
+        let timer = schedule_recv::periodic_ms(100);
 
         loop {
             self.state.post_tick();

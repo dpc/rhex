@@ -1,7 +1,6 @@
-use std::old_io::Timer;
-use std::time::duration::Duration;
 use std::sync::{mpsc};
 use std::collections::VecDeque;
+use std::thread;
 use time;
 use game::controller::{Request, Reply};
 use hex2d;
@@ -119,7 +118,7 @@ impl<U : UiFrontend> Ui<U> {
 
             self.last_redraw_ns = now;
 
-            let astate = &gstate.actors[id];
+            let astate = &gstate.actors[&id];
             self.frontend.draw(&astate, &gstate);
         }
     }
@@ -132,11 +131,9 @@ impl<U : UiFrontend> Ui<U> {
         let mut pending_req : Option<Request> = None;
         let mut pending_action = VecDeque::new();
 
-        let mut timer = Timer::new().unwrap();
-
         loop {
             if let Some((id, gstate)) = pending_req.clone() {
-                let astate = &gstate.actors[id];
+                let astate = &gstate.actors[&id];
                 if let Some(start_turn) = self.autoexploring {
                     if start_turn != gstate.turn && self.should_stop_autoexploring(&astate, &gstate) {
                         self.autoexploring = None;
@@ -150,7 +147,7 @@ impl<U : UiFrontend> Ui<U> {
                             AutoExploreAction::Action(action) => {
                                 rep.send((id, action)).unwrap();
                                 pending_req = None;
-                                timer.sleep(Duration::milliseconds(10));
+                                thread::sleep_ms(10);
                             },
                             AutoExploreAction::Finish => {
                                 self.frontend.event(Event::Log(LogEvent::AutoExploreDone), &gstate);
@@ -177,7 +174,7 @@ impl<U : UiFrontend> Ui<U> {
                     Ok(req) => {
                         let skip = {
                             let (id, ref gstate) = req;
-                            let astate = &gstate.actors[id];
+                            let astate = &gstate.actors[&id];
                             self.frontend.update(&astate, &gstate);
                             !astate.can_perform_action()
                         };
@@ -198,7 +195,7 @@ impl<U : UiFrontend> Ui<U> {
             }
 
             if let Some(action) = self.frontend.input(
-                pending_req.as_ref().map(|&(id, ref gstate)| &gstate.actors[id])
+                pending_req.as_ref().map(|&(id, ref gstate)| &gstate.actors[&id])
                 ) {
                 match action {
                     Action::Exit => return,
@@ -219,7 +216,7 @@ impl<U : UiFrontend> Ui<U> {
                     }
                 }
             } else {
-                timer.sleep(Duration::milliseconds(10));
+                thread::sleep_ms(10);
             }
         }
     }

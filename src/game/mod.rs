@@ -161,7 +161,7 @@ impl State {
     }
 
     pub fn recalculate_noise(&mut self) {
-        for id in self.actors_alive_ids() {
+        for id in &self.actors_alive_ids() {
             let source_emission = self.actors[id].noise_emision;
             if source_emission > 0 {
                 let source_race = self.actors[id].race;
@@ -180,7 +180,7 @@ impl State {
     }
 
     pub fn actors_alive_ids(&self) -> Vec<u32> {
-        self.actors.keys().filter(|&id| !self.actors[*id].is_dead()).cloned().collect()
+        self.actors.keys().filter(|&id| !self.actors[id].is_dead()).cloned().collect()
     }
 
     pub fn recalculate_light_map(&mut self) {
@@ -215,7 +215,7 @@ impl State {
             }
         }
 
-        for (_, &id) in &self.actors_pos {
+        for (_, id) in &self.actors_pos {
             let astate = &self.actors[id];
             let pos = astate.pos.coord;
             if astate.light_emision > 0 {
@@ -265,18 +265,18 @@ impl State {
 
     pub fn act(&mut self, id : u32, action : Action) {
 
-        if !self.actors[id].can_perform_action() {
+        if !self.actors[&id].can_perform_action() {
             return;
         }
 
-        let old_pos = self.actors[id].pos;
-        let new_pos = self.actors[id].pos_after_action(action);
+        let old_pos = self.actors[&id].pos;
+        let new_pos = self.actors[&id].pos_after_action(action);
 
-        if self.actors[id].pos == new_pos {
+        if self.actors[&id].pos == new_pos {
             // no movement
             match action {
                 Action::Pick => {
-                    let head = self.actors[id].head();
+                    let head = self.actors[&id].head();
                     let item = self.at_mut(head).pick_item();
 
                     match item {
@@ -290,7 +290,7 @@ impl State {
                     self.actors.get_mut(&id).unwrap().equip_switch(ch);
                 },
                 Action::Descend => {
-                    if self.at(self.actors[id].coord()).tile_map_or(false, |t| t.feature == Some(Feature::Stairs)) {
+                    if self.at(self.actors[&id].coord()).tile_map_or(false, |t| t.feature == Some(Feature::Stairs)) {
                         self.descend = true;
                     }
                 },
@@ -301,7 +301,7 @@ impl State {
             self.actors_pos.contains_key(&new_pos.coord)
             {
             // we've tried to move into actor; attack?
-            if !self.actors[id].can_attack() {
+            if !self.actors[&id].can_attack() {
                 return;
             }
             let dir = match action {
@@ -309,7 +309,7 @@ impl State {
                 _ => old_pos.dir,
             };
 
-            let target_id = self.actors_pos[new_pos.coord];
+            let target_id = self.actors_pos[&new_pos.coord];
 
             let mut target = self.actors.remove(&target_id).unwrap();
             self.actors.get_mut(&id).unwrap().attacks(dir, &mut target);
@@ -347,7 +347,7 @@ impl State {
     /// Advance one turn (increase the turn counter) and do some maintenance
     pub fn post_tick(&mut self) {
 
-        for id in self.actors_ids() {
+        for id in &self.actors_ids() {
             if self.actors[id].is_dead() && !self.actors_dead.contains(&id){
                 let mut a = self.actors.remove(&id).unwrap();
 
@@ -358,14 +358,14 @@ impl State {
                 for (_, (_, item)) in a.items_equipped.drain() {
                     self.at_mut(a.pos.coord).drop_item(item);
                 }
-                self.actors.insert(id, a);
+                self.actors.insert(*id, a);
 
-                self.actors_dead.insert(id);
+                self.actors_dead.insert(*id);
             }
         }
 
         self.actors_pos = self.actors_pos.iter().filter(|&(coord, ref id)|
-                                                 !self.actors[**id].is_dead() && (self.actors[**id].coord() == *coord)
+                                                 !self.actors[*id].is_dead() && (self.actors[*id].coord() == *coord)
                                                 ).map(|(coord, id)| (*coord, *id)).collect();
 
         self.recalculate_light_map();
@@ -416,7 +416,7 @@ impl<'a> At<'a> {
     pub fn actor_map_or<R, F : Fn(&actor::State) -> R>
         (&self, def: R, cond : F) -> R
     {
-        self.state.actors_pos.get(&self.coord).map(|&id| &self.state.actors[id]).map_or(def, |a| cond(&a))
+        self.state.actors_pos.get(&self.coord).map(|&id| &self.state.actors[&id]).map_or(def, |a| cond(&a))
     }
 
     pub fn item_map_or<R, F : Fn(&Box<Item>) -> R>
@@ -433,8 +433,26 @@ impl<'a> At<'a> {
         !self.is_occupied() && self.tile_map_or(false, |t| t.is_passable())
     }
 
-    pub fn light(&self) -> u32 {
+    pub fn _light(&self) -> u32 {
         self.state.light_map.get(&self.coord).map_or(0, |l| *l)
+    }
+
+    pub fn light_as_seen_by(&self, astate : &actor::State) -> u32 {
+        let pl_coord = astate.pos.coord;
+
+        let ownlight = self.state.light_map.get(&self.coord).map_or(0, |l| *l);
+        if self.state.map.get(&self.coord).map_or(0, |t| t.opaqueness()) < 20 {
+            ownlight
+        } else {
+            let reldir = -pl_coord.direction_to_cw(self.coord).unwrap_or(astate.pos.dir);
+            for &dir in &[reldir, reldir + Left, reldir + Right] {
+                let d_coord = self.coord + dir;
+                if astate.in_los.contains(&d_coord) && self.state.map.get(&d_coord).map_or(0, |t| t.opaqueness()) < 20 {
+                    return self.state.light_map.get(&d_coord).map_or(0, |l| *l)
+                }
+            }
+            ownlight
+        }
     }
 
     pub fn item(&self) -> Option<&'a Item> {

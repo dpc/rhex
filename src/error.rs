@@ -1,6 +1,6 @@
 
 use std::sync::{mpsc};
-use std::error::FromError;
+use std::convert::From;
 
 /// Possible errors that could terminate Controller
 pub enum Error<T> {
@@ -8,14 +8,14 @@ pub enum Error<T> {
     Transmit(mpsc::SendError<T>),
 }
 
-impl<T> FromError<mpsc::RecvError> for Error<T> {
-    fn from_error(err: mpsc::RecvError) -> Error<T> {
+impl<T> From<mpsc::RecvError> for Error<T> {
+    fn from(err: mpsc::RecvError) -> Error<T> {
         Error::Receive(err)
     }
 }
 
-impl<T> FromError<mpsc::SendError<T>> for Error<T> {
-    fn from_error(err: mpsc::SendError<T>) -> Error<T> {
+impl<T> From<mpsc::SendError<T>> for Error<T> {
+    fn from(err: mpsc::SendError<T>) -> Error<T> {
         Error::Transmit(err)
     }
 }

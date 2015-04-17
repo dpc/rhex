@@ -298,9 +298,22 @@ impl State {
 
         let los = calculate_los(self.pos, gstate);
 
-        let visible = los.iter().filter(
-            |&coord| self.pos.coord.distance(*coord) < 2 || gstate.light_map.contains_key(coord)
-            ).cloned().collect();
+        let mut visible = HashSet::new();
+
+        for &coord in &los {
+            if gstate.light_map.contains_key(&coord) {
+                visible.insert(coord);
+                if gstate.at(coord).tile_map_or(true, |t| t.opaqueness() <= 10) {
+                    for &n in &coord.neighbors() {
+                        if gstate.at(n).tile_map_or(true, |t| t.opaqueness() > 10) {
+                            visible.insert(n);
+                        }
+                    }
+                }
+            } else if self.pos.coord.distance(coord) < 2 {
+                visible.insert(coord);
+            }
+        }
 
         let mut discovered = HashSet::new();
         let mut discovered_areas = HashSet::new();

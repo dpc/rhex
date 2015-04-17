@@ -135,7 +135,7 @@ pub fn run(
     loop {
         let (id, ref gstate) = try!(req.recv());
 
-        let astate = &gstate.actors[id];
+        let astate = &gstate.actors[&id];
         if !astate.can_perform_action() {
             continue;
         }
