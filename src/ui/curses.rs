@@ -1,11 +1,12 @@
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::collections::VecDeque;
-use std::{self, cmp, num, env};
-use std::ffi::AsOsStr;
+use std::{self, cmp, env};
 use std::io::Write;
 use core::str::StrExt;
 use ncurses as nc;
+
+use num::integer::Integer;
 
 use util::circular_move;
 
@@ -626,7 +627,7 @@ impl CursesUI {
     }
 
     fn draw_turn<T>(&self, window : nc::WINDOW, label: &str, val: T)
-        where T : num::Int+fmt::Display
+        where T : Integer+fmt::Display
     {
         nc::wattron(window, self.label_color as i32);
         nc::waddstr(window, &format!("{}: ", label));
@@ -636,7 +637,7 @@ impl CursesUI {
     }
 
     fn draw_val<T>(&self, window : nc::WINDOW, label: &str, val: T)
-        where T : num::Int+fmt::Display
+        where T : Integer+fmt::Display
     {
         nc::wattron(window, self.label_color as i32);
         nc::waddstr(window, &format!("{}:", label));
