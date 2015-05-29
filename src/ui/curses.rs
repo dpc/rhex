@@ -429,7 +429,7 @@ impl CursesUI {
                     (
                         visible, in_los, knows,
                         tt, None,
-                        cmp::min(
+                        cmp::max(
                             gstate.at(c1).light_as_seen_by(astate),
                             gstate.at(c2).light_as_seen_by(astate)
                             )

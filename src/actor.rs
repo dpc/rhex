@@ -304,7 +304,7 @@ impl State {
             if gstate.light_map.contains_key(&coord) {
                 visible.insert(coord);
                 if gstate.at(coord).tile_map_or(true, |t| t.opaqueness() <= 10) {
-                    for &n in &coord.neighbors() {
+                    for &n in &[coord + self.pos.dir, coord + (self.pos.dir + Angle::Right), coord + (self.pos.dir + Angle::Left)] {
                         if gstate.at(n).tile_map_or(true, |t| t.opaqueness() > 10) {
                             visible.insert(n);
                         }
