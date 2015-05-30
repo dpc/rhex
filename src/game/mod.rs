@@ -30,6 +30,7 @@ pub enum Action {
     Wait,
     Turn(Angle),
     Move(Angle),
+    Charge,
     Spin(Angle),
     Equip(char),
     Fire(Coordinate),
@@ -53,6 +54,7 @@ pub struct State {
 
 pub fn action_could_be_attack(action : Action) -> bool {
     match action {
+        Action::Charge => true,
         Action::Move(angle) => match angle {
             Left|Right|Forward => true,
             _ => false,
@@ -145,14 +147,13 @@ impl State {
         {
             let mut player = player.unwrap();
             let pos = random_pos(0, 0);
-            player.moved(pos);
-            player.changed_level();
+            player.moved(self, pos);
             state.spawn(player);
         }
 
         if let Some(mut pony) = pony {
             let pos = random_pos(-1, 0);
-            pony.moved(pos);
+            pony.moved(self, pos);
             pony.changed_level();
             state.spawn(pony);
         }
@@ -248,11 +249,13 @@ impl State {
         self.light_map = light_map;
     }
 
-    pub fn spawn(&mut self, astate : actor::State) {
+    pub fn spawn(&mut self, mut astate : actor::State) {
         let id = self.actors_counter;
         self.actors_counter += 1;
 
         self.actors_pos.insert(astate.pos.coord, id);
+        let pos = astate.pos;
+        astate.moved(self, pos);
         self.actors.insert(id, astate);
     }
 
@@ -262,78 +265,84 @@ impl State {
         self.spawn(actor)
     }
 
-
     pub fn act(&mut self, id : u32, action : Action) {
+        let mut actor = self.actors.remove(&id).unwrap();
 
-        if !self.actors[&id].can_perform_action() {
+        if !actor.can_perform_action() {
+            self.actors.insert(id, actor);
             return;
         }
+        let new_pos = actor.pos_after_action(action);
 
-        let old_pos = self.actors[&id].pos;
-        let new_pos = self.actors[&id].pos_after_action(action);
+        for &new_pos in &new_pos {
+            let old_pos = actor.pos;
 
-        if self.actors[&id].pos == new_pos {
-            // no movement
-            match action {
-                Action::Pick => {
-                    let head = self.actors[&id].head();
-                    let item = self.at_mut(head).pick_item();
+            if actor.pos == new_pos {
+                // no movement
+                match action {
+                    Action::Pick => {
+                        let head = actor.head();
+                        let item = self.at_mut(head).pick_item();
 
-                    match item {
-                        Some(item) => {
-                            self.actors.get_mut(&id).unwrap().add_item(item);
-                        },
-                        None => {},
+                        match item {
+                            Some(item) => {
+                                actor.add_item(item);
+                            },
+                            None => {},
+                        }
+                    },
+                    Action::Equip(ch) => {
+                        actor.equip_switch(ch);
+                    },
+                    Action::Descend => {
+                        if self.at(actor.coord()).tile_map_or(false, |t| t.feature == Some(Feature::Stairs)) {
+                            self.descend = true;
+                        }
+                    },
+                    _ => {}
+                }
+            } else if action_could_be_attack(action) &&
+                old_pos.coord != new_pos.coord &&
+                    self.actors_pos.contains_key(&new_pos.coord)
+                {
+                    // we've tried to move into actor; attack?
+                    if !actor.can_attack() {
+                        return;
                     }
-                },
-                Action::Equip(ch) => {
-                    self.actors.get_mut(&id).unwrap().equip_switch(ch);
-                },
-                Action::Descend => {
-                    if self.at(self.actors[&id].coord()).tile_map_or(false, |t| t.feature == Some(Feature::Stairs)) {
-                        self.descend = true;
-                    }
-                },
-                _ => {}
-            }
-        } else if action_could_be_attack(action) &&
-            old_pos.coord != new_pos.coord &&
-            self.actors_pos.contains_key(&new_pos.coord)
-            {
-            // we've tried to move into actor; attack?
-            if !self.actors[&id].can_attack() {
-                return;
-            }
-            let dir = match action {
-                Action::Move(dir) => old_pos.dir + dir,
-                _ => old_pos.dir,
-            };
+                    let dir = match action {
+                        Action::Move(dir) => old_pos.dir + dir,
+                        _ => old_pos.dir,
+                    };
 
-            let target_id = self.actors_pos[&new_pos.coord];
+                    let target_id = self.actors_pos[&new_pos.coord];
 
-            let mut target = self.actors.remove(&target_id).unwrap();
-            self.actors.get_mut(&id).unwrap().attacks(dir, &mut target);
-            self.actors.insert(target_id, target);
-
-        } else if self.at(new_pos.coord).tile_map_or(
-            false, |t| t.feature == Some(tile::Door(false))
-            ) {
-            // walked into door: open it
-            let mut map = self.map.clone().make_unique().clone();
-            let tile = map.remove(&new_pos.coord).unwrap();
-            map.insert(new_pos.coord, tile.add_feature(tile::Door(true)));
-            self.map = Arc::new(map);
-
-        } else if old_pos.coord == new_pos.coord || self.at(new_pos.coord).is_passable() {
-            // we've moved
-            self.actors.get_mut(&id).unwrap().moved(new_pos);
-            // we will remove the previous position on post_tick, so that
-            // for the rest of this turn this actor can be found through both new
-            // and old coor
-            self.actors_pos.insert(new_pos.coord, id);
-        } else {
-            // we hit the wall or something
+                    let mut target = self.actors.remove(&target_id).unwrap();
+                    actor.attacks(dir, &mut target);
+                    self.actors.insert(target_id, target);
+                    // Can't attack twice
+                    break;
+                } else if self.at(new_pos.coord).tile_map_or(
+                    false, |t| t.feature == Some(tile::Door(false))
+                    ) {
+                    // walked into door: open it
+                    let mut map = self.map.clone().make_unique().clone();
+                    let tile = map.remove(&new_pos.coord).unwrap();
+                    map.insert(new_pos.coord, tile.add_feature(tile::Door(true)));
+                    self.map = Arc::new(map);
+                    // Can't charge through the doors
+                    break;
+                } else if old_pos.coord == new_pos.coord || self.at(new_pos.coord).is_passable() {
+                    // we've moved
+                    actor.moved(self, new_pos);
+                    // we will remove the previous position on post_tick, so that
+                    // for the rest of this turn this actor can be found through both new
+                    // and old coor
+                    self.actors_pos.insert(new_pos.coord, id);
+                } else {
+                    // we hit the wall or something
+                }
         }
+        self.actors.insert(id, actor);
     }
 
     pub fn pre_tick(&mut self) {
