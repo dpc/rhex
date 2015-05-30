@@ -50,6 +50,7 @@ const KEY_LOWH : i32 = 'h' as i32;
 const KEY_LOWL : i32 = 'l' as i32;
 const KEY_LOWK : i32 = 'k' as i32;
 const KEY_LOWU : i32 = 'u' as i32;
+const KEY_LOWC : i32 = 'c' as i32;
 const KEY_LOWI : i32 = 'i' as i32;
 const KEY_LOWO : i32 = 'o' as i32;
 const KEY_LOWQ : i32 = 'q' as i32;
@@ -1136,6 +1137,7 @@ impl ui::UiFrontend for CursesUI {
                         KEY_LOWH => Action::Game(game::Action::Turn(Angle::Left)),
                         KEY_LOWL => Action::Game(game::Action::Turn(Angle::Right)),
                         KEY_LOWK => Action::Game(game::Action::Move(Angle::Forward)),
+                        KEY_LOWC => Action::Game(game::Action::Charge),
                         KEY_LOWU => Action::Game(game::Action::Spin(Angle::Left)),
                         KEY_LOWI => Action::Game(game::Action::Spin(Angle::Right)),
                         KEY_CAPH => Action::Game(game::Action::Move(Angle::Left)),

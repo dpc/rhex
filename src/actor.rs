@@ -167,6 +167,9 @@ pub struct State {
     pub mod_stats : Stats,
     pub stats : Stats,
 
+    /// Pending LoS (to be postprocessed)
+    pub pending_los: Visibility,
+
     /// Currently in LoS
     pub in_los: Visibility,
 
@@ -211,6 +214,7 @@ impl State {
             mod_stats: Stats::zero(), // from items etc.
             stats: Stats::zero(),     // effective stats
             in_los: HashSet::new(),
+            pending_los: HashSet::new(),
             visible: HashSet::new(),
             known: HashSet::new(),
             known_areas: HashSet::new(),
@@ -279,28 +283,27 @@ impl State {
         self.pos.coord + self.pos.dir.to_coordinate()
     }
 
-    pub fn pos_after_action(&self, action : Action) -> Position {
+    pub fn pos_after_action(&self, action : Action) -> Vec<Position> {
         let pos = self.pos;
         match action {
-            Action::Wait|Action::Pick|Action::Equip(_)|Action::Descend|Action::Fire(_) => pos,
-            Action::Turn(a) => pos + a,
-            Action::Move(a) => pos + (pos.dir + a).to_coordinate(),
-            Action::Spin(a) => pos + (pos.dir + a).to_coordinate() +
+            Action::Wait|Action::Pick|Action::Equip(_)|Action::Descend|Action::Fire(_) => vec!(pos),
+            Action::Turn(a) => vec!(pos + a),
+            Action::Move(a) => vec!(pos + (pos.dir + a).to_coordinate()),
+            Action::Charge => vec!(pos + pos.dir.to_coordinate(), pos + pos.dir.to_coordinate() + pos.dir.to_coordinate()),
+            Action::Spin(a) => vec!(pos + (pos.dir + a).to_coordinate() +
                 match a {
                     Angle::Right => Angle::Left,
                     Angle::Left => Angle::Right,
-                    _ => return pos,
-                },
+                    _ => return vec!(pos),
+                }
+            ),
         }
     }
 
-    fn postprocess_visibile(&mut self, gstate : &game::State) {
-
-        let los = calculate_los(self.pos, gstate);
-
+    fn los_to_visible(&self, gstate : &game::State, los : &Visibility ) -> Visibility {
         let mut visible = HashSet::new();
 
-        for &coord in &los {
+        for &coord in los {
             if gstate.light_map.contains_key(&coord) {
                 visible.insert(coord);
                 if gstate.at(coord).tile_map_or(true, |t| t.opaqueness() <= 10) {
@@ -315,10 +318,22 @@ impl State {
             }
         }
 
+        visible
+    }
+
+    fn postprocess_visibile(&mut self, gstate : &game::State) {
+        let total_los = self.pending_los.clone();
+        let total_visible = self.los_to_visible(gstate, &total_los);
+
+        self.pending_los = HashSet::new();
+        self.add_current_los_to_pending(gstate);
+
+        let visible = self.los_to_visible(gstate, &self.pending_los);
+
         let mut discovered = HashSet::new();
         let mut discovered_areas = HashSet::new();
 
-        for i in &visible {
+        for i in &total_visible {
             if !self.known.contains(i) {
                 self.known.insert(*i);
                 discovered.insert(*i);
@@ -336,7 +351,7 @@ impl State {
             }
         }
 
-        self.in_los = los;
+        self.in_los = self.pending_los.clone();
         self.visible = visible;
         self.discovered_areas = discovered_areas;
         self.discovered = discovered;
@@ -349,6 +364,7 @@ impl State {
         self.prev_sp = self.sp;
         self.did_attack = Vec::new();
         self.was_attacked_by = Vec::new();
+        self.pending_los = HashSet::new();
 
         self.noise_emision = 0;
         self.heared = HashMap::new();
@@ -436,6 +452,18 @@ impl State {
         } else {
             self.items_backpack.insert(ch, item);
         }
+    }
+
+    pub fn add_current_los_to_pending(&mut self, gstate : &game::State) {
+        let pos = self.pos;
+        algo::los2::los(
+            &|coord| gstate.at(coord).tile_map_or(10000, |tile| tile.opaqueness()),
+            &mut |coord, _ | {
+                let _ = self.pending_los.insert(coord);
+            },
+            10, pos.coord,
+            &[pos.dir]
+            );
     }
 
     pub fn unequip_slot(&mut self, slot : Slot) {
@@ -561,16 +589,4 @@ impl State {
     }
 }
 
-fn calculate_los(pos : Position, gstate : &game::State) -> Visibility {
-    let mut visibility = HashSet::new();
-    algo::los2::los(
-        &|coord| gstate.at(coord).tile_map_or(10000, |tile| tile.opaqueness()),
-        &mut |coord, _ | {
-            let _ = visibility.insert(coord);
-        },
-        10, pos.coord,
-        &[pos.dir]
-        );
 
-    visibility
-}
