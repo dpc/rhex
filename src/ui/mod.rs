@@ -198,7 +198,10 @@ impl<U : UiFrontend> Ui<U> {
                 pending_req.as_ref().map(|&(id, ref gstate)| &gstate.actors[&id])
                 ) {
                 match action {
-                    Action::Exit => return,
+                    Action::Exit => {
+                        debug!("Received Action::Exit");
+                        return
+                    },
                     Action::AutoExplore => {
                         if self.autoexploring.is_none() {
                             pending_action.push_back(action);

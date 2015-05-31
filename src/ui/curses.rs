@@ -1115,22 +1115,25 @@ impl ui::UiFrontend for CursesUI {
                 return None;
             }
             match self.mode {
-                Mode::FullScreen(fs_mode) => match fs_mode {
-                    FSMode::Quit => match ch {
-                        KEY_LOWY|KEY_CAPY => return Some(Action::Exit),
-                        _ => {
-                            self.mode = Mode::Normal;
-                            return Some(Action::Redraw);
-                        },
-                    },
-                    _ => {
-                        match ch {
+                Mode::FullScreen(fs_mode) => {
+                    //info!("Quit question received {:?} while fs_mode = {:?}", ch, fs_mode);
+                    match fs_mode {
+                        FSMode::Quit => match ch {
+                            KEY_LOWY|KEY_CAPY => return Some(Action::Exit),
                             _ => {
                                 self.mode = Mode::Normal;
                                 return Some(Action::Redraw);
+                            },
+                        },
+                        _ => {
+                            match ch {
+                                _ => {
+                                    self.mode = Mode::Normal;
+                                    return Some(Action::Redraw);
+                                }
                             }
-                        }
-                    },
+                        },
+                    }
                 },
                 Mode::Normal => {
                     return Some(match ch {

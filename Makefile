@@ -3,7 +3,7 @@ include Makefile.defs
 default: $(DEFAULT_TARGET)
 
 .PHONY: run test build doc clean release rrun
-run test build doc clean:
+test build doc clean:
 	cargo $@
 
 simple:
@@ -12,7 +12,7 @@ simple:
 release:
 	cargo build --release
 
-rrun:
+run:
 	cargo run --release
 
 .PHONY: docview
