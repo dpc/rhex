@@ -13,7 +13,8 @@ rand = "*"
 time = "*"
 hex2d = "*"
 hex2d-dpcext = "*"
-log ="*"
+log = "*"
+fern = "*"
 
 [dependencies.schedule_recv]
 git = "https://github.com/PeterReid/schedule_recv.git"

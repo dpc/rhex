@@ -1123,13 +1123,11 @@ impl ui::UiFrontend for CursesUI {
                             return Some(Action::Redraw);
                         },
                     },
-                    _ => {
-                        match ch {
-                            _ => {
-                                self.mode = Mode::Normal;
-                                return Some(Action::Redraw);
-                            }
-                        }
+                    _ => match ch {
+                        _ => {
+                            self.mode = Mode::Normal;
+                            return Some(Action::Redraw);
+                        },
                     },
                 },
                 Mode::Normal => {
