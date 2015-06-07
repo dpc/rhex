@@ -1,6 +1,5 @@
 #![feature(core)]
 #![feature(convert)]
-#![feature(std_misc)]
 #![feature(libc)]
 #![feature(alloc)]
 #![feature(collections)]

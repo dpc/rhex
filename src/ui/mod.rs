@@ -5,7 +5,7 @@ use time;
 use game::controller::{Request, Reply};
 use hex2d;
 
-use actor::{self, NoiseType, Race};
+use actor::{self, Noise, Race};
 use game;
 use hex2dext::algo::bfs;
 
@@ -70,7 +70,7 @@ impl<U : UiFrontend> Ui<U> {
                                      .item_map_or(false, |_| true)
                                     ) ||
         astate.heared.iter()
-        .filter(|&(c, t)| *c != astate.pos.coord && *t != NoiseType::Creature(Race::Pony))
+        .filter(|&(c, t)| *c != astate.pos.coord && *t != Noise::Creature(Race::Pony))
         .any(|(c, _)| !astate.sees(*c)) ||
         astate.discovered_stairs(gstate)
     }
