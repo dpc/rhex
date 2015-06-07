@@ -1,4 +1,4 @@
-use std::collections::{HashSet,HashMap};
+use std::collections::{BTreeSet,BTreeMap};
 use std::ops::{Add, Sub};
 use std::cmp;
 
@@ -10,20 +10,20 @@ use game::tile::{Feature};
 use util;
 use item::Item;
 
-pub type Visibility = HashSet<Coordinate>;
-pub type NoiseMap = HashMap<Coordinate, NoiseType>;
+pub type Visibility = BTreeSet<Coordinate>;
+pub type NoiseMap = BTreeMap<Coordinate, Noise>;
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
-pub enum NoiseType {
+pub enum Noise {
     Creature(Race),
     Door,
 }
 
-impl NoiseType {
+impl Noise {
     pub fn description(&self) -> String {
         match *self {
-            NoiseType::Creature(cr) => cr.description(),
-            NoiseType::Door => "Door opening".to_string(),
+            Noise::Creature(cr) => cr.description(),
+            Noise::Door => "Door opening".to_string(),
         }
     }
 }
@@ -129,7 +129,7 @@ impl Sub for Stats {
     }
 }
 
-#[derive(Copy, Clone, Eq, PartialEq, Debug, Hash)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug, Hash, Ord, PartialOrd)]
 pub enum Slot {
     Head,
     Feet,
@@ -196,9 +196,9 @@ pub struct State {
     pub melee_cd : i32,
     pub action_cd : i32,
 
-    pub items_letters: HashSet<char>,
-    pub items_equipped : HashMap<Slot, (char, Box<Item>)>,
-    pub items_backpack : HashMap<char, Box<Item>>,
+    pub items_letters: BTreeSet<char>,
+    pub items_equipped : BTreeMap<Slot, (char, Box<Item>)>,
+    pub items_backpack : BTreeMap<char, Box<Item>>,
 
     pub was_attacked_by : Vec<AttackResult>,
     pub did_attack : Vec<AttackResult>,
@@ -215,19 +215,19 @@ impl State {
             base_stats: stats,        // base stats
             mod_stats: Stats::zero(), // from items etc.
             stats: Stats::zero(),     // effective stats
-            in_los: HashSet::new(),
-            temporary_los: HashSet::new(),
-            visible: HashSet::new(),
-            known: HashSet::new(),
-            known_areas: HashSet::new(),
-            heared: HashMap::new(),
+            in_los: BTreeSet::new(),
+            temporary_los: BTreeSet::new(),
+            visible: BTreeSet::new(),
+            known: BTreeSet::new(),
+            known_areas: BTreeSet::new(),
+            heared: BTreeMap::new(),
             noise_emision: 0,
-            discovered: HashSet::new(),
-            discovered_areas: HashSet::new(),
+            discovered: BTreeSet::new(),
+            discovered_areas: BTreeSet::new(),
             light_emision: 0,
-            items_backpack: HashMap::new(),
-            items_equipped: HashMap::new(),
-            items_letters: HashSet::new(),
+            items_backpack: BTreeMap::new(),
+            items_equipped: BTreeMap::new(),
+            items_letters: BTreeSet::new(),
             melee_cd: 0,
             action_cd: 0,
             was_attacked_by: Vec::new(),
@@ -303,13 +303,13 @@ impl State {
     }
 
     fn los_to_visible(&self, gstate : &game::State, los : &Visibility ) -> Visibility {
-        let mut visible = HashSet::new();
+        let mut visible = BTreeSet::new();
 
         for &coord in los {
             if gstate.light_map.contains_key(&coord) {
                 visible.insert(coord);
                 if gstate.at(coord).tile_map_or(true, |t| t.opaqueness() <= 10) {
-                    for &n in &[coord + self.pos.dir, coord + (self.pos.dir + Angle::Right), coord + (self.pos.dir + Angle::Left)] {
+                    for n in self.pos.dir.arc(1).iter().map(|&d| coord + d) {
                         if gstate.at(n).tile_map_or(true, |t| t.opaqueness() > 10) {
                             visible.insert(n);
                         }
@@ -327,13 +327,13 @@ impl State {
         let total_los = self.temporary_los.clone();
         let total_visible = self.los_to_visible(gstate, &total_los);
 
-        self.temporary_los = HashSet::new();
-        self.add_current_los_to_pending(gstate);
+        self.temporary_los = BTreeSet::new();
+        self.add_current_los_to_temporary_los(gstate);
 
         let visible = self.los_to_visible(gstate, &self.temporary_los);
 
-        let mut discovered = HashSet::new();
-        let mut discovered_areas = HashSet::new();
+        let mut discovered = BTreeSet::new();
+        let mut discovered_areas = BTreeSet::new();
 
         for i in &total_visible {
             if !self.known.contains(i) {
@@ -366,10 +366,10 @@ impl State {
         self.prev_sp = self.sp;
         self.did_attack = Vec::new();
         self.was_attacked_by = Vec::new();
-        self.temporary_los = HashSet::new();
+        self.temporary_los = BTreeSet::new();
 
         self.noise_emision = 0;
-        self.heared = HashMap::new();
+        self.heared = BTreeMap::new();
     }
 
     pub fn noise_makes(&mut self, noise : i32) {
@@ -378,7 +378,7 @@ impl State {
         }
     }
 
-    pub fn noise_hears(&mut self, coord : Coordinate, type_ : NoiseType) {
+    pub fn noise_hears(&mut self, coord : Coordinate, type_ : Noise) {
         self.heared.insert(coord, type_);
     }
 
@@ -456,7 +456,7 @@ impl State {
         }
     }
 
-    fn add_current_los_to_pending(&mut self, gstate : &game::State) {
+    fn add_current_los_to_temporary_los(&mut self, gstate : &game::State) {
         let pos = self.pos;
         algo::los2::los(
             &|coord| gstate.at(coord).tile_map_or(10000, |tile| tile.opaqueness()),
@@ -565,13 +565,13 @@ impl State {
 
     pub fn moved(&mut self, gstate : &game::State, new_pos : Position) {
         self.pos = new_pos;
-        self.add_current_los_to_pending(gstate);
+        self.add_current_los_to_temporary_los(gstate);
         self.noise_makes(2);
     }
 
     pub fn changed_level(&mut self) {
-        self.known = HashSet::new();
-        self.known_areas = HashSet::new();
+        self.known = BTreeSet::new();
+        self.known_areas = BTreeSet::new();
     }
 
     pub fn is_player(&self) -> bool {

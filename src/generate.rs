@@ -2,7 +2,7 @@
 use rand;
 use rand::Rng;
 use std::collections::VecDeque;
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 use hex2d as h2d;
 use hex2d::Angle::*;
@@ -33,10 +33,10 @@ impl DungeonGenerator {
             start: None,
             stairs: None,
             tile_count: 0,
-            map: HashMap::new(),
+            map: BTreeMap::new(),
             endpoints:  VecDeque::new(),
-            actors: HashMap::new(),
-            items: HashMap::new(),
+            actors: BTreeMap::new(),
+            items: BTreeMap::new(),
         }
     }
 }
@@ -71,7 +71,7 @@ fn tile_is_deadend(map : &Map, coord : Coordinate) -> bool {
 
 impl DungeonGenerator {
     /* generate_map_feature */
-   // fn generate_continue_coridor(&self, map : &mut HashMap<h2d::Coordinate, Tile>,
+   // fn generate_continue_coridor(&self, map : &mut BTreeMap<h2d::Coordinate, Tile>,
     fn generate_continue_coridor(&mut self, pos : h2d::Position) {
 
         let npos = pos + pos.dir.to_coordinate();

@@ -1,12 +1,12 @@
-use std::collections::{HashMap, HashSet};
-use std::collections::hash_map::Entry;
+use std::collections::{BTreeMap, BTreeSet};
+use std::collections::btree_map::Entry;
 use std::sync::{Arc};
 
 use hex2dext::algo::bfs;
 use hex2d::{Coordinate, Direction, Angle, Position};
 use hex2d::Angle::{Left, Right, Forward};
 
-use actor::{self, Race, NoiseType};
+use actor::{self, Race, Noise};
 use generate;
 use hex2dext::algo;
 use item::Item;
@@ -20,10 +20,10 @@ pub mod controller;
 
 pub use self::controller::Controller;
 
-pub type Map = HashMap<Coordinate, tile::Tile>;
-pub type Actors = HashMap<Coordinate, actor::State>;
-pub type Items = HashMap<Coordinate, Box<Item>>;
-pub type LightMap = HashMap<Coordinate, u32>;
+pub type Map = BTreeMap<Coordinate, tile::Tile>;
+pub type Actors = BTreeMap<Coordinate, actor::State>;
+pub type Items = BTreeMap<Coordinate, Box<Item>>;
+pub type LightMap = BTreeMap<Coordinate, u32>;
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub enum Action {
@@ -40,9 +40,9 @@ pub enum Action {
 
 #[derive(Clone, Debug)]
 pub struct State {
-    pub actors: HashMap<u32, actor::State>, // id -> State
-    pub actors_pos: HashMap<Coordinate, u32>, // coord -> id
-    pub actors_dead : HashSet<u32>,
+    pub actors: BTreeMap<u32, actor::State>, // id -> State
+    pub actors_pos: BTreeMap<Coordinate, u32>, // coord -> id
+    pub actors_dead : BTreeSet<u32>,
     pub actors_counter : u32,
     pub map : Arc<Map>,
     pub items: Items,
@@ -69,8 +69,8 @@ impl State {
         let cp = Coordinate::new(0, 0);
         let (map, gen_actors, items) = generate::DungeonGenerator::new(0).generate_map(cp, 400);
 
-        let mut actors = HashMap::new();
-        let mut actors_pos = HashMap::new();
+        let mut actors = BTreeMap::new();
+        let mut actors_pos = BTreeMap::new();
 
         let mut actors_counter = 0;
 
@@ -84,13 +84,13 @@ impl State {
             actors: actors,
             actors_pos: actors_pos,
             actors_counter: actors_counter,
-            actors_dead: HashSet::new(),
+            actors_dead: BTreeSet::new(),
             items: items,
             map: Arc::new(map),
             turn: 0,
             level: 0,
             descend: false,
-            light_map: HashMap::new(),
+            light_map: BTreeMap::new(),
         };
 
         state.spawn_player(random_pos(0, 0));
@@ -103,8 +103,8 @@ impl State {
         let cp = Coordinate::new(0, 0);
         let (map, gen_actors, items) = generate::DungeonGenerator::new(self.level + 1).generate_map(cp, 400);
 
-        let mut actors = HashMap::new();
-        let mut actors_pos = HashMap::new();
+        let mut actors = BTreeMap::new();
+        let mut actors_pos = BTreeMap::new();
 
         let mut actors_counter = 0;
 
@@ -135,13 +135,13 @@ impl State {
             actors: actors,
             actors_pos: actors_pos,
             actors_counter: actors_counter,
-            actors_dead: HashSet::new(),
+            actors_dead: BTreeSet::new(),
             items: items,
             map: Arc::new(map),
             turn: self.turn,
             descend: false,
             level: self.level + 1,
-            light_map: HashMap::new(),
+            light_map: BTreeMap::new(),
         };
 
         {
@@ -169,7 +169,7 @@ impl State {
                 let source_coord = self.actors[id].pos.coord;
                 source_coord.for_each_in_range(source_emission, |coord| {
                     if let Some(&target_id) = self.actors_pos.get(&coord) {
-                        self.actors.get_mut(&target_id).unwrap().noise_hears(source_coord, NoiseType::Creature(source_race));
+                        self.actors.get_mut(&target_id).unwrap().noise_hears(source_coord, Noise::Creature(source_race));
                     }
                 });
             }
@@ -185,7 +185,7 @@ impl State {
     }
 
     pub fn recalculate_light_map(&mut self) {
-        let mut light_map : HashMap<Coordinate, u32> = HashMap::new();
+        let mut light_map : BTreeMap<Coordinate, u32> = BTreeMap::new();
 
         for (pos, tile) in &*self.map {
             let light = tile.light;
@@ -325,7 +325,7 @@ impl State {
                     false, |t| t.feature == Some(tile::Door(false))
                     ) {
                     // walked into door: open it
-                    let mut map = self.map.clone().make_unique().clone();
+                    let mut map = unsafe{ self.map.clone().make_unique() }.clone();
                     let tile = map.remove(&new_pos.coord).unwrap();
                     map.insert(new_pos.coord, tile.add_feature(tile::Door(true)));
                     self.map = Arc::new(map);
@@ -360,13 +360,16 @@ impl State {
             if self.actors[id].is_dead() && !self.actors_dead.contains(&id){
                 let mut a = self.actors.remove(&id).unwrap();
 
-                for (_, item) in a.items_backpack.drain() {
-                    self.at_mut(a.pos.coord).drop_item(item);
+                for (_, item) in a.items_backpack.iter() {
+                    self.at_mut(a.pos.coord).drop_item(item.clone());
                 }
+                a.items_backpack.clear();
 
-                for (_, (_, item)) in a.items_equipped.drain() {
-                    self.at_mut(a.pos.coord).drop_item(item);
+                for (_, &(_, ref item)) in a.items_equipped.iter() {
+                    self.at_mut(a.pos.coord).drop_item(item.clone());
                 }
+                a.items_equipped.clear();
+
                 self.actors.insert(*id, a);
 
                 self.actors_dead.insert(*id);
