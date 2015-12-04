@@ -325,10 +325,11 @@ impl State {
                     false, |t| t.feature == Some(tile::Door(false))
                     ) {
                     // walked into door: open it
-                    let mut map = unsafe{ self.map.clone().make_unique() }.clone();
+                    let mut map = self.map.clone();
+                    let mut map = Arc::make_mut(&mut map);
                     let tile = map.remove(&new_pos.coord).unwrap();
                     map.insert(new_pos.coord, tile.add_feature(tile::Door(true)));
-                    self.map = Arc::new(map);
+                    self.map = Arc::new(map.clone());
                     // Can't charge through the doors
                     break;
                 } else if old_pos.coord == new_pos.coord || self.at(new_pos.coord).is_passable() {

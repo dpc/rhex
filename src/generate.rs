@@ -54,7 +54,7 @@ fn tile_is_deadend(map : &Map, coord : Coordinate) -> bool {
 
     let mut changes = 0;
     let mut last = passable[len - 1];
-    for i in (0..len) {
+    for i in 0..len {
         let current = passable[i];
         if last != current {
             changes += 1;

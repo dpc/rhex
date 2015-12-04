@@ -1,8 +1,9 @@
 #![feature(core)]
 #![feature(convert)]
 #![feature(libc)]
-#![feature(alloc)]
-#![feature(collections)]
+#![feature(arc_unique)]
+#![feature(core_str_ext)]
+#![feature(slice_chars)]
 #![allow(deprecated)]
 
 extern crate ncurses;
