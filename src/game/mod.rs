@@ -1,7 +1,6 @@
 use std::collections::{HashMap, HashSet};
 use std::collections::hash_state::{DefaultState};
 use simplemap::SimpleMap;
-use std::collections::btree_map::Entry;
 use std::sync::{Arc};
 use fnv::FnvHasher;
 

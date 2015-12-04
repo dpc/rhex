@@ -1,9 +1,7 @@
 #![feature(core)]
 #![feature(convert)]
 #![feature(libc)]
-#![feature(arc_unique)]
 #![feature(core_str_ext)]
-#![feature(slice_chars)]
 #![feature(hashmap_hasher)]
 #![allow(deprecated)]
 

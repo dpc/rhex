@@ -1,6 +1,4 @@
 use std::collections::{HashMap, HashSet};
-use std::collections::hash_state::{DefaultState};
-use simplemap::SimpleMap;
 use std::ops::{Add, Sub};
 use std::cmp;
 
@@ -18,14 +16,12 @@ pub type NoiseMap = HashMap<Coordinate, Noise>;
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub enum Noise {
     Creature(Race),
-    Door,
 }
 
 impl Noise {
     pub fn description(&self) -> String {
         match *self {
             Noise::Creature(cr) => cr.description(),
-            Noise::Door => "Door opening".to_string(),
         }
     }
 }

@@ -1,20 +1,62 @@
-include Makefile.defs
+PKG_NAME=rhex
+DOCS_DEFAULT_MODULE=rhex
+ifeq (, $(shell which cargo-check 2> /dev/null))
+DEFAULT_TARGET=build
+else
+DEFAULT_TARGET=check
+endif
 
 default: $(DEFAULT_TARGET)
 
-.PHONY: run test build doc clean release rrun
-test build doc clean:
-	cargo $@
+# Mostly generic part goes below
 
-simple:
-	cargo run
+ifneq ($(RELEASE),)
+$(info RELEASE BUILD)
+CARGO_FLAGS += --release
+ALL_TARGETS += build test bench $(EXAMPLES)
+else
+$(info DEBUG BUILD; use `RELEASE=true make [args]` for release build)
+ALL_TARGETS += build $(EXAMPLES) test
+endif
 
-release:
-	cargo build --release
+EXAMPLES = $(shell cd examples 2>/dev/null && ls *.rs 2>/dev/null | sed -e 's/.rs$$//g' )
 
-run:
-	cargo run --release
+all: $(ALL_TARGETS)
+
+.PHONY: run test build doc clean
+run test build clean:
+	cargo $@ $(CARGO_FLAGS)
+
+check:
+	$(info Running check; use `make build` to actually build)
+	cargo $@ $(CARGO_FLAGS)
+
+.PHONY: bench
+bench:
+	cargo $@ $(filter-out --release,$(CARGO_FLAGS))
+
+.PHONY: longtest
+longtest:
+	for i in `seq 10`; do cargo test $(CARGO_FLAGS) || exit 1 ; done
+
+.PHONY: $(EXAMPLES)
+$(EXAMPLES):
+	cargo build --example $@ $(CARGO_FLAGS)
+
+doc: FORCE
+	cp src/lib.rs src/lib.rs.orig
+	sed -i -e '/\/\/ MAKE_DOC_REPLACEME/{ r examples/echo.rs' -e 'd  }' src/lib.rs
+	-cargo doc
+	mv src/lib.rs.orig src/lib.rs
+
+publishdoc: doc
+	echo '<meta http-equiv="refresh" content="0;url='${DOCS_DEFAULT_MODULE}'/index.html">' > target/doc/index.html
+	ghp-import -n target/doc
+	git push -f origin gh-pages
 
 .PHONY: docview
 docview: doc
 	xdg-open target/doc/$(PKG_NAME)/index.html
+
+.PHONY: FORCE
+FORCE:
