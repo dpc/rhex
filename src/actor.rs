@@ -1,4 +1,6 @@
-use std::collections::{BTreeSet,BTreeMap};
+use std::collections::{HashMap, HashSet};
+use std::collections::hash_state::{DefaultState};
+use simplemap::SimpleMap;
 use std::ops::{Add, Sub};
 use std::cmp;
 
@@ -10,8 +12,8 @@ use game::tile::{Feature};
 use util;
 use item::Item;
 
-pub type Visibility = BTreeSet<Coordinate>;
-pub type NoiseMap = BTreeMap<Coordinate, Noise>;
+pub type Visibility = HashSet<Coordinate>;
+pub type NoiseMap = HashMap<Coordinate, Noise>;
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub enum Noise {
@@ -196,9 +198,9 @@ pub struct State {
     pub melee_cd : i32,
     pub action_cd : i32,
 
-    pub items_letters: BTreeSet<char>,
-    pub items_equipped : BTreeMap<Slot, (char, Box<Item>)>,
-    pub items_backpack : BTreeMap<char, Box<Item>>,
+    pub items_letters: HashSet<char>,
+    pub items_equipped : HashMap<Slot, (char, Box<Item>)>,
+    pub items_backpack : HashMap<char, Box<Item>>,
 
     pub was_attacked_by : Vec<AttackResult>,
     pub did_attack : Vec<AttackResult>,
@@ -215,19 +217,19 @@ impl State {
             base_stats: stats,        // base stats
             mod_stats: Stats::zero(), // from items etc.
             stats: Stats::zero(),     // effective stats
-            in_los: BTreeSet::new(),
-            temporary_los: BTreeSet::new(),
-            visible: BTreeSet::new(),
-            known: BTreeSet::new(),
-            known_areas: BTreeSet::new(),
-            heared: BTreeMap::new(),
+            in_los: Default::default(),
+            temporary_los: Default::default(),
+            visible: Default::default(),
+            known: Default::default(),
+            known_areas: Default::default(),
+            heared: HashMap::new(),
             noise_emision: 0,
-            discovered: BTreeSet::new(),
-            discovered_areas: BTreeSet::new(),
+            discovered: Default::default(),
+            discovered_areas: Default::default(),
             light_emision: 0,
-            items_backpack: BTreeMap::new(),
-            items_equipped: BTreeMap::new(),
-            items_letters: BTreeSet::new(),
+            items_backpack: HashMap::new(),
+            items_equipped: HashMap::new(),
+            items_letters: Default::default(),
             melee_cd: 0,
             action_cd: 0,
             was_attacked_by: Vec::new(),
@@ -303,10 +305,10 @@ impl State {
     }
 
     fn los_to_visible(&self, gstate : &game::State, los : &Visibility ) -> Visibility {
-        let mut visible = BTreeSet::new();
+        let mut visible : Visibility = Default::default();
 
         for &coord in los {
-            if gstate.light_map.contains_key(&coord) {
+            if gstate.light_map[coord] > 0 {
                 visible.insert(coord);
                 if gstate.at(coord).tile_map_or(true, |t| t.opaqueness() <= 10) {
                     for n in self.pos.dir.arc(1).iter().map(|&d| coord + d) {
@@ -327,13 +329,13 @@ impl State {
         let total_los = self.temporary_los.clone();
         let total_visible = self.los_to_visible(gstate, &total_los);
 
-        self.temporary_los = BTreeSet::new();
+        self.temporary_los = Default::default();
         self.add_current_los_to_temporary_los(gstate);
 
         let visible = self.los_to_visible(gstate, &self.temporary_los);
 
-        let mut discovered = BTreeSet::new();
-        let mut discovered_areas = BTreeSet::new();
+        let mut discovered : HashSet<_> = Default::default();
+        let mut discovered_areas : HashSet<_> = Default::default();
 
         for i in &total_visible {
             if !self.known.contains(i) {
@@ -366,10 +368,10 @@ impl State {
         self.prev_sp = self.sp;
         self.did_attack = Vec::new();
         self.was_attacked_by = Vec::new();
-        self.temporary_los = BTreeSet::new();
+        self.temporary_los = Default::default();
 
         self.noise_emision = 0;
-        self.heared = BTreeMap::new();
+        self.heared = HashMap::new();
     }
 
     pub fn noise_makes(&mut self, noise : i32) {
@@ -570,8 +572,8 @@ impl State {
     }
 
     pub fn changed_level(&mut self) {
-        self.known = BTreeSet::new();
-        self.known_areas = BTreeSet::new();
+        self.known = Default::default();
+        self.known_areas = Default::default();
     }
 
     pub fn is_player(&self) -> bool {

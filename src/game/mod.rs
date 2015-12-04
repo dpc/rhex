@@ -1,6 +1,9 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{HashMap, HashSet};
+use std::collections::hash_state::{DefaultState};
+use simplemap::SimpleMap;
 use std::collections::btree_map::Entry;
 use std::sync::{Arc};
+use fnv::FnvHasher;
 
 use hex2dext::algo::bfs;
 use hex2d::{Coordinate, Direction, Angle, Position};
@@ -20,10 +23,10 @@ pub mod controller;
 
 pub use self::controller::Controller;
 
-pub type Map = BTreeMap<Coordinate, tile::Tile>;
-pub type Actors = BTreeMap<Coordinate, actor::State>;
-pub type Items = BTreeMap<Coordinate, Box<Item>>;
-pub type LightMap = BTreeMap<Coordinate, u32>;
+pub type Map = SimpleMap<Coordinate, tile::Tile>;
+pub type Actors = HashMap<Coordinate, actor::State, DefaultState<FnvHasher>>;
+pub type Items = HashMap<Coordinate, Box<Item>>;
+pub type LightMap = SimpleMap<Coordinate, u32>;
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub enum Action {
@@ -40,9 +43,9 @@ pub enum Action {
 
 #[derive(Clone, Debug)]
 pub struct State {
-    pub actors: BTreeMap<u32, actor::State>, // id -> State
-    pub actors_pos: BTreeMap<Coordinate, u32>, // coord -> id
-    pub actors_dead : BTreeSet<u32>,
+    pub actors: HashMap<u32, actor::State, DefaultState<FnvHasher>>, // id -> State
+    pub actors_pos: HashMap<Coordinate, u32, DefaultState<FnvHasher>>, // coord -> id
+    pub actors_dead : HashSet<u32, DefaultState<FnvHasher>>,
     pub actors_counter : u32,
     pub map : Arc<Map>,
     pub items: Items,
@@ -69,10 +72,10 @@ impl State {
         let cp = Coordinate::new(0, 0);
         let (map, gen_actors, items) = generate::DungeonGenerator::new(0).generate_map(cp, 400);
 
-        let mut actors = BTreeMap::new();
-        let mut actors_pos = BTreeMap::new();
+        let mut actors : HashMap<u32, actor::State, DefaultState<FnvHasher>> = Default::default();
+        let mut actors_pos : HashMap<Coordinate, u32, _> = Default::default();
 
-        let mut actors_counter = 0;
+        let mut actors_counter = 0u32;
 
         for (coord, astate) in gen_actors {
             actors_pos.insert(coord, actors_counter);
@@ -84,13 +87,13 @@ impl State {
             actors: actors,
             actors_pos: actors_pos,
             actors_counter: actors_counter,
-            actors_dead: BTreeSet::new(),
+            actors_dead: Default::default(),
             items: items,
             map: Arc::new(map),
             turn: 0,
             level: 0,
             descend: false,
-            light_map: BTreeMap::new(),
+            light_map: LightMap::new(),
         };
 
         state.spawn_player(random_pos(0, 0));
@@ -103,8 +106,8 @@ impl State {
         let cp = Coordinate::new(0, 0);
         let (map, gen_actors, items) = generate::DungeonGenerator::new(self.level + 1).generate_map(cp, 400);
 
-        let mut actors = BTreeMap::new();
-        let mut actors_pos = BTreeMap::new();
+        let mut actors : HashMap<u32, actor::State, DefaultState<FnvHasher>> = Default::default();
+        let mut actors_pos : HashMap<Coordinate, u32, _> = Default::default();
 
         let mut actors_counter = 0;
 
@@ -135,13 +138,13 @@ impl State {
             actors: actors,
             actors_pos: actors_pos,
             actors_counter: actors_counter,
-            actors_dead: BTreeSet::new(),
+            actors_dead: Default::default(),
             items: items,
             map: Arc::new(map),
             turn: self.turn,
             descend: false,
             level: self.level + 1,
-            light_map: BTreeMap::new(),
+            light_map: Default::default(),
         };
 
         {
@@ -185,9 +188,9 @@ impl State {
     }
 
     pub fn recalculate_light_map(&mut self) {
-        let mut light_map : BTreeMap<Coordinate, u32> = BTreeMap::new();
+        let mut light_map : SimpleMap<Coordinate, u32> = Default::default();
 
-        for (pos, tile) in &*self.map {
+        for (pos, tile) in self.map.iter() {
             let light = tile.light;
             if light > 0 {
                 algo::los::los(
@@ -199,16 +202,8 @@ impl State {
                         }
                     },
                     &mut |coord, light| {
-                        match light_map.entry(coord) {
-                            Entry::Occupied(mut entry) => {
-                                let val = entry.get_mut();
-                                if light as u32 > *val {
-                                    *val = light as u32;
-                                }
-                            },
-                            Entry::Vacant(entry) => {
-                                entry.insert(light as u32);
-                            },
+                        if light_map[coord] < light as u32 {
+                            light_map[coord] = light as u32;
                         }
                     },
                     light, *pos, Direction::all()
@@ -229,17 +224,9 @@ impl State {
                         }
                     },
                     &mut |coord, light| {
-                        match light_map.entry(coord) {
-                            Entry::Occupied(mut entry) => {
-                                let val = entry.get_mut();
-                                if light as u32 > *val {
-                                    *val = light as u32;
-                                }
-                            },
-                            Entry::Vacant(entry) => {
-                                entry.insert(light as u32);
-                            },
-                        }
+                       if light_map[coord] < light as u32 {
+                           light_map[coord] = light as u32;
+                       }
                     },
                     astate.light_emision as i32, pos, Direction::all()
                 );
@@ -327,8 +314,8 @@ impl State {
                     // walked into door: open it
                     let mut map = self.map.clone();
                     let mut map = Arc::make_mut(&mut map);
-                    let tile = map.remove(&new_pos.coord).unwrap();
-                    map.insert(new_pos.coord, tile.add_feature(tile::Door(true)));
+                    let tile = map[new_pos.coord].clone();
+                    map[new_pos.coord] = tile.add_feature(tile::Door(true));
                     self.map = Arc::new(map.clone());
                     // Can't charge through the doors
                     break;
@@ -416,14 +403,16 @@ pub struct At<'a> {
 }
 
 impl<'a> At<'a> {
+    // TODO: remove option
     pub fn tile(&self) -> Option<&'a tile::Tile> {
-        self.state.map.get(&self.coord)
+        Some(&self.state.map[self.coord])
     }
 
-    pub fn tile_map_or<R, F>(&self, def: R, f : F) -> R
+    // TODO: delme
+    pub fn tile_map_or<R, F>(&self, _ : R, f : F) -> R
         where F : Fn(&tile::Tile) -> R
     {
-        self.state.map.get(&self.coord).map_or(def, |a| f(a))
+        f(&self.state.map[self.coord])
     }
 
     pub fn actor_map_or<R, F : Fn(&actor::State) -> R>
@@ -447,21 +436,21 @@ impl<'a> At<'a> {
     }
 
     pub fn _light(&self) -> u32 {
-        self.state.light_map.get(&self.coord).map_or(0, |l| *l)
+        self.state.light_map[self.coord]
     }
 
     pub fn light_as_seen_by(&self, astate : &actor::State) -> u32 {
         let pl_coord = astate.pos.coord;
 
-        let ownlight = self.state.light_map.get(&self.coord).map_or(0, |l| *l);
-        if self.state.map.get(&self.coord).map_or(0, |t| t.opaqueness()) < 20 {
+        let ownlight = self.state.light_map[self.coord];
+        if self.state.map[self.coord].opaqueness() < 20 {
             ownlight
         } else {
             let reldir = -pl_coord.direction_to_cw(self.coord).unwrap_or(astate.pos.dir);
             for &dir in &[reldir, reldir + Left, reldir + Right] {
                 let d_coord = self.coord + dir;
-                if astate.in_los.contains(&d_coord) && self.state.map.get(&d_coord).map_or(0, |t| t.opaqueness()) < 20 {
-                    return self.state.light_map.get(&d_coord).map_or(0, |l| *l)
+                if astate.in_los.contains(&d_coord) && self.state.map[d_coord].opaqueness() < 20 {
+                    return self.state.light_map[d_coord]
                 }
             }
             ownlight

@@ -4,8 +4,10 @@
 #![feature(arc_unique)]
 #![feature(core_str_ext)]
 #![feature(slice_chars)]
+#![feature(hashmap_hasher)]
 #![allow(deprecated)]
 
+extern crate simplemap;
 extern crate ncurses;
 extern crate hex2d;
 extern crate hex2d_dpcext as hex2dext;
@@ -18,6 +20,7 @@ extern crate time;
 extern crate log;
 extern crate fern;
 extern crate core;
+extern crate fnv;
 
 use std::sync::mpsc;
 use std::thread;

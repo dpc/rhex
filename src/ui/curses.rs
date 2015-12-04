@@ -388,18 +388,14 @@ impl CursesUI {
 
                 let (visible, _in_los, knows, tt, t, light) = if is_proper_coord {
 
-                    let t = gstate.map.get(&c);
-
-                    let tt = match t {
-                        Some(t) => t.type_,
-                        None => tile::Wall,
-                    };
+                    let t = gstate.map[c].clone();
+                    let tt = t.type_;
 
                     (
                         astate.sees(c) || astate.is_dead(),
                         astate.in_los(c) || astate.is_dead(),
                         astate.knows(c),
-                        Some(tt), t,
+                        Some(tt), Some(t),
                         gstate.at(c).light_as_seen_by(astate)
                     )
                 } else {

@@ -27,7 +27,7 @@ impl Feature {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Debug)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub struct Tile {
     pub type_ : Type,
     pub feature : Option<Feature>,
@@ -113,3 +113,13 @@ impl Type {
         }
     }
 }
+
+impl Default for Tile {
+    fn default() -> Tile {
+        Tile {
+            type_: Wall,
+            feature: None, area: None, light: 0
+        }
+    }
+}
+

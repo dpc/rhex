@@ -2,7 +2,8 @@
 use rand;
 use rand::Rng;
 use std::collections::VecDeque;
-use std::collections::BTreeMap;
+use std::collections::HashMap;
+use simplemap::SimpleMap;
 
 use hex2d as h2d;
 use hex2d::Angle::*;
@@ -20,7 +21,7 @@ pub struct DungeonGenerator {
     start : Option<Coordinate>,
     stairs : Option<Coordinate>,
     tile_count : u32,
-    map: Map,
+    map: HashMap<Coordinate, tile::Tile>,
     endpoints: EndpointQueue,
     actors: Actors,
     items: Items,
@@ -33,10 +34,10 @@ impl DungeonGenerator {
             start: None,
             stairs: None,
             tile_count: 0,
-            map: BTreeMap::new(),
+            map: HashMap::new(),
             endpoints:  VecDeque::new(),
-            actors: BTreeMap::new(),
-            items: BTreeMap::new(),
+            actors: Default::default(),
+            items: HashMap::new(),
         }
     }
 }
@@ -45,7 +46,7 @@ fn tile_is_deadend(map : &Map, coord : Coordinate) -> bool {
     let neighbors = coord.neighbors();
 
     let passable : Vec<bool> = neighbors.iter().map(
-        |n_coord| map.get(n_coord).map_or(false, |t| t.is_passable())
+        |n_coord| map[*n_coord].is_passable()
         ).collect();
 
     let len = passable.len();
@@ -71,7 +72,7 @@ fn tile_is_deadend(map : &Map, coord : Coordinate) -> bool {
 
 impl DungeonGenerator {
     /* generate_map_feature */
-   // fn generate_continue_coridor(&self, map : &mut BTreeMap<h2d::Coordinate, Tile>,
+   // fn generate_continue_coridor(&self, map : &mut HashMap<h2d::Coordinate, Tile>,
     fn generate_continue_coridor(&mut self, pos : h2d::Position) {
 
         let npos = pos + pos.dir.to_coordinate();
@@ -257,15 +258,21 @@ impl DungeonGenerator {
             }
         }
 
+        let mut map = SimpleMap::new();
+
+        for (&coord, tile) in self.map.iter() {
+            map[coord] = tile.clone()
+        }
+
         // eliminate dead ends
-        for (&coord, tile) in self.map.clone().iter() {
+        for (&coord, tile) in self.map.iter() {
             if tile.feature == Some(tile::Door(false)) {
-                if tile_is_deadend(&self.map, coord) {
-                    self.map.insert(coord, tile::Tile::new(tile::Wall));
+                if tile_is_deadend(&map, coord) {
+                    map[coord] = tile::Tile::new(tile::Wall);
                 }
             }
         }
 
-        return (self.map, self.actors, self.items);
+        return (map, self.actors, self.items);
     }
 }
