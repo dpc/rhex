@@ -4,9 +4,6 @@ name = "rhex"
 version = "0.0.1"
 authors = ["Dawid Ciężarkiewicz <dpc@ucore.info>"]
 
-[dependencies.ncurses]
-git = "https://github.com/jeaye/ncurses-rs.git"
-
 [dependencies]
 num = "*"
 rand = "*"
@@ -15,6 +12,5 @@ hex2d = "*"
 hex2d-dpcext = "*"
 log = "*"
 fern = "*"
-
-[dependencies.schedule_recv]
-git = "https://github.com/PeterReid/schedule_recv.git"
+schedule_recv = "*"
+ncurses = "*"
