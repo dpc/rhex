@@ -197,7 +197,7 @@ impl State {
                         if coord == *pos {
                             0
                         } else {
-                            self.at(coord).tile_map_or(light, |tile| tile.opaqueness())
+                            self.at(coord).tile().opaqueness()
                         }
                     },
                     &mut |coord, light| {
@@ -219,7 +219,7 @@ impl State {
                         if coord == pos {
                             0
                         } else {
-                            self.at(coord).tile_map_or(astate.light_emision as i32, |tile| tile.opaqueness())
+                            self.at(coord).tile().opaqueness()
                         }
                     },
                     &mut |coord, light| {
@@ -281,7 +281,7 @@ impl State {
                         actor.equip_switch(ch);
                     },
                     Action::Descend => {
-                        if self.at(actor.coord()).tile_map_or(false, |t| t.feature == Some(Feature::Stairs)) {
+                        if self.at(actor.coord()).tile().feature == Some(Feature::Stairs) {
                             self.descend = true;
                         }
                     },
@@ -307,8 +307,7 @@ impl State {
                     self.actors.insert(target_id, target);
                     // Can't attack twice
                     break;
-                } else if self.at(new_pos.coord).tile_map_or(
-                    false, |t| t.feature == Some(tile::Door(false))
+                } else if self.at(new_pos.coord).tile().feature == Some(tile::Door(false)
                     ) {
                     // walked into door: open it
                     let mut map = self.map.clone();
@@ -403,15 +402,8 @@ pub struct At<'a> {
 
 impl<'a> At<'a> {
     // TODO: remove option
-    pub fn tile(&self) -> Option<&'a tile::Tile> {
-        Some(&self.state.map[self.coord])
-    }
-
-    // TODO: delme
-    pub fn tile_map_or<R, F>(&self, _ : R, f : F) -> R
-        where F : Fn(&tile::Tile) -> R
-    {
-        f(&self.state.map[self.coord])
+    pub fn tile(&self) -> &'a tile::Tile {
+        &self.state.map[self.coord]
     }
 
     pub fn actor_map_or<R, F : Fn(&actor::State) -> R>
@@ -431,7 +423,7 @@ impl<'a> At<'a> {
     }
 
     pub fn is_passable(&self) -> bool {
-        !self.is_occupied() && self.tile_map_or(false, |t| t.is_passable())
+        !self.is_occupied() && self.tile().is_passable()
     }
 
     pub fn _light(&self) -> u32 {
@@ -478,8 +470,8 @@ impl<'a> AtMut<'a> {
     pub fn drop_item(&mut self, item : Box<Item>) {
         let coord = {
             let mut bfs = bfs::Traverser::new(
-                |coord| self.state.at(coord).tile_map_or(false, |t| t.is_passable()),
-                |coord| self.state.at(coord).tile_map_or(false, |t| t.is_passable()) && self.state.items.get(&coord).is_none(),
+                |coord| self.state.at(coord).tile().is_passable(),
+                |coord| self.state.at(coord).tile().is_passable() && self.state.items.get(&coord).is_none(),
                 self.coord
                 );
 

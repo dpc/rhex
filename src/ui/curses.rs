@@ -406,17 +406,13 @@ impl CursesUI {
                     let knows = astate.knows(c1) && astate.knows(c2);
 
                     let (e1, e2) = (
-                        gstate.at(c1).tile_map_or(
-                            tile::Wall.base_ascii_expand(), |t| t.ascii_expand()
-                            ),
-                        gstate.at(c2).tile_map_or(
-                            tile::Wall.base_ascii_expand(), |t| t.ascii_expand()
-                            )
+                        gstate.at(c1).tile().ascii_expand(),
+                        gstate.at(c2).tile().ascii_expand(),
                         );
 
                     let c = Some(if e1 > e2 { c1 } else { c2 });
 
-                    let tt = c.map_or(None, |c| gstate.at(c).tile_map_or(Some(tile::Wall), |t| Some(t.type_)));
+                    let tt = c.map_or(None, |c| Some(gstate.at(c).tile().type_));
 
                     let visible = (astate.sees(c1) && astate.sees(c2)) ||
                         astate.is_dead();
@@ -534,7 +530,7 @@ impl CursesUI {
                         if c == head {
                             fg = color::TARGET_SELF_FG;
                         }
-                        if !gstate.at(c).tile_map_or(false, |t| t.is_passable()) {
+                        if !gstate.at(c).tile().is_passable() {
                             bg = color::BLOCKED_BG;
                         }
                     }
@@ -851,9 +847,9 @@ impl CursesUI {
             return "Unknown".to_string();
         }
 
-        let tile_type = gstate.at(coord).tile_map_or(tile::Wall, |t| t.type_);
-        let tile = gstate.at(coord).tile_map_or(None, |t| Some(t.clone()));
-        let feature_descr = tile.clone().and_then(|t| t.feature).map(|f| f.description());
+        let tile_type = gstate.at(coord).tile().type_;
+        let tile = gstate.at(coord).tile();
+        let feature_descr = tile.feature.map(|f| f.description());
         let item_descr = gstate.at(coord).item_map_or(None, |i| Some(i.description().to_string()));
 
         let actor_descr =
@@ -877,7 +873,7 @@ impl CursesUI {
                 "a wall".to_string()
             },
             (tile::Empty, _, _, _) => {
-                match tile.and_then(|t| t.area).and_then(|a| Some(a.type_)) {
+                match tile.area.and_then(|a| Some(a.type_)) {
                     Some(area::Room(_)) => "room".to_string(),
                     None => "nothing".to_string()
                 }
@@ -1013,7 +1009,7 @@ impl ui::UiFrontend for CursesUI {
         }
 
         let discoviered_areas = astate.discovered_areas.iter()
-            .filter_map(|coord| gstate.at(*coord).tile_map_or(None, |t| t.area))
+            .filter_map(|coord| gstate.at(*coord).tile().area)
             ;
 
         if let Some(s) = self.format_areas(discoviered_areas.map(|area| area.type_)) {

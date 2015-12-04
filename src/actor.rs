@@ -306,9 +306,9 @@ impl State {
         for &coord in los {
             if gstate.light_map[coord] > 0 {
                 visible.insert(coord);
-                if gstate.at(coord).tile_map_or(true, |t| t.opaqueness() <= 10) {
+                if gstate.at(coord).tile().opaqueness() <= 10 {
                     for n in self.pos.dir.arc(1).iter().map(|&d| coord + d) {
-                        if gstate.at(n).tile_map_or(true, |t| t.opaqueness() > 10) {
+                        if gstate.at(n).tile().opaqueness() > 10 {
                             visible.insert(n);
                         }
                     }
@@ -341,7 +341,7 @@ impl State {
         }
 
         for &coord in &discovered {
-            if let Some(area) = gstate.at(coord).tile().and_then(|t| t.area) {
+            if let Some(area) = gstate.at(coord).tile().area {
                 let area_center = area.center;
 
                 if !self.known_areas.contains(&area_center) {
@@ -457,7 +457,7 @@ impl State {
     fn add_current_los_to_temporary_los(&mut self, gstate : &game::State) {
         let pos = self.pos;
         algo::los2::los(
-            &|coord| gstate.at(coord).tile_map_or(10000, |tile| tile.opaqueness()),
+            &|coord| gstate.at(coord).tile().opaqueness(),
             &mut |coord, _ | {
                 let _ = self.temporary_los.insert(coord);
             },
@@ -547,9 +547,7 @@ impl State {
 
     pub fn discovered_stairs(&self, gstate : &game::State) -> bool {
         self.discovered.iter().any(
-            |c| gstate.at(*c).tile_map_or(
-                false, |t| t.feature == Some(Feature::Stairs)
-                )
+            |c| gstate.at(*c).tile().feature == Some(Feature::Stairs)
             )
     }
 

@@ -82,7 +82,7 @@ impl<U : UiFrontend> Ui<U> {
         let start = astate.pos.coord;
 
         let mut bfs = bfs::Traverser::new(
-            |c| c == start || gstate.at(c).tile_map_or(false, |t| t.is_passable()),
+            |c| c == start || gstate.at(c).tile().is_passable(),
             |c| !astate.knows(c),
             start
             );

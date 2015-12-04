@@ -25,7 +25,7 @@ fn closest_reachable<F>(
     where F : Fn(Coordinate) -> bool
 {
     let mut bfs = bfs::Traverser::new(
-        |pos| pos == start || (gstate.at(pos).tile_map_or(false, |t| t.is_passable())
+        |pos| pos == start || (gstate.at(pos).tile().is_passable()
                                && pos.distance(start) < max_distance && !gstate.at(pos).is_occupied()),
                                cond,
                                start
@@ -74,7 +74,7 @@ fn go_to(c: Coordinate, astate : &actor::State, gstate : &game::State) -> game::
     };
 
     let n_pos = astate.pos + ndir.to_coordinate();
-    if gstate.at(n_pos.coord).tile_map_or(false, |t| t.type_.is_passable()) {
+    if gstate.at(n_pos.coord).tile().type_.is_passable() {
         if ndir == astate.pos.dir {
             return game::Action::Move(Forward)
         } else {
