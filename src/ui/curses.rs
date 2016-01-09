@@ -600,7 +600,7 @@ impl CursesUI {
         nc::wattron(window, self.label_color as i32);
         nc::waddstr(window, &format!("{}: ", name));
 
-        let width = max_x as u32 - 4 - name.char_len() as u32;
+        let width = max_x as u32 - 4 - name.chars().count() as u32;
         let cur_w = cur * width / max;
         let prev_w = prev * width / max;
 
@@ -660,7 +660,7 @@ impl CursesUI {
             "-".to_string()
         };
 
-        let item = item.slice_chars(0, cmp::min(item.char_len(), 13));
+        //let item = item.slice_chars(0, cmp::min(item.char_len(), 13));
         nc::waddstr(window, &format!("{:^13}", item));
     }
 
@@ -968,7 +968,7 @@ impl CursesUI {
 
         nc::wbkgd(window, ' ' as nc::chtype | cpair as nc::chtype);
         nc::werase(window);
-        nc::wmove(window, max_y / 2, (max_x  - text.char_len() as i32) / 2);
+        nc::wmove(window, max_y / 2, (max_x  - text.chars().count() as i32) / 2);
 
         nc::waddstr(window, text);
         nc::wnoutrefresh(window);

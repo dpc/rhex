@@ -14,7 +14,7 @@ use hex2dext::algo;
 use item::Item;
 use util::random_pos;
 
-use self::tile::{Tile, Feature};
+use self::tile::{Feature};
 
 pub mod area;
 pub mod tile;
