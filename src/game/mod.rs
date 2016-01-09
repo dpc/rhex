@@ -438,13 +438,15 @@ impl<'a> At<'a> {
             ownlight
         } else {
             let reldir = -pl_coord.direction_to_cw(self.coord).unwrap_or(astate.pos.dir);
-            for &dir in &[reldir, reldir + Left, reldir + Right] {
-                let d_coord = self.coord + dir;
-                if astate.in_los.contains(&d_coord) && self.state.map[d_coord].opaqueness() < 20 {
-                    return self.state.light_map[d_coord]
-                }
-            }
-            ownlight
+            [reldir, reldir + Left, reldir + Right].iter()
+                .map(|&dir| self.coord + dir)
+                .map(|d_coord|
+                     if self.state.map[d_coord].opaqueness() < 20 {
+                         self.state.light_map[d_coord]
+                     } else {
+                         0
+                     })
+            .max().unwrap_or(0)
         }
     }
 
