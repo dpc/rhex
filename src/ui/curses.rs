@@ -514,8 +514,10 @@ impl CursesUI {
 
                 if let Some(t) = t {
                     if visible && t.light > 0 {
-                        fg = color::LIGHTSOURCE;
-                        glyph = "*";
+                        if !occupied {
+                            fg = color::LIGHTSOURCE;
+                            glyph = "*";
+                        }
                     }
                 }
 
