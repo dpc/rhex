@@ -150,6 +150,7 @@ impl State {
             let mut player = player.unwrap();
             let pos = random_pos(0, 0);
             player.moved(self, pos);
+            player.changed_level();
             state.spawn(player);
         }
 
@@ -437,9 +438,9 @@ impl<'a> At<'a> {
         if self.state.map[self.coord].opaqueness() < 20 {
             ownlight
         } else {
-            let reldir = -pl_coord.direction_to_cw(self.coord).unwrap_or(astate.pos.dir);
-            [reldir, reldir + Left, reldir + Right].iter()
-                .map(|&dir| self.coord + dir)
+            pl_coord.directions_to(self.coord)
+                .iter()
+                .map(|&dir| self.coord - dir)
                 .map(|d_coord|
                      if self.state.map[d_coord].opaqueness() < 20 {
                          self.state.light_map[d_coord]
