@@ -385,7 +385,6 @@ impl CursesUI {
 
                 let is_proper_coord = off == (0, 0);
 
-
                 let (visible, _in_los, knows, tt, t, light) = if is_proper_coord {
 
                     let t = gstate.map[c].clone();
@@ -403,7 +402,14 @@ impl CursesUI {
                     let c1 = c;
                     let (c2, _) = Coordinate::from_pixel_integer(SPACING, (cvx + 1, cvy));
 
-                    let knows = astate.knows(c1) && astate.knows(c2);
+                    let low_opaq1 = astate.sees(c1) && gstate.at(c1).tile().opaqueness() <= 1;
+                    let low_opaq2 = astate.sees(c2) && gstate.at(c2).tile().opaqueness() <= 1;
+                    let light1 = gstate.at(c1).light_as_seen_by(astate);
+                    let light2 = gstate.at(c2).light_as_seen_by(astate);
+
+                    let knows = (astate.knows(c1) && astate.knows(c2)) ||
+                        (astate.knows(c1) && low_opaq1) ||
+                        (astate.knows(c2) && low_opaq2);
 
                     let (e1, e2) = (
                         gstate.at(c1).tile().ascii_expand(),
@@ -414,18 +420,26 @@ impl CursesUI {
 
                     let tt = c.map_or(None, |c| Some(gstate.at(c).tile().type_));
 
-                    let visible = (astate.sees(c1) && astate.sees(c2)) ||
-                        astate.is_dead();
-                    let in_los = (astate.in_los(c1) && astate.in_los(c2))
-                        || astate.is_dead();
+                    let visible = astate.is_dead() ||
+                        (astate.sees(c1) && astate.sees(c2)) ||
+                        (astate.sees(c1) && low_opaq1) ||
+                        (astate.sees(c2) && low_opaq2);
+
+                    let in_los = astate.is_dead() ||
+                        (astate.in_los(c1) && astate.in_los(c2)) ||
+                        (astate.in_los(c1) && low_opaq1) ||
+                        (astate.in_los(c2) && low_opaq2);
+
+                    let light = match (astate.sees(c1), astate.sees(c2)) {
+                        (true, true) => (light1 + light2) / 2,
+                        (true, false) => light1,
+                        (false, true) => light2,
+                        (false, false) => 0,
+                    };
 
                     (
                         visible, in_los, knows,
-                        tt, None,
-                        cmp::max(
-                            gstate.at(c1).light_as_seen_by(astate),
-                            gstate.at(c2).light_as_seen_by(astate)
-                            )
+                        tt, None, light
                     )
                 };
 
