@@ -783,7 +783,11 @@ impl CursesUI {
         let descr = self.tile_description(head, astate, gstate);
         self.draw_label(window, "In front");
         nc::wattron(window, self.text_color as i32);
-        nc::waddstr(window, &format!(" {}", descr));
+        nc::waddstr(window, &format!(" {} ({} {} {})", descr,
+                        gstate.at(head).light_as_seen_by(astate) as usize,
+                        astate.sees(head) as usize,
+                        astate.in_los(head) as usize
+        ));
 
         y += 1;
         nc::wmove(window, y, 0);

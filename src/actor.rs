@@ -306,15 +306,12 @@ impl State {
         for &coord in los {
             if gstate.light_map[coord] > 0 {
                 visible.insert(coord);
-                if gstate.at(coord).tile().opaqueness() <= 10 {
-                    for n in self.pos.dir.arc(1).iter().map(|&d| coord + d) {
-                        if gstate.at(n).tile().opaqueness() > 10 {
-                            visible.insert(n);
-                        }
-                    }
-                }
             } else if self.pos.coord.distance(coord) < 2 {
                 visible.insert(coord);
+            } else if gstate.at(coord).tile().opaqueness() > 10 {
+                if gstate.at(coord).light_as_seen_by(self) > 0 {
+                    visible.insert(coord);
+                }
             }
         }
 

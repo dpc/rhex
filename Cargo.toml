@@ -9,7 +9,7 @@ num = "*"
 rand = "*"
 time = "*"
 hex2d = "*"
-hex2d-dpcext = "*"
+hex2d-dpcext = { git = "https://github.com/dpc/hex2d-dpcext-rs" }
 log = "*"
 fern = "*"
 schedule_recv = "*"
