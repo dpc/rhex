@@ -430,11 +430,15 @@ impl CursesUI {
                         (astate.in_los(c1) && low_opaq1) ||
                         (astate.in_los(c2) && low_opaq2);
 
-                    let light = match (astate.sees(c1), astate.sees(c2)) {
-                        (true, true) => (light1 + light2) / 2,
-                        (true, false) => light1,
-                        (false, true) => light2,
-                        (false, false) => 0,
+                    let light = if astate.is_dead() {
+                        (light1 + light2) / 2
+                    } else {
+                        match (astate.sees(c1), astate.sees(c2)) {
+                            (true, true) => (light1 + light2) / 2,
+                            (true, false) => light1,
+                            (false, true) => light2,
+                            (false, false) => 0,
+                        }
                     };
 
                     (
@@ -516,13 +520,36 @@ impl CursesUI {
                     if visible && t.light > 0 {
                         if !occupied {
                             fg = color::LIGHTSOURCE;
-                            glyph = "*";
+                            bold = true;
                         }
                     }
                 }
 
                 if is_proper_coord && visible && gstate.at(c).actor_map_or(0, |a| a.light_emision) > 0u32 {
                     bg = color::LIGHTSOURCE;
+                }
+
+                if is_proper_coord && actors_aheads.contains_key(&c) &&
+                    astate.sees(*actors_aheads.get(&c).unwrap()) {
+                        bold = true;
+                        let color = if c == astate_ahead {
+                            color::TARGET_SELF_FG
+                        } else {
+                            color::TARGET_ENEMY_FG
+                        };
+
+                        if astate.knows(c) {
+                            fg = color;
+                        } else {
+                            draw = true;
+                            glyph = " ";
+                            bg = color;
+                        }
+                    }
+
+                if is_proper_coord && c != center && !visible && astate.hears(c) {
+                    bg = color::NOISE_BG;
+                    draw = true;
                 }
 
                 if self.mode == Mode::Examine {
@@ -551,34 +578,8 @@ impl CursesUI {
                             bg = color::BLOCKED_BG;
                         }
                     }
-                } else {
-                    if is_proper_coord && actors_aheads.contains_key(&c) &&
-                        astate.sees(*actors_aheads.get(&c).unwrap()) {
-                        bold = true;
-                        let color = if c == astate_ahead {
-                            color::TARGET_SELF_FG
-                        } else {
-                            color::TARGET_ENEMY_FG
-                        };
-
-                        if astate.knows(c) {
-                            if occupied {
-                                bg = color;
-                            } else {
-                                fg = color;
-                            }
-                        } else {
-                            draw = true;
-                            glyph = " ";
-                            bg = color;
-                        }
-                    }
                 }
 
-                if is_proper_coord && c != center && !visible && astate.hears(c) {
-                    bg = color::NOISE_BG;
-                    draw = true;
-                }
 
                 if draw {
                     let cpair = nc::COLOR_PAIR(calloc.get(fg, bg));

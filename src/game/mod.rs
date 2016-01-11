@@ -47,10 +47,10 @@ pub struct State {
     pub actors_dead : HashSet<u32, DefaultState<FnvHasher>>,
     pub actors_counter : u32,
     pub map : Arc<Map>,
-    pub items: Items,
-    pub light_map: LightMap,
+    pub items: Items, // items on the floor
+    pub light_map: LightMap, // light intensity at a given coordinate
     pub turn : u64,
-    pub descend : bool,
+    descend : bool,
     pub level : i32,
 }
 
