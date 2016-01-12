@@ -61,7 +61,7 @@ fn grue(astate : &actor::State, gstate : &game::State) -> game::Action {
         }
     }
 
-    match rand::thread_rng().gen_range(0, 10) {
+    match rand::thread_rng().gen_range(0, 5) {
         0 => roam(),
         _ => game::Action::Wait,
     }
@@ -141,7 +141,7 @@ pub fn run(
         }
 
         let action = match astate.race {
-            actor::Race::Pony => pony_follow(&astate, &gstate),
+//            actor::Race::Pony => pony_follow(&astate, &gstate),
             _ => grue(&astate, &gstate),
         };
 

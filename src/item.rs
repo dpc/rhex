@@ -78,31 +78,29 @@ impl Item {
         }
     }
 
-    pub fn stats(&self) -> actor::Stats {
-        let mut s = actor::Stats::zero();
+    pub fn stats(&self) -> actor::EffectiveStats {
+        let mut s : actor::EffectiveStats = Default::default();
 
         match self.type_ {
             Plate => {
-                s.ac += 4;
-                s.ev -= 2;
+                s.base.ac += 4;
+                s.base.ev -= 2;
             },
             Leather => {
-                s.ac += 1;
+                s.base.ac += 1;
             },
-            Helmet => s.ac += 1,
-            Boots => s.ev += 1,
-            Buckler => { s.ev += 1; s.ac += 1 },
-            Cloak => { s.ev += 1; },
+            Helmet => s.base.ac += 1,
+            Boots => s.base.ev += 1,
+            Buckler => { s.base.ev += 1; s.base.ac += 1 },
+            Cloak => { s.base.ev += 1; },
             Knife => {
                 s.melee_dmg += 1;
             },
             Sword => {
                 s.melee_dmg += 3;
-                s.melee_cd += 1;
             },
             Axe => {
                 s.melee_dmg += 4;
-                s.melee_cd += 2;
             },
             _ => {},
         }
@@ -121,7 +119,7 @@ impl Item {
         match self.type_ {
             HealthPotion => {
                 astate.hp += 5;
-                astate.hp = cmp::min(astate.hp, astate.stats.max_hp);
+                astate.hp = cmp::min(astate.hp, astate.stats.base.max_hp);
                 true
             },
             _ => {

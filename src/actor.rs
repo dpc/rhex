@@ -10,6 +10,10 @@ use game::tile::{Feature};
 use util;
 use item::Item;
 
+use self::Race::*;
+use race::*;
+use std::iter::Iterator;
+
 pub type Visibility = HashSet<Coordinate>;
 pub type NoiseMap = HashMap<Coordinate, Noise>;
 
@@ -29,16 +33,20 @@ impl Noise {
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub enum Race {
     Human,
-    Pony,
-    Grue,
+    Elf,
+    Dwarf,
+    Rat,
+    Goblin,
 }
 
 impl Race {
     pub fn description(&self) -> String {
         match *self {
-            Race::Grue => "Grue",
-            Race::Pony => "Pony",
             Race::Human => "Human",
+            Race::Elf => "Elf",
+            Race::Dwarf => "Dwarf",
+            Race::Rat => "Rat",
+            Race::Goblin => "Goblin",
         }.to_string()
     }
 }
@@ -53,36 +61,52 @@ pub struct Stats {
     pub max_sp : i32,
     pub ac: i32,
     pub ev: i32,
+    pub infravision : i32,
+    pub vision : i32,
+}
+
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
+pub struct EffectiveStats {
+    pub base : Stats,
     pub melee_dmg: i32,
     pub melee_acc: i32,
-    pub melee_cd: i32, // attack cooldown
 }
 
 impl Stats {
     pub fn new(race : Race) -> Stats {
-        let mut s = Stats {
-            int: 2, dex : 2, str_ : 2,
-            max_hp: 10, max_mp: 5, max_sp: 5,
-            ac: 0, ev: 0,
-            melee_cd: 0, melee_dmg: 1, melee_acc: 1,
-        };
-
         match race {
-            Race::Grue => {
-                s.int = 1; s.dex = 1; s.str_ = 1; s.max_hp = 5;
-            },
-            _ => {}
+            Goblin => GOBLIN_STATS,
+            Rat => RAT_STATS,
+            Elf => ELF_STATS,
+            Human => HUMAN_STATS,
+            Dwarf => DWARF_STATS,
         }
-
-        s
     }
 
-    pub fn zero() -> Stats {
+    pub fn to_effective(&self) -> EffectiveStats {
+        let mut efs = EffectiveStats::default();
+        efs.base = *self;
+        efs
+    }
+}
+
+impl Default for Stats {
+    fn default() -> Self {
         Stats {
             int: 0, dex: 0, str_: 0,
             max_hp: 0, max_mp: 0, max_sp: 0,
             ac: 0, ev: 0,
-            melee_cd: 0, melee_dmg: 0, melee_acc: 0,
+            infravision: 0, vision: 0,
+        }
+    }
+}
+
+impl Default for EffectiveStats {
+    fn default() -> Self {
+        EffectiveStats {
+            base: Default::default(),
+            melee_dmg: 0,
+            melee_acc: 0,
         }
     }
 }
@@ -90,7 +114,7 @@ impl Stats {
 impl Add for Stats {
     type Output = Stats;
 
-    fn add(self, s : Stats) -> Stats {
+    fn add(self, s : Self) -> Self {
         Stats {
             int: self.int + s.int,
             dex: self.dex + s.dex,
@@ -100,7 +124,18 @@ impl Add for Stats {
             max_sp:  self.max_sp + s.max_sp,
             ac: self.ac + s.ac,
             ev: self.ev + s.ev,
-            melee_cd: self.melee_cd + s.melee_cd,
+            infravision: self.infravision + s.infravision,
+            vision : self.vision + s.vision,
+        }
+    }
+}
+
+impl Add for EffectiveStats {
+    type Output = EffectiveStats;
+
+    fn add(self, s : Self) -> Self {
+        EffectiveStats {
+            base: self.base + s.base,
             melee_dmg: self.melee_dmg + s.melee_dmg,
             melee_acc: self.melee_acc + s.melee_acc,
         }
@@ -110,7 +145,7 @@ impl Add for Stats {
 impl Sub for Stats {
     type Output = Stats;
 
-    fn sub (self, s : Stats) -> Stats {
+    fn sub(self, s : Self) -> Self {
         Stats {
             int: self.int - s.int,
             dex: self.dex - s.dex,
@@ -120,7 +155,18 @@ impl Sub for Stats {
             max_sp:  self.max_sp - s.max_sp,
             ac: self.ac - s.ac,
             ev: self.ev - s.ev,
-            melee_cd: self.melee_cd - s.melee_cd,
+            infravision: self.infravision - s.infravision,
+            vision: self.vision - s.vision,
+        }
+    }
+}
+
+impl Sub for EffectiveStats {
+    type Output = EffectiveStats;
+
+    fn sub(self, s : Self) -> Self {
+        EffectiveStats{
+            base : self.base - s.base,
             melee_dmg: self.melee_dmg - s.melee_dmg,
             melee_acc: self.melee_acc - s.melee_acc,
         }
@@ -162,8 +208,8 @@ pub struct State {
 
     pub race : Race,
     pub base_stats : Stats,
-    pub mod_stats : Stats,
-    pub stats : Stats,
+    pub mod_stats : EffectiveStats,
+    pub stats : EffectiveStats,
 
     /// LoS at the end of the tick
     pub in_los: Visibility,
@@ -191,7 +237,6 @@ pub struct State {
 
     pub light_emision : u32,
 
-    pub melee_cd : i32,
     pub action_cd : i32,
 
     pub items_letters: HashSet<char>,
@@ -211,8 +256,8 @@ impl State {
             player: false,
             pos: pos, pre_pos: pos,
             base_stats: stats,        // base stats
-            mod_stats: Stats::zero(), // from items etc.
-            stats: Stats::zero(),     // effective stats
+            mod_stats: Default::default(), // from items etc.
+            stats: Default::default(),     // effective stats
             in_los: Default::default(),
             temporary_los: Default::default(),
             visible: Default::default(),
@@ -226,7 +271,6 @@ impl State {
             items_backpack: HashMap::new(),
             items_equipped: HashMap::new(),
             items_letters: Default::default(),
-            melee_cd: 0,
             action_cd: 0,
             was_attacked_by: Vec::new(),
             did_attack: Vec::new(),
@@ -237,25 +281,6 @@ impl State {
             prev_mp: stats.max_mp,
             prev_sp: stats.max_sp,
         }
-    }
-
-    // TODO: Remove this, make more general etc.
-    pub fn new_grue(level : i32, pos : Position) -> State {
-        let mut ret = State::new(Race::Grue, pos);
-
-        ret.base_stats.int = 1;
-        ret.base_stats.dex = 1;
-        ret.base_stats.str_ = 1;
-
-        ret.base_stats.max_hp += level / 2;
-
-        ret.base_stats.dex += level / 2;
-        ret.base_stats.str_ += (2 + level) / 4;
-
-        ret.base_stats.ev += (1 + level) / 5;
-        ret.base_stats.ac += (2 + level) / 6;
-        ret
-
     }
 
     pub fn sees(&self, pos : Coordinate) -> bool {
@@ -280,7 +305,7 @@ impl State {
 
     /// "head" - The coordinate that is in front of an actor
     pub fn head(&self) -> Coordinate {
-        self.pos.coord + self.pos.dir.to_coordinate()
+        self.pos.coord + self.pos.dir
     }
 
     pub fn pos_after_action(&self, action : Action) -> Vec<Position> {
@@ -306,7 +331,7 @@ impl State {
         for &coord in los {
             if gstate.light_map[coord] > 0 {
                 visible.insert(coord);
-            } else if self.pos.coord.distance(coord) < 2 {
+            } else if self.pos.coord.distance(coord) <= self.stats.base.infravision {
                 visible.insert(coord);
             } else if gstate.at(coord).tile().opaqueness() > 10 {
                 if gstate.at(coord).light_as_seen_by(self) > 0 {
@@ -330,7 +355,7 @@ impl State {
         let mut discovered : HashSet<_> = Default::default();
         let mut discovered_areas : HashSet<_> = Default::default();
 
-        for i in &total_visible {
+        for i in total_visible.iter().chain(visible.iter()) {
             if !self.known.contains(i) {
                 self.known.insert(*i);
                 discovered.insert(*i);
@@ -379,9 +404,6 @@ impl State {
 
     pub fn post_tick(&mut self, gstate : &game::State) {
         self.postprocess_visibile(gstate);
-        if self.melee_cd > 0 {
-            self.melee_cd -= 1;
-        }
 
         if self.action_cd > 0 {
             self.action_cd -= 1;
@@ -453,12 +475,13 @@ impl State {
 
     fn add_current_los_to_temporary_los(&mut self, gstate : &game::State) {
         let pos = self.pos;
+        let vision = self.stats.base.vision;
         algo::los2::los(
             &|coord| gstate.at(coord).tile().opaqueness(),
             &mut |coord, _ | {
                 let _ = self.temporary_los.insert(coord);
             },
-            10, pos.coord,
+            vision, pos.coord,
             &[pos.dir]
             );
     }
@@ -489,24 +512,22 @@ impl State {
     }
 
     pub fn recalculate_stats(&mut self) {
-        self.stats = self.base_stats + self.mod_stats;
+        self.stats = self.base_stats.to_effective() + self.mod_stats;
 
         // Add attributes to derived stats
-        self.stats.melee_dmg += (self.stats.str_ + 1) / 2;
-        self.stats.ac += self.stats.str_ / 2;
-        self.stats.melee_acc += (self.stats.dex + 1) / 2;
-        self.stats.ev += self.stats.dex / 2;
-        self.stats.max_sp += self.stats.str_;
-        self.stats.max_mp += self.stats.int;
+        self.stats.melee_dmg += (self.stats.base.str_ + 1) / 2;
+        self.stats.base.ac += self.stats.base.str_ / 2;
+        self.stats.melee_acc += (self.stats.base.dex + 1) / 2;
+        self.stats.base.ev += self.stats.base.dex / 2;
+        self.stats.base.max_sp += self.stats.base.str_ * 2;
+        self.stats.base.max_mp += self.stats.base.int * 2;
     }
 
     pub fn attacks(&mut self, dir : Direction, target : &mut State) {
-        self.melee_cd = self.stats.melee_cd + 1;
-
         let mut acc = self.stats.melee_acc;
         let mut dmg = self.stats.melee_dmg;
 
-        let (ac, ev) = (target.stats.ac, target.stats.ev);
+        let (ac, ev) = (target.stats.base.ac, target.stats.base.ev);
 
         let from_behind = match dir - target.pre_pos.dir {
             Angle::Forward|Angle::Left|Angle::Right => true,
@@ -553,7 +574,7 @@ impl State {
     }
 
     pub fn can_attack(&self) -> bool {
-        self.melee_cd == 0 && self.action_cd == 0
+        self.action_cd == 0
     }
 
     pub fn moved(&mut self, gstate : &game::State, new_pos : Position) {

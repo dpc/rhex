@@ -31,6 +31,7 @@ mod item;
 mod ui;
 mod util;
 mod logging;
+mod race;
 
 pub fn main() {
 

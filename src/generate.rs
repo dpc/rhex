@@ -12,6 +12,7 @@ use game::tile;
 use game::{Map, Actors, Items};
 use game::area;
 use actor;
+use actor::Race;
 use item;
 
 type EndpointQueue = VecDeque<h2d::Position>;
@@ -163,7 +164,7 @@ impl DungeonGenerator {
                 0|1 => {
                     let pos = Position::new(coord, Direction::XY);
                     self.actors.insert(coord,
-                            actor::State::new_grue(self.level, pos)
+                            actor::State::new(Race::Rat, pos)
                             );
                 },
                 2 => {

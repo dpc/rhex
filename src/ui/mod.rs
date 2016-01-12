@@ -63,14 +63,14 @@ impl<U : UiFrontend> Ui<U> {
         astate.discovered_areas.iter().any(|_| true ) ||
         astate.visible.iter().any(|&coord|
                                   gstate.at(coord)
-                                  .actor_map_or(false, |a| a.race == actor::Race::Grue)
+                                  .actor_map_or(false, |a| a.race == actor::Race::Rat)
                                  ) ||
         astate.discovered.iter().any(|&coord|
                                      gstate.at(coord)
                                      .item_map_or(false, |_| true)
                                     ) ||
         astate.heared.iter()
-        .filter(|&(c, t)| *c != astate.pos.coord && *t != Noise::Creature(Race::Pony))
+//        .filter(|&(c, t)| *c != astate.pos.coord && *t != Noise::Creature(Race::Pony))
         .any(|(c, _)| !astate.sees(*c)) ||
         astate.discovered_stairs(gstate)
     }

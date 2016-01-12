@@ -16,14 +16,8 @@ pub fn roll(a : i32, b : i32) -> bool {
 
     let base = cmp::max(a, b) / 4;
 
-    let a = cmp::max(a - base, 0);
-    let b = cmp::max(b - base, 0);
-
-    let (a, b) = if (a, b) == (0, 0) {
-        (1, 1)
-    } else {
-        (a, b)
-    };
+    let a = cmp::max(a - base, 1);
+    let b = cmp::max(b - base, 1);
 
     rand::thread_rng().gen_range(0, a+b) < a
 }

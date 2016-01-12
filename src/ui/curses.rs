@@ -330,7 +330,7 @@ impl CursesUI {
 
         let actors_aheads : HashMap<Coordinate, Coordinate> =
             gstate.actors.iter().filter(|&(_, a)| !a.is_dead())
-            .map(|(_, a)| (a.pos.coord + a.pos.dir, a.pos.coord)).collect();
+            .map(|(_, a)| (a.head(), a.pos.coord)).collect();
         let astate_ahead = astate.pos.coord + astate.pos.dir;
 
         /* Get the screen bounds. */
@@ -456,14 +456,16 @@ impl CursesUI {
 
                 let mut draw = knows;
 
+                if visible { debug_assert!(knows); }
+
                 let mut bold = false;
                 let occupied = gstate.at(c).is_occupied();
                 let (fg, bg, mut glyph) =
                     if is_proper_coord && visible && occupied {
-                        let fg = match gstate.at(c).actor_map_or(Race::Grue, |a| a.race) {
-                            Race::Human => color::CHAR_SELF_FG,
-                            Race::Pony => color::CHAR_ALLY_FG,
-                            Race::Grue => color::CHAR_ENEMY_FG,
+                        let fg = match gstate.at(c).actor_map_or(Race::Rat, |a| a.race) {
+                            Race::Human | Race::Elf | Race::Dwarf => color::CHAR_SELF_FG,
+                            //Race::Pony => color::CHAR_ALLY_FG,
+                            Race::Rat | Race::Goblin => color::CHAR_ENEMY_FG,
                         };
                         (fg, color::CHAR_BG, "@")
                     } else if is_proper_coord && visible && gstate.at(c).item().is_some() {
@@ -678,7 +680,7 @@ impl CursesUI {
     fn draw_item(&self, window : nc::WINDOW, astate : &actor::State, label: &str, slot : actor::Slot) {
         self.draw_label(window, label);
 
-        if slot == Slot::RHand && astate.melee_cd > 0 {
+        if slot == Slot::RHand && astate.sp > 0 {
             nc::wattron(window, self.text_gray_color as i32);
         } else {
             nc::wattron(window, self.text_color as i32);
@@ -725,8 +727,9 @@ impl CursesUI {
     fn draw_stats(&mut self, astate : &actor::State, gstate : &game::State) {
         let window = self.stats_window.as_ref().unwrap().window;
 
-        let (ac, ev) = (astate.stats.ac, astate.stats.ev);
-        let (dmg, acc, cd) = (astate.stats.melee_dmg, astate.stats.melee_acc, astate.stats.melee_cd);
+        let (ac, ev) = (astate.stats.base.ac, astate.stats.base.ev);
+        let (dmg, acc) =
+            (astate.stats.melee_dmg, astate.stats.melee_acc);
 
         let cpair = self.text_color;
         nc::wbkgd(window, ' ' as nc::chtype | cpair as nc::chtype);
@@ -740,17 +743,15 @@ impl CursesUI {
 
         let mut y = 0;
         nc::wmove(window, y, 0);
-        self.draw_val(window, "Str", astate.stats.str_);
+        self.draw_val(window, "Str", astate.stats.base.str_);
         nc::wmove(window, y, 7);
         self.draw_val(window, "DMG", dmg);
         nc::wmove(window, y, 15);
-        self.draw_val(window, "CD", cd);
-        nc::wmove(window, y, 21);
         self.draw_val(window, "ACC", acc);
 
         y += 1;
         nc::wmove(window, y, 0);
-        self.draw_val(window, "Int", astate.stats.int);
+        self.draw_val(window, "Int", astate.stats.base.int);
         nc::wmove(window, y, 7);
         self.draw_val(window, " AC", ac);
         nc::wmove(window, y, 15);
@@ -758,26 +759,26 @@ impl CursesUI {
 
         y += 1;
         nc::wmove(window, y, 0);
-        self.draw_val(window, "Dex", astate.stats.dex);
+        self.draw_val(window, "Dex", astate.stats.base.dex);
 
         y += 1;
         nc::wmove(window, y, 0);
 
         self.draw_stats_bar(window, "HP",
                             astate.hp, astate.prev_hp,
-                            astate.stats.max_hp);
+                            astate.stats.base.max_hp);
 
         y += 1;
         nc::wmove(window, y, 0);
         self.draw_stats_bar(window, "MP",
                             astate.mp, astate.prev_mp,
-                            astate.stats.max_mp);
+                            astate.stats.base.max_mp);
 
         y += 1;
         nc::wmove(window, y, 0);
         self.draw_stats_bar(window, "SP",
                             astate.sp, astate.prev_sp,
-                            astate.stats.max_sp);
+                            astate.stats.base.max_sp);
 
         let slots = [
             ("R", Slot::RHand),
@@ -886,9 +887,12 @@ impl CursesUI {
         let actor_descr =
             if astate.sees(coord) || astate.is_dead() {
                 gstate.at(coord).actor_map_or(None, |a| Some(match a.race{
-                    Race::Pony => "A Pony",
-                    Race::Grue => "A Grue",
+                    //Race::Pony => "A Pony",
+                    Race::Rat => "A rat",
+                    Race::Goblin => "Goblin",
                     Race::Human => "Human",
+                    Race::Elf => "Elf",
+                    Race::Dwarf => "Dwarf",
                 }.to_string())
                 )
             } else {

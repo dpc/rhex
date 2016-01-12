@@ -8,7 +8,7 @@ use hex2dext::algo::bfs;
 use hex2d::{Coordinate, Direction, Angle, Position};
 use hex2d::Angle::{Left, Right, Forward};
 
-use actor::{self, Race, Noise};
+use actor::{self, Noise};
 use generate;
 use hex2dext::algo;
 use item::Item;
@@ -117,7 +117,7 @@ impl State {
         }
 
         let mut player = None;
-        let mut pony = None;
+        let mut pony : Option<actor::State> = None;
 
         for (_, astate) in self.actors.iter() {
             if astate.is_player() {
@@ -127,10 +127,12 @@ impl State {
         }
 
         for (_, astate) in self.actors.iter() {
+            /*
             if astate.race == Race::Pony {
                 pony = Some(astate.clone());
                 break;
             }
+            */
         }
 
         let mut state = State {
