@@ -113,7 +113,7 @@ pub mod color {
     pub const WATER_BG: [u8; 4] = [4, 74, 67, 67];
     pub const STONE_FG : [u8; 4] = [BLACK, GRAY[1] , NOT_IN_LOS_FG, NOT_IN_LOS_FG];
     pub const WALL_FG : [u8; 4] = STONE_FG;
-    pub const WALL_BG : [u8; 4] = [GRAY[14], GRAY[8] , GRAY[4], NOT_IN_LOS_BG];
+    pub const WALL_BG : [u8; 4] = EMPTY_BG;
     pub const CHAR_SELF_FG : [u8; 4] = [19, 18, NOT_IN_LOS_FG, NOT_IN_LOS_FG];
     pub const CHAR_ALLY_FG : [u8; 4] = [28, 22, NOT_IN_LOS_FG, NOT_IN_LOS_FG];
     pub const CHAR_ENEMY_FG : [u8; 4] = [124, 88, NOT_IN_LOS_FG, NOT_IN_LOS_FG];
@@ -502,6 +502,7 @@ impl CursesUI {
                                 (fg, bg, glyph)
                             },
                             Some(tile::Wall) => {
+                                bold = true;
                                 (color::WALL_FG, color::WALL_BG, WALL_CH)
                             },
                             Some(tile::Water) => {
