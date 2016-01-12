@@ -43,19 +43,16 @@ impl Tile {
         }
     }
 
-    pub fn add_feature(mut self, f : Feature) -> Tile {
+    pub fn add_feature(&mut self, f : Feature) -> &mut Tile {
         self.feature = Some(f); self
     }
 
-    pub fn add_light(mut self, light : i32) -> Tile {
+    pub fn add_light(&mut self, light : i32) -> &mut Tile {
         self.light = light; self
     }
 
-    pub fn add_area(mut self, area: area::Area) -> Tile {
-
-        self.area = Some(area);
-
-        self
+    pub fn add_area(&mut self, area: area::Area) -> &mut Tile {
+        self.area = Some(area); self
     }
 
     pub fn is_passable(&self) -> bool {

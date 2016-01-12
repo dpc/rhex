@@ -313,8 +313,7 @@ impl State {
                     // walked into door: open it
                     let mut map = self.map.clone();
                     let mut map = Arc::make_mut(&mut map);
-                    let tile = map[new_pos.coord].clone();
-                    map[new_pos.coord] = tile.add_feature(tile::Door(true));
+                    map[new_pos.coord].add_feature(tile::Door(true));
                     self.map = Arc::new(map.clone());
                     // Can't charge through the doors
                     break;

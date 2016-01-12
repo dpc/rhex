@@ -168,7 +168,7 @@ impl DungeonGenerator {
                 },
                 2 => {
                     if self.stairs.is_none() {
-                        self.map.insert(coord, tile::Tile::new(tile::Empty)
+                        self.map.insert(coord, *tile::Tile::new(tile::Empty)
                                         .add_feature(tile::Stairs)
                                         .add_area(area));
                         self.stairs = Some(coord);
@@ -176,7 +176,7 @@ impl DungeonGenerator {
                     }
                 },
                 3 => {
-                    self.map.insert(coord, tile::Tile::new(tile::Empty)
+                    self.map.insert(coord, *tile::Tile::new(tile::Empty)
                                     .add_feature(tile::Statue)
                                     .add_area(area));
                     self.tile_count += 1;
@@ -188,24 +188,23 @@ impl DungeonGenerator {
         coord.for_each_in_range((r - 1) as i32, |c| {
            if !self.map.contains_key(&c) {
                self.tile_count += 1;
-               self.map.insert(c, tile::Tile::new(tile::Empty).add_area(area));
+               self.map.insert(c, *tile::Tile::new(tile::Empty).add_area(area));
            }
         });
 
         // TODO: Guarantee that the room is not completely closed
         coord.for_each_in_ring(r as i32, h2d::Spin::CW(h2d::Direction::XY), |c| {
             if !self.map.contains_key(&c) {
-                self.map.insert(c, tile::Tile::new(tile::Empty).add_feature(tile::Door(false)));
+                self.map.insert(c, *tile::Tile::new(tile::Empty).add_feature(tile::Door(false)));
                 self.tile_count += 1;
             }
         });
 
-        // TODO: Guarantee that the room is not completely closed
         coord.for_each_in_range(r as i32 - 1, |c| {
             if self.map.contains_key(&c) {
                 match rand::thread_rng().gen_range(0, 15) {
                     0 => {
-                        self.map.insert(c, tile::Tile::new(tile::Empty).add_light((r + 4) as i32));
+                        self.map.get_mut(&c).unwrap().add_light((r + 4) as i32);
                     },
                     _ => {},
                 }
@@ -213,7 +212,7 @@ impl DungeonGenerator {
             }
         });
         if rand::thread_rng().gen_weighted_bool(3) {
-            self.items.insert(coord, item::random(self.level)); 
+            self.items.insert(coord, item::random(self.level));
         }
     }
 
