@@ -39,6 +39,13 @@ mod locale {
 //        . . .
 static SPACING: IntegerSpacing<i32> = IntegerSpacing::PointyTop(2, 1);
 
+const WALL_CH : &'static str = "#";
+const DOOR_OPEN_CH : &'static str = "_";
+const DOOR_CLOSED_CH : &'static str = "×";
+const STATUE_CH : &'static str = "&";
+const STAIRS_DOWN_CH : &'static str = ">";
+const WATER_CH : &'static str = "~";
+const NOTHING_CH : &'static str = "~";
 const NORMAL_DOT : &'static str = ".";
 const UNICODE_DOT : &'static str = "·";
 
@@ -481,26 +488,31 @@ impl CursesUI {
                                             bg = color::EMPTY_BG;
                                         }
                                         Some(tile::Door(open)) =>
-                                            glyph = if open { "_" } else { "+" },
-                                        Some(tile::Statue) => glyph = "&",
-                                        Some(tile::Stairs) => glyph = ">",
+                                            if open {
+                                                glyph = DOOR_OPEN_CH;
+                                            } else {
+                                                glyph = DOOR_CLOSED_CH;
+                                                bg = color::WALL_BG;
+                                            },
+                                        Some(tile::Statue) => glyph = STATUE_CH,
+                                        Some(tile::Stairs) => glyph = STAIRS_DOWN_CH,
                                     }
                                 }
 
                                 (fg, bg, glyph)
                             },
                             Some(tile::Wall) => {
-                                (color::WALL_FG, color::WALL_BG, "#")
+                                (color::WALL_FG, color::WALL_BG, WALL_CH)
                             },
                             Some(tile::Water) => {
-                                (color::WATER_FG, color::WATER_BG, "~")
+                                (color::WATER_FG, color::WATER_BG, WATER_CH)
                             },
                             None => {
                                 (color::EMPTY_FG, color::EMPTY_BG, "?")
                             },
                         }
                     } else {
-                        (color::EMPTY_FG, color::EMPTY_BG, " ")
+                        (color::EMPTY_FG, color::EMPTY_BG, NOTHING_CH)
                     };
 
 
