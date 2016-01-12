@@ -126,7 +126,7 @@ pub mod color {
     pub const GREEN_FG: u8 = 34;
     pub const RED_FG:   u8 = 124;
     pub const NOISE_BG : u8 = ORANGE;
-    pub const TARGET_SELF_FG : u8 = 20;
+    pub const TARGET_SELF_FG : u8 = 33;
     pub const TARGET_ENEMY_FG : u8 = 196;
     pub const LIGHTSOURCE : u8 = YELLOW;
     pub const LOG_1_FG : u8 = GRAY[25];
