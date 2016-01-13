@@ -161,12 +161,6 @@ impl DungeonGenerator {
 
         if Some(coord) != self.start {
             match rand::thread_rng().gen_range(0, 6) {
-                0|1 => {
-                    let pos = Position::new(coord, Direction::XY);
-                    self.actors.insert(coord,
-                            actor::State::new(Race::Rat, pos)
-                            );
-                },
                 2 => {
                     if self.stairs.is_none() {
                         self.map.insert(coord, *tile::Tile::new(tile::Empty)
@@ -212,7 +206,23 @@ impl DungeonGenerator {
                 self.tile_count += 1;
             }
         });
-        if rand::thread_rng().gen_weighted_bool(3) {
+
+
+        coord.for_each_in_range(r as i32 / 2, |c| {
+            if self.map.get(&c).map(|t| t.is_passable()).unwrap_or(false) {
+                match rand::thread_rng().gen_range(0, 10) {
+                    0 => {
+                        let pos = Position::new(c, Direction::XY);
+                        self.actors.insert(c,
+                                           actor::State::new(Race::Rat, pos)
+                                          );
+                    },
+                    _ => {},
+                }
+            }
+        });
+
+        if rand::thread_rng().gen_weighted_bool(2) {
             self.items.insert(coord, item::random(self.level));
         }
     }

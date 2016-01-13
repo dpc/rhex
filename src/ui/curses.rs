@@ -400,7 +400,7 @@ impl CursesUI {
                     (
                         astate.sees(c) || astate.is_dead(),
                         astate.in_los(c) || astate.is_dead(),
-                        astate.knows(c),
+                        astate.knows(c) || astate.is_dead(),
                         Some(tt), Some(t),
                         gstate.at(c).light_as_seen_by(astate)
                     )
@@ -414,7 +414,8 @@ impl CursesUI {
                     let light1 = gstate.at(c1).light_as_seen_by(astate);
                     let light2 = gstate.at(c2).light_as_seen_by(astate);
 
-                    let knows = (astate.knows(c1) && astate.knows(c2)) ||
+                    let knows = astate.is_dead() ||
+                        (astate.knows(c1) && astate.knows(c2)) ||
                         (astate.knows(c1) && low_opaq1) ||
                         (astate.knows(c2) && low_opaq2);
 

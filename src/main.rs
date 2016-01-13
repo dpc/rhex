@@ -33,10 +33,7 @@ mod util;
 mod logging;
 mod race;
 
-pub fn main() {
-
-    logging::init();
-
+pub fn run() {
     info!("Generating map...");
     let state = game::State::new();
 
@@ -69,4 +66,11 @@ pub fn main() {
     ui.run(pl_req_rx, pl_rep_tx);
 
     info!("UI done, exiting...");
+}
+
+pub fn main() {
+
+    logging::init();
+
+    run();
 }

@@ -14,6 +14,9 @@ use self::Race::*;
 use race::*;
 use std::iter::Iterator;
 
+use rand;
+use rand::Rng;
+
 pub type Visibility = HashSet<Coordinate>;
 pub type NoiseMap = HashMap<Coordinate, Noise>;
 
@@ -515,9 +518,9 @@ impl State {
         self.stats = self.base_stats.to_effective() + self.mod_stats;
 
         // Add attributes to derived stats
-        self.stats.melee_dmg += (self.stats.base.str_ + 1) / 2;
+        self.stats.melee_dmg += self.stats.base.str_;
+        self.stats.melee_acc += self.stats.base.dex;
         self.stats.base.ac += self.stats.base.str_ / 2;
-        self.stats.melee_acc += (self.stats.base.dex + 1) / 2;
         self.stats.base.ev += self.stats.base.dex / 2;
         self.stats.base.max_sp += self.stats.base.str_ * 2;
         self.stats.base.max_mp += self.stats.base.int * 2;
@@ -541,7 +544,11 @@ impl State {
 
         let success = util::roll(acc, ev);
 
-        let dmg = cmp::max(0, dmg - ac);
+        let rand_ac = cmp::max(
+            rand::thread_rng().gen_range(0, ac + 1),
+            rand::thread_rng().gen_range(0, ac + 1),
+            );
+        let dmg = cmp::max(0, dmg - rand_ac);
 
         if success {
             target.hp -= dmg;
