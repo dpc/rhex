@@ -10,7 +10,7 @@ use num::integer::Integer;
 
 use util::circular_move;
 
-use super::Action;
+use super::{Action, AutoMoveType};
 use game;
 use game::area;
 use actor::{self, Race, Slot};
@@ -681,7 +681,7 @@ impl CursesUI {
     fn draw_item(&self, window : nc::WINDOW, astate : &actor::State, label: &str, slot : actor::Slot) {
         self.draw_label(window, label);
 
-        if slot == Slot::RHand && astate.sp > 0 {
+        if slot == Slot::RHand && !astate.can_attack() {
             nc::wattron(window, self.text_gray_color as i32);
         } else {
             nc::wattron(window, self.text_color as i32);
@@ -766,19 +766,19 @@ impl CursesUI {
         nc::wmove(window, y, 0);
 
         self.draw_stats_bar(window, "HP",
-                            astate.hp, astate.prev_hp,
+                            astate.hp, astate.saved_hp,
                             astate.stats.base.max_hp);
 
         y += 1;
         nc::wmove(window, y, 0);
         self.draw_stats_bar(window, "MP",
-                            astate.mp, astate.prev_mp,
+                            astate.mp, astate.saved_mp,
                             astate.stats.base.max_mp);
 
         y += 1;
         nc::wmove(window, y, 0);
         self.draw_stats_bar(window, "SP",
-                            astate.sp, astate.prev_sp,
+                            astate.sp, astate.saved_sp,
                             astate.stats.base.max_sp);
 
         let slots = [
@@ -1172,7 +1172,8 @@ impl ui::UiFrontend for CursesUI {
                         KEY_DOT => Action::Game(game::Action::Wait),
                         KEY_COMMA => Action::Game(game::Action::Pick),
                         KEY_DESCEND => Action::Game(game::Action::Descend),
-                        KEY_LOWO => Action::AutoExplore,
+                        KEY_LOWO => Action::AutoMove(AutoMoveType::Explore),
+                        KEY_CAPK => Action::AutoMove(AutoMoveType::Walk),
                         KEY_LOWQ => {
                             self.mode = Mode::FullScreen(FSMode::Quit);
                             return Some(Action::Redraw);

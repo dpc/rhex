@@ -73,6 +73,7 @@ pub struct EffectiveStats {
     pub base : Stats,
     pub melee_dmg: i32,
     pub melee_acc: i32,
+    pub melee_str_req: i32,
 }
 
 impl Stats {
@@ -110,6 +111,7 @@ impl Default for EffectiveStats {
             base: Default::default(),
             melee_dmg: 0,
             melee_acc: 0,
+            melee_str_req: 0,
         }
     }
 }
@@ -141,6 +143,7 @@ impl Add for EffectiveStats {
             base: self.base + s.base,
             melee_dmg: self.melee_dmg + s.melee_dmg,
             melee_acc: self.melee_acc + s.melee_acc,
+            melee_str_req: self.melee_str_req + s.melee_str_req,
         }
     }
 }
@@ -172,6 +175,7 @@ impl Sub for EffectiveStats {
             base : self.base - s.base,
             melee_dmg: self.melee_dmg - s.melee_dmg,
             melee_acc: self.melee_acc - s.melee_acc,
+            melee_str_req: self.melee_str_req- s.melee_str_req,
         }
     }
 }
@@ -201,9 +205,9 @@ pub struct State {
     pub hp: i32,
     pub mp: i32,
     pub sp: i32,
-    pub prev_hp: i32,
-    pub prev_mp: i32,
-    pub prev_sp: i32,
+    pub saved_hp: i32,
+    pub saved_mp: i32,
+    pub saved_sp: i32,
 
     pub player : bool,
     pub pre_pos : Position,
@@ -280,9 +284,9 @@ impl State {
             hp: stats.max_hp,
             mp: stats.max_mp,
             sp: stats.max_sp,
-            prev_hp: stats.max_hp,
-            prev_mp: stats.max_mp,
-            prev_sp: stats.max_sp,
+            saved_hp: stats.max_hp,
+            saved_mp: stats.max_mp,
+            saved_sp: stats.max_sp,
         }
     }
 
@@ -317,7 +321,12 @@ impl State {
             Action::Wait|Action::Pick|Action::Equip(_)|Action::Descend|Action::Fire(_) => vec!(pos),
             Action::Turn(a) => vec!(pos + a),
             Action::Move(a) => vec!(pos + (pos.dir + a).to_coordinate()),
-            Action::Charge => vec!(pos + pos.dir.to_coordinate(), pos + pos.dir.to_coordinate() + pos.dir.to_coordinate()),
+            Action::Charge => if self.can_charge_sp() {
+                vec!(pos + pos.dir.to_coordinate(),
+                pos + pos.dir.to_coordinate() + pos.dir.to_coordinate())
+            } else {
+                vec!(pos + pos.dir.to_coordinate())
+            },
             Action::Spin(a) => vec!(pos + (pos.dir + a).to_coordinate() +
                 match a {
                     Angle::Right => Angle::Left,
@@ -328,6 +337,18 @@ impl State {
         }
     }
 
+    pub fn post_action(&mut self, action : Action) {
+        match action {
+            Action::Wait => {
+                self.sp = cmp::min(self.stats.base.max_sp, self.sp + 1);
+            },
+            Action::Charge => {
+                self.sp = cmp::max(0, self.sp - self.charge_sp_cost());
+            },
+            _ => {}
+        }
+    }
+
     fn los_to_visible(&self, gstate : &game::State, los : &Visibility ) -> Visibility {
         let mut visible : Visibility = Default::default();
 
@@ -335,6 +356,8 @@ impl State {
             if gstate.light_map[coord] > 0 {
                 visible.insert(coord);
             } else if self.pos.coord.distance(coord) <= self.stats.base.infravision {
+                visible.insert(coord);
+            } else if coord == self.head() {
                 visible.insert(coord);
             } else if gstate.at(coord).tile().opaqueness() > 10 {
                 if gstate.at(coord).light_as_seen_by(self) > 0 {
@@ -382,14 +405,23 @@ impl State {
         self.discovered = discovered;
     }
 
+    // Save some stats for a reference
+    pub fn save_stats(&mut self) {
+        self.saved_hp = self.hp;
+        self.saved_mp = self.mp;
+        self.saved_sp = self.sp;
+    }
+
+
     pub fn pre_tick(&mut self, _ : &game::State) {
         self.pre_pos = self.pos;
-        self.prev_hp = self.hp;
-        self.prev_mp = self.mp;
-        self.prev_sp = self.sp;
         self.did_attack = Vec::new();
         self.was_attacked_by = Vec::new();
         self.temporary_los = Default::default();
+
+        if self.can_perform_action() {
+            self.save_stats();
+        }
 
         self.noise_emision = 0;
         self.heared = HashMap::new();
@@ -542,12 +574,21 @@ impl State {
             dmg *= 2;
         }
 
+        if !self.can_attack_sp() {
+            acc /= 2;
+            dmg /= 2;
+            self.sp = 0;
+        } else {
+            self.sp -= self.melee_sp_cost();
+        }
+
         let success = util::roll(acc, ev);
 
         let rand_ac = cmp::max(
             rand::thread_rng().gen_range(0, ac + 1),
             rand::thread_rng().gen_range(0, ac + 1),
             );
+
         let dmg = cmp::max(0, dmg - rand_ac);
 
         if success {
@@ -580,8 +621,26 @@ impl State {
         self.player = true;
     }
 
+    pub fn melee_sp_cost(&self) -> i32 {
+        cmp::max(0, self.stats.melee_str_req - self.stats.base.str_)
+    }
+
+    pub fn charge_sp_cost(&self) -> i32 {
+        cmp::max(0, 10 - self.stats.base.str_)
+    }
+
+    // Can attack considering only sp?
+    pub fn can_attack_sp(&self) -> bool {
+        self.sp > self.melee_sp_cost()
+    }
+
+    // Can attack considering only sp?
+    pub fn can_charge_sp(&self) -> bool {
+        self.sp > self.charge_sp_cost()
+    }
+
     pub fn can_attack(&self) -> bool {
-        self.action_cd == 0
+        self.action_cd == 0 &&  self.can_attack_sp()
     }
 
     pub fn moved(&mut self, gstate : &game::State, new_pos : Position) {
@@ -609,7 +668,6 @@ impl State {
 
     pub fn description(&self) -> String {
         self.race.description()
-
     }
 }
 

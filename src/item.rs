@@ -83,24 +83,31 @@ impl Item {
 
         match self.type_ {
             Plate => {
-                s.base.ac += 4;
-                s.base.ev -= 2;
+                s.base.ac = 4;
+                s.base.ev = -2;
             },
             Leather => {
-                s.base.ac += 1;
+                s.base.ac = 1;
             },
-            Helmet => s.base.ac += 1,
-            Boots => s.base.ev += 1,
-            Buckler => { s.base.ev += 1; s.base.ac += 1 },
-            Cloak => { s.base.ev += 1; },
+            Helmet => {
+                s.base.ac = 1;
+                s.base.vision = -2;
+                s.base.infravision = -1;
+            }
+            Boots => s.base.ev = 1,
+            Buckler => { s.base.ev = 1; s.base.ac = 1 },
+            Cloak => { s.base.ev = 1; },
             Knife => {
-                s.melee_dmg += 1;
+                s.melee_dmg = 1;
+                s.melee_str_req = 2;
             },
             Sword => {
                 s.melee_dmg += 3;
+                s.melee_str_req = 4;
             },
             Axe => {
                 s.melee_dmg += 4;
+                s.melee_str_req = 5;
             },
             _ => {},
         }
@@ -131,14 +138,12 @@ impl Item {
 
 pub fn random(level : i32) -> Box<Item> {
 
-    let a = -level;
+    let a = -(level / 2);
     let b = level + 1;
     let r = rand::thread_rng().gen_range(a, b) +
         rand::thread_rng().gen_range(a, b) +
         rand::thread_rng().gen_range(a, b) +
-        rand::thread_rng().gen_range(-2, 3) +
-        level / 2;
-
+        rand::thread_rng().gen_range(a, b);
 
     Box::new(match r {
         0 => Item::new(HealthPotion),

@@ -266,7 +266,7 @@ impl State {
         for &new_pos in &new_pos {
             let old_pos = actor.pos;
 
-            if actor.pos == new_pos {
+            if old_pos == new_pos {
                 // no movement
                 match action {
                     Action::Pick => {
@@ -331,6 +331,7 @@ impl State {
                 }
         }
         self.actors.insert(id, actor);
+        self.actors.get_mut(&id).unwrap().post_action(action);
     }
 
     pub fn pre_tick(&mut self) {

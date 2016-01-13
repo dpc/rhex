@@ -5,6 +5,8 @@ use time;
 use game::controller::{Request, Reply};
 use hex2d;
 
+use hex2d::Angle;
+
 use actor::{self, Noise, Race};
 use game;
 use hex2dext::algo::bfs;
@@ -20,7 +22,7 @@ pub trait UiFrontend {
 
 pub enum Action {
     Exit,
-    AutoExplore,
+    AutoMove(AutoMoveType),
     Redraw,
     Game(game::Action),
 }
@@ -33,14 +35,21 @@ pub enum Event {
     Log(LogEvent)
 }
 
+#[derive(Copy, Clone, PartialEq, Eq)]
+pub enum AutoMoveType {
+    Explore,
+    Walk,
+}
+
 /// Generic UI logic
 pub struct Ui<U : UiFrontend> {
     frontend : U,
-    autoexploring : Option<u64>,
+    automoving : Option<AutoMoveType>,
+    automove_turn : u64,
     last_redraw_ns : u64,
 }
 
-pub enum AutoExploreAction {
+pub enum AutoMoveAction {
     Action(game::Action),
     Finish,
     Blocked,
@@ -51,12 +60,13 @@ impl<U : UiFrontend> Ui<U> {
     pub fn new(frontend : U) -> Ui<U> {
         Ui {
             frontend: frontend,
-            autoexploring: None,
+            automoving : None,
+            automove_turn: 0,
             last_redraw_ns: 0,
         }
     }
 
-    pub fn should_stop_autoexploring(
+    pub fn should_stop_automoving(
         &self, astate : &actor::State, gstate : &game::State) -> bool {
 
         !astate.was_attacked_by.is_empty() ||
@@ -75,9 +85,26 @@ impl<U : UiFrontend> Ui<U> {
         astate.discovered_stairs(gstate)
     }
 
+    pub fn automove_action(
+        &self, astate : &actor::State, gstate : &game::State,
+        movetype : AutoMoveType,
+        ) -> AutoMoveAction {
+
+        match movetype {
+            AutoMoveType::Explore => self.autoexplore_action(astate, gstate),
+            AutoMoveType::Walk => {
+                if gstate.at(astate.head()).tile().is_passable() {
+                    AutoMoveAction::Action(game::Action::Move(Angle::Forward))
+                } else {
+                    AutoMoveAction::Finish
+                }
+            }
+        }
+    }
+
     pub fn autoexplore_action(
-        &self, astate : &actor::State, gstate : &game::State
-        ) -> AutoExploreAction {
+        &self, astate : &actor::State, gstate : &game::State,
+        ) -> AutoMoveAction {
 
         let start = astate.pos.coord;
 
@@ -93,18 +120,18 @@ impl<U : UiFrontend> Ui<U> {
                 let ndir = astate.pos.coord.direction_to_cw(neigh).expect("bfs gave me trash");
                 if ndir == astate.pos.dir {
                     if gstate.at(neigh).is_occupied() {
-                        AutoExploreAction::Blocked
+                        AutoMoveAction::Blocked
                     } else {
-                        AutoExploreAction::Action(game::Action::Move(hex2d::Angle::Forward))
+                        AutoMoveAction::Action(game::Action::Move(Angle::Forward))
                     }
                 } else {
-                    AutoExploreAction::Action(game::Action::Turn(ndir - astate.pos.dir))
+                    AutoMoveAction::Action(game::Action::Turn(ndir - astate.pos.dir))
                 }
             } else {
-                AutoExploreAction::Finish
+                AutoMoveAction::Finish
             }
         } else {
-           AutoExploreAction::Finish
+           AutoMoveAction::Finish
         }
     }
 
@@ -112,7 +139,8 @@ impl<U : UiFrontend> Ui<U> {
         if let &Some((id, ref gstate)) = req {
             let now = time::precise_time_ns();
 
-            if self.autoexploring.is_some() && self.last_redraw_ns + 50 * 1000 * 1000 > now {
+            if self.automoving.is_some() &&
+                self.last_redraw_ns + 50 * 1000 * 1000 > now {
                 return
             }
 
@@ -134,24 +162,29 @@ impl<U : UiFrontend> Ui<U> {
         loop {
             if let Some((id, gstate)) = pending_req.clone() {
                 let astate = &gstate.actors[&id];
-                if let Some(start_turn) = self.autoexploring {
-                    if start_turn != gstate.turn && self.should_stop_autoexploring(&astate, &gstate) {
-                        self.autoexploring = None;
+                if let Some(movetype) = self.automoving {
+                    let start_turn = self.automove_turn;
+                    if start_turn != gstate.turn && self.should_stop_automoving(&astate, &gstate) {
+                        self.automoving = None;
                         self.redraw(&pending_req);
                     } else {
-                        match self.autoexplore_action(&astate, &gstate) {
-                            AutoExploreAction::Blocked => {
-                                self.autoexploring = None;
+                        match self.automove_action(&astate, &gstate, movetype) {
+                            AutoMoveAction::Blocked => {
+                                self.automoving = None;
                                 self.redraw(&pending_req);
                             },
-                            AutoExploreAction::Action(action) => {
+                            AutoMoveAction::Action(action) => {
                                 rep.send((id, action)).unwrap();
                                 pending_req = None;
                                 thread::sleep_ms(10);
                             },
-                            AutoExploreAction::Finish => {
-                                self.frontend.event(Event::Log(LogEvent::AutoExploreDone), &gstate);
-                                self.autoexploring = None;
+                            AutoMoveAction::Finish => {
+                                if movetype == AutoMoveType::Explore {
+                                    self.frontend.event(
+                                        Event::Log(LogEvent::AutoExploreDone), &gstate
+                                        );
+                                }
+                                self.automoving = None;
                                 self.redraw(&pending_req);
                             }
                         }
@@ -165,7 +198,10 @@ impl<U : UiFrontend> Ui<U> {
                                 pending_req = None;
                             },
                             Action::Redraw => { },
-                            Action::AutoExplore => { self.autoexploring = Some(gstate.turn); },
+                            Action::AutoMove(movetype) => {
+                                self.automoving = Some(movetype);
+                                self.automove_turn = gstate.turn;
+                            },
                         }
                     }
                 }
@@ -185,6 +221,8 @@ impl<U : UiFrontend> Ui<U> {
                         if skip {
                             // no need to respond
                             pending_req = None;
+                        } else {
+
                         }
                     },
                     Err(err) => match err {
@@ -202,20 +240,17 @@ impl<U : UiFrontend> Ui<U> {
                         debug!("Received Action::Exit");
                         return
                     },
-                    Action::AutoExplore => {
-                        if self.autoexploring.is_none() {
-                            pending_action.push_back(action);
-                        }
-                    },
                     Action::Redraw => {
                         self.redraw(&pending_req);
                     },
                     _ => {
-                        if self.autoexploring.is_some() {
-                            self.autoexploring = None;
+                        if self.automoving.is_some() {
+                            self.automoving = None;
                             self.redraw(&pending_req);
+                        } else {
+                            pending_action.push_back(action);
                         }
-                        pending_action.push_back(action);
+
                     }
                 }
             } else {
