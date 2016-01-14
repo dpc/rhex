@@ -329,7 +329,8 @@ impl CursesUI {
         let window = self.map_window.as_ref().unwrap().window;
 
         let actors_aheads : HashMap<Coordinate, Coordinate> =
-            gstate.actors.iter().filter(|&(_, a)| !a.is_dead())
+            gstate.actors_byid.iter()
+            .filter(|&(_, a)| !a.is_dead())
             .map(|(_, a)| (a.head(), a.pos.coord)).collect();
         let astate_ahead = astate.pos.coord + astate.pos.dir;
 

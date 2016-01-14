@@ -146,7 +146,7 @@ impl<U : UiFrontend> Ui<U> {
 
             self.last_redraw_ns = now;
 
-            let astate = &gstate.actors[&id];
+            let astate = &gstate.actors_byid[&id];
             self.frontend.draw(&astate, &gstate);
         }
     }
@@ -161,7 +161,7 @@ impl<U : UiFrontend> Ui<U> {
 
         loop {
             if let Some((id, gstate)) = pending_req.clone() {
-                let astate = &gstate.actors[&id];
+                let astate = &gstate.actors_byid[&id];
                 if let Some(movetype) = self.automoving {
                     let start_turn = self.automove_turn;
                     if start_turn != gstate.turn && self.should_stop_automoving(&astate, &gstate) {
@@ -210,7 +210,7 @@ impl<U : UiFrontend> Ui<U> {
                     Ok(req) => {
                         let skip = {
                             let (id, ref gstate) = req;
-                            let astate = &gstate.actors[&id];
+                            let astate = &gstate.actors_byid[&id];
                             self.frontend.update(&astate, &gstate);
                             !astate.can_perform_action()
                         };
@@ -233,7 +233,7 @@ impl<U : UiFrontend> Ui<U> {
             }
 
             if let Some(action) = self.frontend.input(
-                pending_req.as_ref().map(|&(id, ref gstate)| &gstate.actors[&id])
+                pending_req.as_ref().map(|&(id, ref gstate)| &gstate.actors_byid[&id])
                 ) {
                 match action {
                     Action::Exit => {

@@ -636,7 +636,7 @@ impl State {
 
     // Can attack considering only sp?
     pub fn can_charge_sp(&self) -> bool {
-        self.sp > self.charge_sp_cost()
+        self.sp >= self.charge_sp_cost()
     }
 
     pub fn can_attack(&self) -> bool {

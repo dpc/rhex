@@ -37,7 +37,7 @@ impl Controller {
             self.state.post_tick();
 
             let rc_state = Arc::new(self.state.clone());
-            let actors = self.state.actors.clone();
+            let actors = self.state.actors_byid.clone();
 
             for (&id, actor) in &actors {
                 if actor.is_player() {

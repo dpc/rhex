@@ -42,8 +42,8 @@ pub enum Action {
 
 #[derive(Clone, Debug)]
 pub struct State {
-    pub actors: HashMap<u32, actor::State, DefaultState<FnvHasher>>, // id -> State
-    pub actors_pos: HashMap<Coordinate, u32, DefaultState<FnvHasher>>, // coord -> id
+    pub actors_byid: HashMap<u32, actor::State, DefaultState<FnvHasher>>, // id -> State
+    pub actors_coord_to_id: HashMap<Coordinate, u32, DefaultState<FnvHasher>>, // coord -> id
     pub actors_dead : HashSet<u32, DefaultState<FnvHasher>>,
     pub actors_counter : u32,
     pub map : Arc<Map>,
@@ -83,8 +83,8 @@ impl State {
         }
 
         let mut state = State {
-            actors: actors,
-            actors_pos: actors_pos,
+            actors_byid: actors,
+            actors_coord_to_id: actors_pos,
             actors_counter: actors_counter,
             actors_dead: Default::default(),
             items: items,
@@ -119,14 +119,14 @@ impl State {
         let mut player = None;
         let mut pony : Option<actor::State> = None;
 
-        for (_, astate) in self.actors.iter() {
+        for (_, astate) in self.actors_byid.iter() {
             if astate.is_player() {
                 player = Some(astate.clone());
                 break;
             }
         }
 
-        for (_, astate) in self.actors.iter() {
+        for (_, astate) in self.actors_byid.iter() {
             /*
             if astate.race == Race::Pony {
                 pony = Some(astate.clone());
@@ -136,8 +136,8 @@ impl State {
         }
 
         let mut state = State {
-            actors: actors,
-            actors_pos: actors_pos,
+            actors_byid: actors,
+            actors_coord_to_id: actors_pos,
             actors_counter: actors_counter,
             actors_dead: Default::default(),
             items: items,
@@ -168,13 +168,14 @@ impl State {
 
     pub fn recalculate_noise(&mut self) {
         for id in &self.actors_alive_ids() {
-            let source_emission = self.actors[id].noise_emision;
+            let source_emission = self.actors_byid[id].noise_emision;
             if source_emission > 0 {
-                let source_race = self.actors[id].race;
-                let source_coord = self.actors[id].pos.coord;
+                let source_race = self.actors_byid[id].race;
+                let source_coord = self.actors_byid[id].pos.coord;
                 source_coord.for_each_in_range(source_emission, |coord| {
-                    if let Some(&target_id) = self.actors_pos.get(&coord) {
-                        self.actors.get_mut(&target_id).unwrap().noise_hears(source_coord, Noise::Creature(source_race));
+                    if let Some(&target_id) = self.actors_coord_to_id.get(&coord) {
+                        self.actors_byid.get_mut(&target_id).unwrap()
+                            .noise_hears(source_coord, Noise::Creature(source_race));
                     }
                 });
             }
@@ -182,11 +183,11 @@ impl State {
     }
 
     pub fn actors_ids(&self) -> Vec<u32> {
-        self.actors.keys().cloned().collect()
+        self.actors_byid.keys().cloned().collect()
     }
 
     pub fn actors_alive_ids(&self) -> Vec<u32> {
-        self.actors.keys().filter(|&id| !self.actors[id].is_dead()).cloned().collect()
+        self.actors_byid.keys().filter(|&id| !self.actors_byid[id].is_dead()).cloned().collect()
     }
 
     pub fn recalculate_light_map(&mut self) {
@@ -213,8 +214,8 @@ impl State {
             }
         }
 
-        for (_, id) in &self.actors_pos {
-            let astate = &self.actors[id];
+        for (_, id) in &self.actors_coord_to_id {
+            let astate = &self.actors_byid[id];
             let pos = astate.pos.coord;
             if astate.light_emision > 0 {
                 algo::los::los(
@@ -239,13 +240,18 @@ impl State {
     }
 
     pub fn spawn(&mut self, mut astate : actor::State) {
+        if self.actors_coord_to_id.contains_key(&astate.pos.coord) {
+            // TODO: Find an alternative place
+            return;
+        }
         let id = self.actors_counter;
         self.actors_counter += 1;
 
-        self.actors_pos.insert(astate.pos.coord, id);
+        debug_assert!(!self.actors_coord_to_id.contains_key(&astate.pos.coord));
+        self.actors_coord_to_id.insert(astate.pos.coord, id);
         let pos = astate.pos;
         astate.moved(self, pos);
-        self.actors.insert(id, astate);
+        self.actors_byid.insert(id, astate);
     }
 
     pub fn spawn_player(&mut self, pos : Position) {
@@ -255,10 +261,10 @@ impl State {
     }
 
     pub fn act(&mut self, id : u32, action : Action) {
-        let mut actor = self.actors.remove(&id).unwrap();
+        let mut actor = self.actors_byid.remove(&id).unwrap();
 
         if !actor.can_perform_action() {
-            self.actors.insert(id, actor);
+            self.actors_byid.insert(id, actor);
             return;
         }
         let new_pos = actor.pos_after_action(action);
@@ -292,22 +298,22 @@ impl State {
                 }
             } else if action_could_be_attack(action) &&
                 old_pos.coord != new_pos.coord &&
-                    self.actors_pos.contains_key(&new_pos.coord)
+                    self.actors_coord_to_id.contains_key(&new_pos.coord)
                 {
                     // we've tried to move into actor; attack?
                     if !actor.can_attack() {
-                        return;
+                        break;
                     }
                     let dir = match action {
                         Action::Move(dir) => old_pos.dir + dir,
                         _ => old_pos.dir,
                     };
 
-                    let target_id = self.actors_pos[&new_pos.coord];
+                    let target_id = self.actors_coord_to_id[&new_pos.coord];
 
-                    let mut target = self.actors.remove(&target_id).unwrap();
+                    let mut target = self.actors_byid.remove(&target_id).unwrap();
                     actor.attacks(dir, &mut target);
-                    self.actors.insert(target_id, target);
+                    self.actors_byid.insert(target_id, target);
                     // Can't attack twice
                     break;
                 } else if self.at(new_pos.coord).tile().feature == Some(tile::Door(false)
@@ -319,26 +325,35 @@ impl State {
                     self.map = Arc::new(map.clone());
                     // Can't charge through the doors
                     break;
-                } else if old_pos.coord == new_pos.coord || self.at(new_pos.coord).is_passable() {
+                } else if old_pos.coord == new_pos.coord &&
+                    old_pos.dir != new_pos.dir
+                {
+                    // we've rotated
+                    actor.moved(self, new_pos);
+                } else if old_pos.coord != new_pos.coord &&
+                    self.at(new_pos.coord).is_passable() &&
+                    !self.actors_coord_to_id.contains_key(&new_pos.coord)
+                {
                     // we've moved
                     actor.moved(self, new_pos);
                     // we will remove the previous position on post_tick, so that
                     // for the rest of this turn this actor can be found through both new
                     // and old coor
-                    self.actors_pos.insert(new_pos.coord, id);
+                    debug_assert!(!self.actors_coord_to_id.contains_key(&new_pos.coord));
+                    self.actors_coord_to_id.insert(new_pos.coord, id);
                 } else {
                     // we hit the wall or something
                 }
         }
-        self.actors.insert(id, actor);
-        self.actors.get_mut(&id).unwrap().post_action(action);
+        self.actors_byid.insert(id, actor);
+        self.actors_byid.get_mut(&id).unwrap().post_action(action);
     }
 
     pub fn pre_tick(&mut self) {
         for id in self.actors_alive_ids() {
-            let mut actor = self.actors.remove(&id).unwrap();
+            let mut actor = self.actors_byid.remove(&id).unwrap();
             actor.pre_tick(self);
-            self.actors.insert(id, actor);
+            self.actors_byid.insert(id, actor);
         }
     }
 
@@ -346,8 +361,8 @@ impl State {
     pub fn post_tick(&mut self) {
 
         for id in &self.actors_ids() {
-            if self.actors[id].is_dead() && !self.actors_dead.contains(&id){
-                let mut a = self.actors.remove(&id).unwrap();
+            if self.actors_byid[id].is_dead() && !self.actors_dead.contains(&id){
+                let mut a = self.actors_byid.remove(&id).unwrap();
 
                 for (_, item) in a.items_backpack.iter() {
                     self.at_mut(a.pos.coord).drop_item(item.clone());
@@ -359,23 +374,33 @@ impl State {
                 }
                 a.items_equipped.clear();
 
-                self.actors.insert(*id, a);
+                self.actors_byid.insert(*id, a);
 
                 self.actors_dead.insert(*id);
             }
         }
 
-        self.actors_pos = self.actors_pos.iter().filter(|&(coord, ref id)|
-                                                 !self.actors[*id].is_dead() && (self.actors[*id].coord() == *coord)
-                                                ).map(|(coord, id)| (*coord, *id)).collect();
+        self.actors_coord_to_id = self.actors_coord_to_id.iter()
+            .filter(|&(coord, id)| {
+                !self.actors_byid[id].is_dead()
+            }).map(|(coord, id)| {
+                (
+                    self.actors_byid[id].pos.coord,
+                    *id,
+                    )
+            }).collect();
+
+        self.actors_coord_to_id.iter().map(|(coord, ref id)| {
+            debug_assert!(self.actors_byid[*id].coord() == *coord);
+        }).count();
 
         self.recalculate_light_map();
         self.recalculate_noise();
 
         for id in self.actors_alive_ids() {
-            let mut actor = self.actors.remove(&id).unwrap();
+            let mut actor = self.actors_byid.remove(&id).unwrap();
             actor.post_tick(self);
-            self.actors.insert(id, actor);
+            self.actors_byid.insert(id, actor);
         }
 
         self.turn += 1;
@@ -412,7 +437,9 @@ impl<'a> At<'a> {
     pub fn actor_map_or<R, F : Fn(&actor::State) -> R>
         (&self, def: R, cond : F) -> R
     {
-        self.state.actors_pos.get(&self.coord).map(|&id| &self.state.actors[&id]).map_or(def, |a| cond(&a))
+        self.state.actors_coord_to_id.get(&self.coord)
+            .map(|&id| &self.state.actors_byid[&id])
+            .map_or(def, |a| cond(&a))
     }
 
     pub fn item_map_or<R, F : Fn(&Box<Item>) -> R>
@@ -422,7 +449,7 @@ impl<'a> At<'a> {
     }
 
     pub fn is_occupied(&self) -> bool {
-        self.state.actors_pos.contains_key(&self.coord)
+        self.state.actors_coord_to_id.contains_key(&self.coord)
     }
 
     pub fn is_passable(&self) -> bool {
