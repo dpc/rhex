@@ -6,7 +6,7 @@
 
 Simple roguelike prototype written in [Rust][rust-home].
 
-You can try it out by pointing your **ssh client** to: rhex [at] rhex.dpc.pw (password is obvious). Note: **Make sure your terminal supports 256 colors and exports `TERM=xterm-256color`!**
+~~You can try it out by pointing your **ssh client** to: rhex [at] rhex.dpc.pw (password is obvious).~~ (temporary unavailable) Note: **Make sure your terminal supports 256 colors and exports `TERM=xterm-256color`!**
 
 It's intendent to exercise my [Rust][rust-home] knowledge and let me play with
 certain mechanisms that I'd like to see in roguelike game:
