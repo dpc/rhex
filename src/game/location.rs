@@ -222,6 +222,7 @@ impl Location {
         self.actors_coord_to_id.insert(astate.pos.coord, id);
         let pos = astate.pos;
         astate.moved(self, pos);
+        astate.post_act(self);
         self.actors_byid.insert(id, astate);
 
         id
