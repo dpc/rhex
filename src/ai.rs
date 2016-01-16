@@ -1,14 +1,24 @@
 use rand;
 use rand::Rng;
-use std::sync::{mpsc};
 
 use hex2dext::algo::bfs;
 
 use hex2d::{Coordinate, ToCoordinate};
 use hex2d::Angle::{Left, Right, Forward, Back, LeftBack};
 use game;
-use actor;
-use error::Error;
+use game::actor;
+
+pub trait Ai {
+    fn action(&mut self, id : actor::Id, engine : &game::Engine) -> game::Action;
+}
+
+pub struct Simple;
+
+impl Ai for Simple {
+    fn action(&mut self, id : actor::Id, engine : &game::Engine) -> game::Action {
+        grue(&engine.current_location().actors_byid[&id], engine.current_location())
+    }
+}
 
 fn roam() -> game::Action {
     match rand::thread_rng().gen_range(0, 10) {
@@ -20,7 +30,7 @@ fn roam() -> game::Action {
 }
 
 fn closest_reachable<F>(
-    gstate : &game::State, start : Coordinate, max_distance : i32, cond : F
+    gstate : &game::Location , start : Coordinate, max_distance : i32, cond : F
     ) -> Option<(Coordinate, Coordinate)>
     where F : Fn(Coordinate) -> bool
 {
@@ -33,7 +43,7 @@ fn closest_reachable<F>(
     bfs.find().map(|pos| (pos, bfs.backtrace_last(pos).unwrap()))
 }
 
-fn grue(astate : &actor::State, gstate : &game::State) -> game::Action {
+fn grue(astate : &actor::Actor, gstate : &game::Location) -> game::Action {
 
     for &visible_pos in &astate.visible {
         if gstate.at(visible_pos).actor_map_or(false, |a| a.is_player()) {
@@ -67,7 +77,7 @@ fn grue(astate : &actor::State, gstate : &game::State) -> game::Action {
     }
 }
 
-fn go_to(c: Coordinate, astate : &actor::State, gstate : &game::State) -> game::Action {
+fn go_to(c: Coordinate, astate : &actor::Actor, gstate : &game::Location) -> game::Action {
     let ndir = match astate.pos.coord.direction_to_cw(c) {
         None => return game::Action::Wait,
         Some(dir) => dir,
@@ -99,7 +109,7 @@ fn go_to(c: Coordinate, astate : &actor::State, gstate : &game::State) -> game::
     }
 }
 
-fn pony_follow(astate : &actor::State, gstate : &game::State) -> game::Action {
+fn pony_follow(astate : &actor::Actor, gstate : &game::Location) -> game::Action {
     let start = astate.pos.coord;
 
     let player_pos = closest_reachable(gstate, start, 10,
@@ -123,28 +133,5 @@ fn pony_follow(astate : &actor::State, gstate : &game::State) -> game::Action {
         go_to(neigh, astate, gstate)
     } else {
         roam()
-    }
-}
-
-pub fn run(
-    req : mpsc::Receiver<game::controller::Request>,
-    rep : mpsc::Sender<game::controller::Reply>
-    ) -> Result<(), Error<game::controller::Reply>>
-{
-
-    loop {
-        let (id, ref gstate) = try!(req.recv());
-
-        let astate = &gstate.actors_byid[&id];
-        if !astate.can_perform_action() {
-            continue;
-        }
-
-        let action = match astate.race {
-//            actor::Race::Pony => pony_follow(&astate, &gstate),
-            _ => grue(&astate, &gstate),
-        };
-
-        try!(rep.send((id, action)));
     }
 }

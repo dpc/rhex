@@ -8,30 +8,20 @@ use hex2dext::algo;
 use game::{self, Action};
 use game::tile::{Feature};
 use util;
-use item::Item;
+use super::item::Item;
 
 use self::Race::*;
-use race::*;
 use std::iter::Iterator;
 
 use rand;
 use rand::Rng;
 
-pub type Visibility = HashSet<Coordinate>;
-pub type NoiseMap = HashMap<Coordinate, Noise>;
+use super::conts::*;
+use super::{Visibility, NoiseMap};
 
-#[derive(Copy, Clone, Eq, PartialEq, Debug)]
-pub enum Noise {
-    Creature(Race),
-}
+use super::{Location, Noise};
 
-impl Noise {
-    pub fn description(&self) -> String {
-        match *self {
-            Noise::Creature(cr) => cr.description(),
-        }
-    }
-}
+pub type Id = u32;
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub enum Race {
@@ -200,8 +190,7 @@ pub struct AttackResult {
 }
 
 #[derive(Clone, Debug)]
-pub struct State {
-
+pub struct Actor {
     pub hp: i32,
     pub mp: i32,
     pub sp: i32,
@@ -254,11 +243,11 @@ pub struct State {
     pub did_attack : Vec<AttackResult>,
 }
 
-impl State {
-    pub fn new(race : Race, pos : Position) -> State {
+impl Actor {
+    pub fn new(race : Race, pos : Position) -> Self {
         let stats = Stats::new(race);
 
-        State {
+        Actor {
             race: race,
             player: false,
             pos: pos, pre_pos: pos,
@@ -349,18 +338,18 @@ impl State {
         }
     }
 
-    fn los_to_visible(&self, gstate : &game::State, los : &Visibility ) -> Visibility {
+    fn los_to_visible(&self, loc: &game::Location, los : &Visibility ) -> Visibility {
         let mut visible : Visibility = Default::default();
 
         for &coord in los {
-            if gstate.light_map[coord] > 0 {
+            if loc.light_map[coord] > 0 {
                 visible.insert(coord);
             } else if self.pos.coord.distance(coord) <= self.stats.base.infravision {
                 visible.insert(coord);
             } else if coord == self.head() {
                 visible.insert(coord);
-            } else if gstate.at(coord).tile().opaqueness() > 10 {
-                if gstate.at(coord).light_as_seen_by(self) > 0 {
+            } else if loc.at(coord).tile().opaqueness() > 10 {
+                if loc.at(coord).light_as_seen_by(self) > 0 {
                     visible.insert(coord);
                 }
             }
@@ -369,14 +358,14 @@ impl State {
         visible
     }
 
-    fn postprocess_visibile(&mut self, gstate : &game::State) {
+    fn postprocess_visibile(&mut self, loc: &game::Location) {
         let total_los = self.temporary_los.clone();
-        let total_visible = self.los_to_visible(gstate, &total_los);
+        let total_visible = self.los_to_visible(loc, &total_los);
 
         self.temporary_los = Default::default();
-        self.add_current_los_to_temporary_los(gstate);
+        self.add_current_los_to_temporary_los(loc);
 
-        let visible = self.los_to_visible(gstate, &self.temporary_los);
+        let visible = self.los_to_visible(loc, &self.temporary_los);
 
         let mut discovered : HashSet<_> = Default::default();
         let mut discovered_areas : HashSet<_> = Default::default();
@@ -389,7 +378,7 @@ impl State {
         }
 
         for &coord in &discovered {
-            if let Some(area) = gstate.at(coord).tile().area {
+            if let Some(area) = loc.at(coord).tile().area {
                 let area_center = area.center;
 
                 if !self.known_areas.contains(&area_center) {
@@ -413,7 +402,17 @@ impl State {
     }
 
 
-    pub fn pre_tick(&mut self, _ : &game::State) {
+    pub fn noise_makes(&mut self, noise : i32) {
+        if self.noise_emision < noise {
+            self.noise_emision = noise;
+        }
+    }
+
+    pub fn noise_hears(&mut self, coord : Coordinate, type_ : Noise) {
+        self.heared.insert(coord, type_);
+    }
+
+    pub fn pre_act(&mut self) {
         self.pre_pos = self.pos;
         self.did_attack = Vec::new();
         self.was_attacked_by = Vec::new();
@@ -427,18 +426,8 @@ impl State {
         self.heared = HashMap::new();
     }
 
-    pub fn noise_makes(&mut self, noise : i32) {
-        if self.noise_emision < noise {
-            self.noise_emision = noise;
-        }
-    }
-
-    pub fn noise_hears(&mut self, coord : Coordinate, type_ : Noise) {
-        self.heared.insert(coord, type_);
-    }
-
-    pub fn post_tick(&mut self, gstate : &game::State) {
-        self.postprocess_visibile(gstate);
+    pub fn post_act(&mut self, loc : &Location) {
+        self.postprocess_visibile(loc);
 
         if self.action_cd > 0 {
             self.action_cd -= 1;
@@ -508,11 +497,11 @@ impl State {
         }
     }
 
-    fn add_current_los_to_temporary_los(&mut self, gstate : &game::State) {
+    fn add_current_los_to_temporary_los(&mut self, loc : &Location) {
         let pos = self.pos;
         let vision = self.stats.base.vision;
         algo::los2::los(
-            &|coord| gstate.at(coord).tile().opaqueness(),
+            &|coord| loc.at(coord).tile().opaqueness(),
             &mut |coord, _ | {
                 let _ = self.temporary_los.insert(coord);
             },
@@ -558,7 +547,7 @@ impl State {
         self.stats.base.max_mp += self.stats.base.int * 2;
     }
 
-    pub fn attacks(&mut self, dir : Direction, target : &mut State) {
+    pub fn attacks(&mut self, dir : Direction, target : &mut Actor) {
         let mut acc = self.stats.melee_acc;
         let mut dmg = self.stats.melee_dmg;
 
@@ -611,9 +600,9 @@ impl State {
         });
     }
 
-    pub fn discovered_stairs(&self, gstate : &game::State) -> bool {
+    pub fn discovered_stairs(&self, loc : &Location) -> bool {
         self.discovered.iter().any(
-            |c| gstate.at(*c).tile().feature == Some(Feature::Stairs)
+            |c| loc.at(*c).tile().feature == Some(Feature::Stairs)
             )
     }
 
@@ -643,9 +632,9 @@ impl State {
         self.action_cd == 0 &&  self.can_attack_sp()
     }
 
-    pub fn moved(&mut self, gstate : &game::State, new_pos : Position) {
+    pub fn moved(&mut self, loc: &Location, new_pos : Position) {
         self.pos = new_pos;
-        self.add_current_los_to_temporary_los(gstate);
+        self.add_current_los_to_temporary_los(loc);
         self.noise_makes(2);
     }
 
@@ -670,5 +659,3 @@ impl State {
         self.race.description()
     }
 }
-
-

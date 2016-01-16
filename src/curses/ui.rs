@@ -1,0 +1,1415 @@
+use std::cell::RefCell;
+use std::collections::{VecDeque, HashMap, HashSet};
+use std::env;
+use std;
+use std::{thread, cmp, fmt};
+use std::io::Write;
+use std::fmt::Write as FmtWrite;
+use core::str::StrExt;
+
+use num::integer::Integer;
+
+use ncurses as nc;
+use hex2d::{Position, Direction, Coordinate, Angle, Left, Right, Forward, Back, ToCoordinate};
+
+use hex2dext::algo::{bfs};
+
+use super::consts::*;
+use super::color;
+use super::{LogEntry, AutoMoveType, AutoMoveAction, LogEvent, Event};
+use super::Result;
+
+use game::{actor, Location, Actor, item, area};
+use game;
+use game::actor::{Race, Slot};
+use game::tile;
+use util;
+
+mod locale {
+    use libc::{c_int, c_char};
+    pub const LC_ALL: c_int = 6;
+    extern "C" {
+        pub fn setlocale(category: c_int, locale: *const c_char) -> *mut c_char;
+    }
+}
+
+
+pub struct Window {
+    pub window : nc::WINDOW,
+}
+
+impl Window {
+    pub fn new(w : i32, h : i32, x : i32, y : i32) -> Window {
+        Window {
+            window : nc::subwin(nc::stdscr, h, w, y, x),
+        }
+    }
+}
+
+impl Drop for Window {
+    fn drop(&mut self) {
+        nc::delwin(self.window);
+    }
+}
+
+struct Windows {
+    map : Window,
+    log : Window,
+    stats : Window,
+    full : Window,
+}
+
+impl Windows {
+    fn after_resize() -> Self {
+        let mut max_x = 0;
+        let mut max_y = 0;
+        nc::getmaxyx(nc::stdscr, &mut max_y, &mut max_x);
+
+        let mid_x = max_x - 30;
+        let mid_y = 12;
+
+        let map_window = Window::new(
+                mid_x, max_y, 0, 0
+                );
+        let stats_window = Window::new(
+                max_x - mid_x, mid_y, mid_x, 0
+                );
+        let log_window = Window::new(
+                max_x - mid_x, max_y - mid_y, mid_x, mid_y
+                );
+        let fs_window = Window::new(
+                max_x, max_y, 0, 0
+                );
+
+        Windows {
+            map: map_window,
+            stats: stats_window,
+            log: log_window,
+            full: fs_window,
+        }
+    }
+}
+
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
+enum InvMode {
+    View,
+    Equip,
+}
+
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
+enum FSMode {
+    Help,
+    Intro,
+    Quit,
+}
+
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
+enum TargetMode {
+    Fire,
+}
+
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
+enum Mode {
+    Normal,
+    Examine,
+    Target(TargetMode),
+    FullScreen(FSMode),
+    Inventory(InvMode),
+}
+
+pub struct Ui {
+    calloc : RefCell<color::Allocator>,
+
+    windows : Windows,
+
+    mode : Mode,
+    log : VecDeque<LogEntry>,
+    target_pos : Option<Position>,
+    dot : &'static str,
+
+    label_color: u64,
+    text_color: u64,
+    text_gray_color: u64,
+    red_color: u64,
+    green_color: u64,
+
+    engine : game::Engine,
+    exit : bool,
+    needs_redraw : bool,
+    game : game::Engine,
+    game_delay : i32,
+
+    automoving : Option<AutoMoveType>,
+    automove_turn : u64,
+
+    game_action_queue : VecDeque<game::Action>,
+}
+
+
+impl Ui {
+    pub fn new() -> Result<Self> {
+
+        let term_ok = env::var_os("TERM").as_ref()
+            .and_then(|s| s.as_os_str().to_str())
+            .map_or(false, |s| s.ends_with("-256color"));
+
+        let term_putty = env::var_os("TERM").as_ref()
+            .and_then(|s| s.as_os_str().to_str())
+            .map_or(false, |s| s.starts_with("putty"));
+
+        if !term_ok {
+            panic!("Your TERM environment variable must end with -256color, sorry, stranger from the past. It is curable. Google it, fix it, try again.");
+        }
+
+        if env::var_os("ESCDELAY").is_none() {
+            env::set_var("ESCDELAY", "25");
+        }
+
+        unsafe {
+            let _ = locale::setlocale(locale::LC_ALL, b"en_US.UTF-8\0".as_ptr() as *const i8);
+        }
+
+        nc::initscr();
+        nc::start_color();
+        nc::keypad(nc::stdscr, true);
+        nc::noecho();
+        nc::raw();
+        nc::timeout(0);
+        nc::flushinp();
+
+        assert!(nc::has_colors());
+
+        let mut calloc = color::Allocator::new();
+        let label_color = nc::COLOR_PAIR(
+            calloc.get(color::LABEL_FG, color::BACKGROUND_BG)
+            );
+        let text_color = nc::COLOR_PAIR(
+            calloc.get(color::VISIBLE_FG, color::BACKGROUND_BG)
+            );
+        let text_gray_color = nc::COLOR_PAIR(
+            calloc.get(color::GRAY[10], color::BACKGROUND_BG)
+            );
+        let green_color = nc::COLOR_PAIR(
+            calloc.get(color::GREEN_FG, color::BACKGROUND_BG)
+            );
+        let red_color = nc::COLOR_PAIR(
+            calloc.get(color::RED_FG, color::BACKGROUND_BG)
+            );
+
+        let mut engine =  game::Engine::new();
+
+        engine.spawn();
+
+        nc::doupdate();
+
+        Ok(Ui {
+            calloc: RefCell::new(calloc),
+            windows : Windows::after_resize(),
+            mode: Mode::FullScreen(FSMode::Intro),
+            target_pos: None,
+            dot: if term_putty { NORMAL_DOT } else { UNICODE_DOT },
+            log: VecDeque::new(),
+
+            label_color: label_color,
+            text_color: text_color,
+            text_gray_color: text_gray_color,
+            red_color: red_color,
+            green_color: green_color,
+
+            exit : false,
+            needs_redraw : true,
+            game_delay : 0,
+
+            engine : engine,
+            automoving: None,
+            automove_turn: !0,
+
+            game_action_queue : VecDeque::new(),
+            game : game::Engine::new(),
+        })
+    }
+
+    pub fn resize(&mut self) {
+        self.windows = Windows::after_resize()
+    }
+
+
+    /// Mark the screen for redraw
+    pub fn redraw(&mut self) {
+        self.needs_redraw = true;
+    }
+
+    pub fn screen_size(&self) -> (i32, i32) {
+        let mut max_x = 0;
+        let mut max_y = 0;
+        nc::getmaxyx(nc::stdscr, &mut max_y, &mut max_x);
+
+        (max_y, max_y)
+    }
+
+    pub fn redraw_now(&mut self, astate : &Actor, gstate : &game::Location) {
+        match self.mode {
+            Mode::Normal|Mode::Examine|Mode::Inventory(_)|Mode::Target(_) => {
+                if let Mode::Inventory(_) = self.mode {
+                    self.draw_inventory(astate, gstate);
+                } else {
+                    self.draw_map(astate, gstate);
+                }
+
+                self.draw_log(astate, gstate);
+
+                self.draw_stats(astate, gstate);
+            },
+            Mode::FullScreen(fs_mode) => match fs_mode {
+                FSMode::Help => {
+                    self.draw_help();
+                },
+                FSMode::Quit => {
+                    self.draw_quit();
+                },
+                FSMode::Intro => {
+                    self.draw_intro();
+                },
+            },
+        }
+
+        let (max_x, max_y) = self.screen_size();
+
+        nc::mv(max_y - 1, max_x - 1);
+        // TODO: Is this needed?
+        let _ = std::io::stdout().flush();
+    }
+
+    pub fn is_automoving(&self) -> bool {
+        self.automoving.is_some()
+    }
+
+    pub fn should_stop_automoving(
+        &self, astate : &Actor, gstate : &game::Location) -> bool {
+
+        !astate.was_attacked_by.is_empty() ||
+        astate.discovered_areas.iter().any(|_| true ) ||
+        astate.visible.iter().any(|&coord|
+                                  gstate.at(coord)
+                                  .actor_map_or(false, |a| a.race == actor::Race::Rat)
+                                 ) ||
+        astate.discovered.iter().any(|&coord|
+                                     gstate.at(coord)
+                                     .item_map_or(false, |_| true)
+                                    ) ||
+        astate.heared.iter()
+//        .filter(|&(c, t)| *c != astate.pos.coord && *t != Noise::Creature(Race::Pony))
+        .any(|(c, _)| !astate.sees(*c)) ||
+        astate.discovered_stairs(gstate)
+    }
+
+    pub fn automove_action(
+        &self, astate : &Actor, gstate : &game::Location,
+        movetype : AutoMoveType,
+        ) -> AutoMoveAction {
+
+        match movetype {
+            AutoMoveType::Explore => self.autoexplore_action(astate, gstate),
+            AutoMoveType::Walk => {
+                if gstate.at(astate.head()).tile().is_passable() {
+                    AutoMoveAction::Action(game::Action::Move(Angle::Forward))
+                } else {
+                    AutoMoveAction::Finish
+                }
+            }
+        }
+    }
+
+    pub fn autoexplore_action(
+        &self, astate : &Actor, gstate : &game::Location,
+        ) -> AutoMoveAction {
+
+        let start = astate.pos.coord;
+
+        let mut bfs = bfs::Traverser::new(
+            |c| c == start || gstate.at(c).tile().is_passable(),
+            |c| !astate.knows(c),
+            start
+            );
+
+        if let Some(dst) = bfs.find() {
+            if let Some(neigh) = bfs.backtrace_last(dst) {
+
+                let ndir = astate.pos.coord.direction_to_cw(neigh).expect("bfs gave me trash");
+                if ndir == astate.pos.dir {
+                    if gstate.at(neigh).is_occupied() {
+                        AutoMoveAction::Blocked
+                    } else {
+                        AutoMoveAction::Action(game::Action::Move(Angle::Forward))
+                    }
+                } else {
+                    AutoMoveAction::Action(game::Action::Turn(ndir - astate.pos.dir))
+                }
+            } else {
+                AutoMoveAction::Finish
+            }
+        } else {
+           AutoMoveAction::Finish
+        }
+    }
+
+    pub fn run(&mut self) {
+        let mut game_delay = 0;
+        while !self.exit {
+            if game_delay > 0 {
+                game_delay -= 1;
+            } else {
+                let cur_loc = self.engine.current_location().clone();
+                let player_id = cur_loc.player_id();
+                let player = cur_loc.actors_byid[&player_id].clone();
+
+
+                if self.engine.needs_player_input() {
+                    if let Some(movetype) = self.automoving {
+                        let start_turn = self.automove_turn;
+                        if start_turn != self.engine.turn() && self.should_stop_automoving(&player, &cur_loc) {
+                            self.automoving = None;
+                            self.redraw();
+                        } else {
+                            match self.automove_action(&player, &cur_loc, movetype) {
+                                AutoMoveAction::Blocked => {
+                                    self.automoving = None;
+                                    self.redraw();
+                                },
+                                AutoMoveAction::Action(action) => {
+                                    self.engine.player_act(action);
+
+                                    let cur_loc = self.engine.current_location().clone();
+                                    let player_id = cur_loc.player_id();
+                                    let player = cur_loc.actors_byid[&player_id].clone();
+                                    self.update(&player, &cur_loc)
+                                },
+                                AutoMoveAction::Finish => {
+                                    if movetype == AutoMoveType::Explore {
+                                        self.event(
+                                            Event::Log(LogEvent::AutoExploreDone), &cur_loc
+                                            );
+                                    }
+                                    self.automoving = None;
+                                    self.redraw();
+                                }
+                            }
+                        }
+                    } else if let Some(action) = self.game_action_queue.pop_front() {
+                        self.engine.player_act(action);
+                        self.redraw();
+                    }
+                } else {
+                    self.engine.tick();
+                    self.redraw();
+                }
+                self.game_delay = if self.is_automoving() { 10 } else { 50 };
+            }
+            {
+                let cur_loc = self.engine.current_location().clone();
+                let player_id = cur_loc.player_id();
+                let player = cur_loc.actors_byid[&player_id].clone();
+
+
+                self.input_handle(&player);
+                if self.needs_redraw {
+                    self.needs_redraw = false;
+                    self.redraw_now(&player, &cur_loc);
+                }
+            }
+            thread::sleep_ms(1);
+        }
+    }
+
+    /// Handle input.
+    pub fn input_handle(&mut self, actor : &Actor) {
+        loop {
+            let ch = nc::getch();
+            if ch == nc::KEY_RESIZE {
+                self.resize();
+                self.redraw();
+            }
+            if ch == -1 {
+                return;
+            }
+
+            self.input_handle_key(actor, ch);
+        }
+    }
+
+    pub fn action_push(&mut self, action : game::Action) {
+        self.game_action_queue.push_back(action);
+    }
+
+    pub fn mode_switch_to(&mut self, mode : Mode) {
+        self.mode = mode;
+        self.redraw();
+    }
+
+    pub fn queue_turn(&mut self, angle : Angle) {
+        self.action_push(game::Action::Turn(angle))
+    }
+
+    pub fn queue_spin(&mut self, angle : Angle) {
+        self.action_push(game::Action::Spin(angle))
+    }
+
+    pub fn queue_move(&mut self, angle: Angle) {
+        self.action_push(game::Action::Move(angle))
+    }
+
+    pub fn queue_charge(&mut self) {
+        self.action_push(game::Action::Charge)
+    }
+
+    pub fn queue_pick(&mut self) {
+        self.action_push(game::Action::Pick)
+    }
+
+    pub fn queue_fire(&mut self, coord : Coordinate) {
+        self.action_push(game::Action::Fire(coord))
+    }
+
+    pub fn queue_wait(&mut self) {
+        self.action_push(game::Action::Wait)
+    }
+
+    pub fn queue_descend(&mut self) {
+        self.action_push(game::Action::Descend)
+    }
+
+    pub fn queue_equip(&mut self, ch : char) {
+        self.action_push(game::Action::Equip(ch))
+    }
+
+    pub fn input_handle_key(&mut self, astate : &Actor, ch : i32) {
+        match self.mode {
+            Mode::FullScreen(fs_mode) => match fs_mode {
+                FSMode::Quit => match ch {
+                    KEY_LOWY|KEY_CAPY => self.exit = true,
+                    _ => self.mode_switch_to(Mode::Normal),
+                },
+                _ => match ch {
+                    _ => self.mode_switch_to(Mode::Normal),
+                },
+            },
+            Mode::Normal => {
+                match ch {
+                    KEY_LOWH => self.queue_turn(Left),
+                    KEY_LOWL => self.queue_turn(Right),
+                    KEY_LOWK => self.queue_move(Forward),
+                    KEY_LOWC => self.queue_charge(),
+                    KEY_LOWU => self.queue_spin(Left),
+                    KEY_LOWI => self.queue_spin(Right),
+                    KEY_CAPH => self.queue_move(Left),
+                    KEY_CAPL => self.queue_move(Right),
+                    KEY_LOWJ => self.queue_move(Back),
+                    KEY_DOT => self.queue_wait(),
+                    KEY_COMMA => self.queue_pick(),
+                    KEY_DESCEND => self.queue_descend(),
+                    KEY_LOWO => self.automoving = Some(AutoMoveType::Explore),
+                    KEY_CAPK => self.automoving = Some(AutoMoveType::Walk),
+                    KEY_LOWQ => self.mode_switch_to(Mode::FullScreen(FSMode::Quit)),
+                    KEY_CAPI => self.mode_switch_to(Mode::Inventory(InvMode::View)),
+                    KEY_CAPE => self.mode_switch_to(Mode::Inventory(InvMode::Equip)),
+                    KEY_LOWX => {
+                        self.target_pos = None;
+                        self.mode_switch_to(Mode::Examine);
+                    },
+                    KEY_LOWF =>  {
+                        self.target_pos = None;
+                        self.mode_switch_to(Mode::Target(TargetMode::Fire));
+                    },
+                    KEY_HELP => {
+                        self.mode_switch_to(Mode::FullScreen(FSMode::Help));
+                    },
+                    _ => { }
+                }
+            },
+            Mode::Inventory(InvMode::Equip) => match ch {
+                ch => match ch as u8 as char {
+                    'a'...'z'|'A'...'Z' => {
+                        if astate.item_letter_taken(ch as u8 as char) {
+                            self.queue_equip(ch as u8 as char)
+                        }
+                    },
+                    '\x1b' => self.mode_switch_to(Mode::Normal),
+                    _ => {},
+                }
+            },
+            Mode::Inventory(InvMode::View) => match ch {
+                ch => match ch as u8 as char {
+                    'a'...'z'|'A'...'Z' => { },
+                    '\x1b' => self.mode_switch_to(Mode::Normal),
+                    _ => {},
+                }
+            },
+            Mode::Examine => {
+                let pos = self.target_pos.unwrap();
+
+                match ch {
+                    KEY_ESC | KEY_LOWX | KEY_LOWQ => {
+                        self.target_pos = None;
+                        self.mode = Mode::Normal;
+                    },
+                    KEY_LOWH => {
+                        self.target_pos = Some(pos + Angle::Left);
+                    },
+                    KEY_LOWL => {
+                        self.target_pos = Some(pos + Angle::Right);
+                    },
+                    KEY_LOWJ => {
+                        self.target_pos = Some(pos + (pos.dir + Angle::Back).to_coordinate());
+                    },
+                    KEY_LOWK => {
+                        self.target_pos = Some(pos + pos.dir.to_coordinate());
+                    },
+                    KEY_CAPK => {
+                        self.target_pos = Some(pos + pos.dir.to_coordinate().scale(5));
+                    },
+                    KEY_CAPJ => {
+                        self.target_pos = Some(pos + (pos.dir + Angle::Back).to_coordinate().scale(5));
+                    },
+                    _ => { }
+                }
+            },
+            Mode::Target(_) => {
+                let pos = self.target_pos.unwrap();
+                let center = astate.pos;
+
+                match ch  {
+                    KEY_ESC | KEY_LOWX | KEY_LOWQ => {
+                        self.target_pos = None;
+                        self.mode_switch_to(Mode::Normal);
+                    },
+                    KEY_ENTER | KEY_LOWF => {
+                        let target = self.target_pos.unwrap();
+                        self.target_pos = None;
+                        self.mode_switch_to(Mode::Normal);
+                        self.queue_fire(target.coord);
+                    },
+                    KEY_LOWH => {
+                        self.target_pos = Some(
+                            util::circular_move(center, pos, Angle::Left)
+                            );
+                        self.redraw();
+                    },
+                    KEY_LOWL => {
+                        self.target_pos = Some(
+                            util::circular_move(center, pos, Angle::Right)
+                            );
+                        self.redraw();
+                    },
+                    KEY_LOWJ => {
+                        self.target_pos = Some(
+                            util::circular_move(center, pos, Angle::Back)
+                            );
+                        self.redraw();
+                    },
+                    KEY_LOWK => {
+                        self.target_pos = Some(
+                            util::circular_move(center, pos, Angle::Forward)
+                            );
+                        self.redraw();
+                    },
+                    _ => { }
+                }
+            }
+        }
+    }
+
+    // TODO: break into smaller stuff?
+    fn update(&mut self, astate : &Actor, gstate : &game::Location) {
+        if astate.is_dead() {
+            return;
+        }
+
+        let discoviered_areas = astate.discovered_areas.iter()
+            .filter_map(|coord| gstate.at(*coord).tile().area)
+            ;
+
+        if let Some(s) = self.format_areas(discoviered_areas.map(|area| area.type_)) {
+            self.log(&s, gstate);
+        }
+
+        for item_coord in astate.discovered.iter().filter(|&coord|
+                                      gstate.at(*coord).item_map_or(false, |_| true)
+                                      ) {
+            let item_descr = gstate.at(*item_coord).item_map_or("".to_string(), |i| i.description().to_string());
+            self.log(&format!("You've found {}.", item_descr), gstate);
+        }
+
+        if astate.discovered_stairs(gstate) {
+            self.log("You've found stairs.", gstate);
+        }
+
+        for res in &astate.was_attacked_by {
+            if res.success {
+                self.log(&format!(
+                        "{} hit you {}for {} dmg.",
+                        res.who,
+                        if res.behind { "from behind " } else { "" },
+                        res.dmg
+                        ), gstate);
+            } else {
+                self.log(&format!("{} missed you.", res.who), gstate);
+            }
+        }
+
+        for res in &astate.did_attack {
+            if res.success {
+                self.log(&format!(
+                        "You hit {} {}for {} dmg.",
+                        res.who,
+                        if res.behind { "from behind " } else { "" },
+                        res.dmg
+                        ), gstate);
+            } else {
+                self.log(&format!("You missed {}.", res.who), gstate);
+            }
+        }
+
+        let noises = astate.heared.iter()
+            .filter(|&(c, _) | *c != astate.pos.coord)
+            .filter(|&(c, _) | !astate.sees(*c));
+
+        for (_, &noise) in noises {
+            self.log(&format!("You hear {}.", noise.description()), gstate);
+        }
+    }
+
+
+    pub fn log(&mut self, s : &str, gstate : &game::Location) {
+        self.log.push_front(LogEntry{
+            text: s.to_string(), turn: gstate.turn
+        });
+    }
+
+    pub fn display_intro(&mut self) {
+        self.mode = Mode::FullScreen(FSMode::Intro);
+    }
+
+    fn draw_map(
+        &mut self,
+        astate : &Actor, gstate : &game::Location,
+        )
+    {
+        let mut calloc = self.calloc.borrow_mut();
+
+        let window = self.windows.map.window;
+
+        let actors_aheads : HashMap<Coordinate, Coordinate> =
+            gstate.actors_byid.iter()
+            .filter(|&(_, a)| !a.is_dead())
+            .map(|(_, a)| (a.head(), a.pos.coord)).collect();
+        let astate_ahead = astate.pos.coord + astate.pos.dir;
+
+        /* Get the screen bounds. */
+        let mut max_x = 0;
+        let mut max_y = 0;
+        nc::getmaxyx(window, &mut max_y, &mut max_x);
+
+        let mid_x = max_x / 2;
+        let mid_y = max_y / 2;
+
+        let cpair = nc::COLOR_PAIR(calloc.get(color::VISIBLE_FG, color::MAP_BACKGROUND_BG));
+        nc::wbkgd(window, ' ' as nc::chtype | cpair as nc::chtype);
+        nc::werase(window);
+
+        let (center, head) = match self.mode {
+            Mode::Examine => {
+                match self.target_pos {
+                    None => {
+                        self.target_pos = Some(astate.pos);
+                        (astate.pos.coord, astate.pos.coord + astate.pos.dir)
+                    },
+                    Some(pos) => {
+                        (pos.coord, pos.coord + pos.dir)
+                    },
+                }
+            },
+            Mode::Target(_) => {
+                match self.target_pos {
+                    None => {
+                        self.target_pos = Some(astate.pos);
+                        (astate.pos.coord, astate.pos.coord + astate.pos.dir)
+                    },
+                    Some(pos) => {
+                        (astate.pos.coord, pos.coord)
+                    },
+                }
+            },
+            _ => {
+                (astate.pos.coord, astate.pos.coord + astate.pos.dir)
+            }
+        };
+
+        let mut target_line = HashSet::new();
+        if let Mode::Target(_) = self.mode {
+            center.for_each_in_line_to(head, |c| {
+                target_line.insert(c);
+            });
+        }
+
+        let (vpx, vpy) = center.to_pixel_integer(SPACING);
+
+        for vy in 0..max_y {
+            for vx in 0..max_x {
+                let (rvx, rvy) = (vx - mid_x, vy - mid_y);
+
+                let (cvx, cvy) = (rvx + vpx, rvy + vpy);
+
+                let (c, off) = Coordinate::from_pixel_integer(SPACING, (cvx, cvy));
+
+                let is_proper_coord = off == (0, 0);
+
+                let (visible, _in_los, knows, tt, t, light) = if is_proper_coord {
+
+                    let t = gstate.map[c].clone();
+                    let tt = t.type_;
+
+                    (
+                        astate.sees(c) || astate.is_dead(),
+                        astate.in_los(c) || astate.is_dead(),
+                        astate.knows(c),
+                        Some(tt), Some(t),
+                        gstate.at(c).light_as_seen_by(astate)
+                    )
+                } else {
+                    // Paint a glue characters between two real characters
+                    let c1 = c;
+                    let (c2, _) = Coordinate::from_pixel_integer(SPACING, (cvx + 1, cvy));
+
+                    let low_opaq1 = astate.sees(c1) && gstate.at(c1).tile().opaqueness() <= 1;
+                    let low_opaq2 = astate.sees(c2) && gstate.at(c2).tile().opaqueness() <= 1;
+                    let light1 = gstate.at(c1).light_as_seen_by(astate);
+                    let light2 = gstate.at(c2).light_as_seen_by(astate);
+
+                    let knows = (astate.knows(c1) && astate.knows(c2)) ||
+                        (astate.knows(c1) && low_opaq1) ||
+                        (astate.knows(c2) && low_opaq2);
+
+                    let (e1, e2) = (
+                        gstate.at(c1).tile().ascii_expand(),
+                        gstate.at(c2).tile().ascii_expand(),
+                        );
+
+                    let c = Some(if e1 > e2 { c1 } else { c2 });
+
+                    let tt = c.map_or(None, |c| Some(gstate.at(c).tile().type_));
+
+                    let visible = astate.is_dead() ||
+                        (astate.sees(c1) && astate.sees(c2)) ||
+                        (astate.sees(c1) && low_opaq1) ||
+                        (astate.sees(c2) && low_opaq2);
+
+                    let in_los = astate.is_dead() ||
+                        (astate.in_los(c1) && astate.in_los(c2)) ||
+                        (astate.in_los(c1) && low_opaq1) ||
+                        (astate.in_los(c2) && low_opaq2);
+
+                    let light = if astate.is_dead() {
+                        (light1 + light2) / 2
+                    } else {
+                        match (astate.sees(c1), astate.sees(c2)) {
+                            (true, true) => (light1 + light2) / 2,
+                            (true, false) => light1,
+                            (false, true) => light2,
+                            (false, false) => 0,
+                        }
+                    };
+
+                    (
+                        visible, in_los, knows,
+                        tt, None, light
+                    )
+                };
+
+                let mut draw = knows;
+
+                if visible { debug_assert!(knows || astate.is_dead()); }
+
+                let mut bold = false;
+                let occupied = gstate.at(c).is_occupied();
+                let (fg, bg, mut glyph) =
+                    if is_proper_coord && visible && occupied {
+                        let fg = match gstate.at(c).actor_map_or(Race::Rat, |a| a.race) {
+                            Race::Human | Race::Elf | Race::Dwarf => color::CHAR_SELF_FG,
+                            //Race::Pony => color::CHAR_ALLY_FG,
+                            Race::Rat | Race::Goblin => color::CHAR_ENEMY_FG,
+                        };
+                        (fg, color::CHAR_BG, "@")
+                    } else if is_proper_coord && visible && gstate.at(c).item().is_some() {
+                        let item = gstate.at(c).item().unwrap();
+                        let s = item_to_str(item.category());
+                        if astate.discovered.contains(&c) {
+                            bold = true;
+                        }
+                        (color::WALL_FG, color::EMPTY_BG, s)
+                    } else if knows {
+                        match tt {
+                            Some(tile::Empty) => {
+                                let mut fg = color::STONE_FG;
+                                let mut bg = color::EMPTY_BG;
+                                let mut glyph = " ";
+
+                                if is_proper_coord {
+                                    match t.and_then(|t| t.feature) {
+                                        None => {
+                                            glyph = self.dot;
+                                            fg = color::EMPTY_FG;
+                                            bg = color::EMPTY_BG;
+                                        }
+                                        Some(tile::Door(open)) =>
+                                            if open {
+                                                glyph = DOOR_OPEN_CH;
+                                            } else {
+                                                glyph = DOOR_CLOSED_CH;
+                                                bg = color::WALL_BG;
+                                            },
+                                        Some(tile::Statue) => glyph = STATUE_CH,
+                                        Some(tile::Stairs) => glyph = STAIRS_DOWN_CH,
+                                    }
+                                }
+
+                                (fg, bg, glyph)
+                            },
+                            Some(tile::Wall) => {
+                                bold = true;
+                                (color::WALL_FG, color::WALL_BG, WALL_CH)
+                            },
+                            Some(tile::Water) => {
+                                (color::WATER_FG, color::WATER_BG, WATER_CH)
+                            },
+                            None => {
+                                (color::EMPTY_FG, color::EMPTY_BG, "?")
+                            },
+                        }
+                    } else {
+                        (color::EMPTY_FG, color::EMPTY_BG, NOTHING_CH)
+                    };
+
+
+                let (mut fg, mut bg) = if !visible || light == 0 {
+                    if visible /* change to in_los for los debug */ {
+                        (fg[2], bg[2])
+                    } else {
+                        (fg[3], bg[3])
+                    }
+                } else if light < 3 {
+                    (fg[1], bg[1])
+                } else {
+                    (fg[0], bg[0])
+                };
+
+                if let Some(t) = t {
+                    if visible && t.light > 0 {
+                        if !occupied {
+                            fg = color::LIGHTSOURCE;
+                            bold = true;
+                        }
+                    }
+                }
+
+                if is_proper_coord && visible && gstate.at(c).actor_map_or(0, |a| a.light_emision) > 0u32 {
+                    bg = color::LIGHTSOURCE;
+                }
+
+                if is_proper_coord && actors_aheads.contains_key(&c) &&
+                    astate.sees(*actors_aheads.get(&c).unwrap()) {
+                        bold = true;
+                        let color = if c == astate_ahead {
+                            color::TARGET_SELF_FG
+                        } else {
+                            color::TARGET_ENEMY_FG
+                        };
+
+                        if astate.knows(c) {
+                            fg = color;
+                        } else {
+                            draw = true;
+                            glyph = " ";
+                            bg = color;
+                        }
+                    }
+
+                if is_proper_coord && c != center && !visible && astate.hears(c) {
+                    bg = color::NOISE_BG;
+                    draw = true;
+                }
+
+                if self.mode == Mode::Examine {
+                    if is_proper_coord && center == c {
+                        glyph = "@";
+                        fg = color::CHAR_GRAY_FG;
+                        draw = true;
+                    } else if is_proper_coord && c == head {
+                        bold = true;
+                        if astate.knows(c) {
+                            fg = color::TARGET_SELF_FG;
+                        } else {
+                            draw = true;
+                            glyph = " ";
+                            bg = color::TARGET_SELF_FG;
+                        }
+                    }
+                } else if let Mode::Target(_) = self.mode {
+                    if is_proper_coord && target_line.contains(&c) {
+                        glyph = "*";
+                        draw = true;
+                        if c == head {
+                            fg = color::TARGET_SELF_FG;
+                        }
+                        if !gstate.at(c).tile().is_passable() {
+                            bg = color::BLOCKED_BG;
+                        }
+                    }
+                }
+
+
+                if draw {
+                    let cpair = nc::COLOR_PAIR(calloc.get(fg, bg));
+
+                    if bold {
+                        nc::wattron(window, nc::A_BOLD() as i32);
+                    }
+
+                    nc::wattron(window, cpair as i32);
+                    nc::mvwaddstr(window, vy, vx, glyph);
+                    nc::wattroff(window, cpair as i32);
+
+                    if bold {
+                        nc::wattroff(window, nc::A_BOLD() as i32);
+                    }
+                }
+
+            }
+        }
+
+        nc::wnoutrefresh(window);
+    }
+
+    fn draw_stats_bar(&mut self, window : nc::WINDOW, name : &str,
+                      cur : i32, prev : i32, max : i32) {
+
+        let mut max_x = 0;
+        let mut max_y = 0;
+        nc::getmaxyx(window, &mut max_y, &mut max_x);
+
+        let cur = cmp::max(cur, 0) as u32;
+        let prev = cmp::max(prev, 0) as u32;
+        let max = cmp::max(max, 1) as u32;
+
+        nc::wattron(window, self.label_color as i32);
+        nc::waddstr(window, &format!("{}: ", name));
+
+        let width = max_x as u32 - 4 - name.chars().count() as u32;
+        let cur_w = cur * width / max;
+        let prev_w = prev * width / max;
+
+        nc::wattron(window, self.text_color as i32);
+        nc::waddstr(window, "[");
+        for i in 0..width {
+            let (color, s) = match (i < cur_w, i < prev_w) {
+                (true, true) => (self.text_color, "="),
+                (false, true) => (self.red_color, "-"),
+                (true, false) => (self.green_color, "+"),
+                (false, false) => (self.text_color, " "),
+            };
+            nc::wattron(window, color as i32);
+            nc::waddstr(window, s);
+        }
+        nc::wattron(window, self.text_color as i32);
+        nc::waddstr(window, "]");
+    }
+
+    fn draw_turn<T>(&self, window : nc::WINDOW, label: &str, val: T)
+        where T : Integer+fmt::Display
+    {
+        nc::wattron(window, self.label_color as i32);
+        nc::waddstr(window, &format!("{}: ", label));
+
+        nc::wattron(window, self.text_color as i32);
+        nc::waddstr(window, &format!("{:<8}", val));
+    }
+
+    fn draw_val<T>(&self, window : nc::WINDOW, label: &str, val: T)
+        where T : Integer+fmt::Display
+    {
+        nc::wattron(window, self.label_color as i32);
+        nc::waddstr(window, &format!("{}:", label));
+
+        nc::wattron(window, self.text_color as i32);
+        nc::waddstr(window, &format!("{:>2} ", val));
+    }
+
+    fn draw_label(&self, window : nc::WINDOW, label: &str) {
+        nc::wattron(window, self.label_color as i32);
+        nc::waddstr(window, &format!("{}:", label));
+    }
+
+    fn draw_item(&self, window : nc::WINDOW, astate : &Actor, label: &str, slot : Slot) {
+        self.draw_label(window, label);
+
+        if slot == Slot::RHand && !astate.can_attack() {
+            nc::wattron(window, self.text_gray_color as i32);
+        } else {
+            nc::wattron(window, self.text_color as i32);
+        }
+
+        let item = if let Some(&(_, ref item)) = astate.items_equipped.get(&slot) {
+            item.description().to_string()
+        } else {
+            "-".to_string()
+        };
+
+        //let item = item.slice_chars(0, cmp::min(item.char_len(), 13));
+        nc::waddstr(window, &format!("{:^13}", item));
+    }
+
+    fn draw_inventory(&mut self, astate : &Actor, _gstate : &game::Location) {
+        let window = self.windows.map.window;
+
+        let cpair = self.text_color;
+        nc::wbkgd(window, ' ' as nc::chtype | cpair as nc::chtype);
+
+        nc::werase(window);
+        nc::wmove(window, 0, 0);
+        if !astate.items_equipped.is_empty() {
+            nc::waddstr(window, &format!("Equipped: \n"));
+            for (slot, &(ref ch, ref i)) in &astate.items_equipped {
+                nc::waddstr(window, &format!(" {} - {} [{:?}]\n", ch, i.description(), slot));
+            }
+            nc::waddstr(window, &format!("\n"));
+        }
+
+        if !astate.items_backpack.is_empty() {
+            nc::waddstr(window, &format!("Inventory: \n"));
+
+            for (ch, i) in &astate.items_backpack {
+                nc::waddstr(window, &format!(" {} - {}\n", ch, i.description()));
+            }
+            nc::waddstr(window, &format!("\n"));
+        }
+
+        nc::wnoutrefresh(window);
+    }
+
+    fn draw_stats(&mut self, astate : &Actor, gstate : &game::Location) {
+        let window = self.windows.stats.window;
+
+        let (ac, ev) = (astate.stats.base.ac, astate.stats.base.ev);
+        let (dmg, acc) =
+            (astate.stats.melee_dmg, astate.stats.melee_acc);
+
+        let cpair = self.text_color;
+        nc::wbkgd(window, ' ' as nc::chtype | cpair as nc::chtype);
+
+        nc::werase(window);
+        nc::wmove(window, 0, 0);
+
+        let mut max_x = 0;
+        let mut max_y = 0;
+        nc::getmaxyx(window, &mut max_y, &mut max_x);
+
+        let mut y = 0;
+        nc::wmove(window, y, 0);
+        self.draw_val(window, "Str", astate.stats.base.str_);
+        nc::wmove(window, y, 7);
+        self.draw_val(window, "DMG", dmg);
+        nc::wmove(window, y, 15);
+        self.draw_val(window, "ACC", acc);
+
+        y += 1;
+        nc::wmove(window, y, 0);
+        self.draw_val(window, "Int", astate.stats.base.int);
+        nc::wmove(window, y, 7);
+        self.draw_val(window, " AC", ac);
+        nc::wmove(window, y, 15);
+        self.draw_val(window, "EV", ev);
+
+        y += 1;
+        nc::wmove(window, y, 0);
+        self.draw_val(window, "Dex", astate.stats.base.dex);
+
+        y += 1;
+        nc::wmove(window, y, 0);
+
+        self.draw_stats_bar(window, "HP",
+                            astate.hp, astate.saved_hp,
+                            astate.stats.base.max_hp);
+
+        y += 1;
+        nc::wmove(window, y, 0);
+        self.draw_stats_bar(window, "MP",
+                            astate.mp, astate.saved_mp,
+                            astate.stats.base.max_mp);
+
+        y += 1;
+        nc::wmove(window, y, 0);
+        self.draw_stats_bar(window, "SP",
+                            astate.sp, astate.saved_sp,
+                            astate.stats.base.max_sp);
+
+        let slots = [
+            ("R", Slot::RHand),
+            ("L", Slot::LHand),
+            ("F", Slot::Feet),
+            ("B", Slot::Body),
+            ("H", Slot::Head),
+            ("C", Slot::Cloak),
+            ("Q", Slot::Quick),
+        ];
+
+        for (i, &(string, slot)) in slots.iter().enumerate() {
+            if i & 1 == 0 {
+                y += 1;
+                nc::wmove(window, y, 0);
+            } else {
+                nc::wmove(window, y, 14);
+            }
+
+            self.draw_item(window, astate, string, slot);
+        }
+
+        y += 1;
+        nc::wmove(window, y, 0);
+
+        let pos = if self.mode == Mode::Examine {
+            self.target_pos.unwrap()
+        } else {
+            astate.pos
+        };
+
+        let head = pos.coord + pos.dir;
+        let descr = self.tile_description(head, astate, gstate);
+        self.draw_label(window, "In front");
+        nc::wattron(window, self.text_color as i32);
+        nc::waddstr(window, &format!(" {}", descr));
+
+        y += 1;
+        nc::wmove(window, y, 0);
+        self.draw_turn(window, "Turn", gstate.turn);
+        self.draw_turn(window, "Level", gstate.level);
+
+        nc::wnoutrefresh(window);
+    }
+
+    // TODO: Consider the distance to the Item to print something
+    // like "you see x in the distance", "you find yourself in x".
+    fn format_areas<I>(&self, mut i : I) -> Option<String>
+        where I : Iterator, <I as Iterator>::Item : fmt::Display
+        {
+            if let Some(descr) = i.next() {
+                let mut s = String::new();
+                write!(&mut s, "{}", "You see: ").unwrap();
+                write!(&mut s, "{}", descr).unwrap();
+
+                for ref descr in i {
+                    write!(&mut s, ", ").unwrap();
+                    write!(&mut s, "{}", descr).unwrap();
+                }
+
+                write!(&mut s, ".").unwrap();
+                Some(s)
+            } else {
+                None
+            }
+        }
+
+    fn turn_to_color(
+        &self, turn : u64, calloc : &RefCell<color::Allocator>,
+        gstate : &game::Location) -> Option<i16>
+    {
+        let mut calloc = calloc.borrow_mut();
+
+        let dturn = gstate.turn - turn;
+
+        let fg = if dturn < 1 {
+            Some(color::LOG_1_FG)
+        } else if dturn < 4 {
+            Some(color::LOG_2_FG)
+        } else if dturn < 16 {
+            Some(color::LOG_3_FG)
+        } else if dturn < 32 {
+            Some(color::LOG_4_FG)
+        } else if dturn < 64 {
+            Some(color::LOG_5_FG)
+        } else {
+            None
+        };
+
+        fg.map(|fg| calloc.get(fg, color::BACKGROUND_BG))
+    }
+
+    fn tile_description(&self, coord : Coordinate,
+                        astate : &Actor, gstate : &game::Location
+                        ) -> String
+    {
+        if !astate.knows(coord) {
+            return "Unknown".to_string();
+        }
+
+        let tile_type = gstate.at(coord).tile().type_;
+        let tile = gstate.at(coord).tile();
+        let feature_descr = tile.feature.map(|f| f.description());
+        let item_descr = gstate.at(coord).item_map_or(None, |i| Some(i.description().to_string()));
+
+        let actor_descr =
+            if astate.sees(coord) || astate.is_dead() {
+                gstate.at(coord).actor_map_or(None, |a| Some(match a.race{
+                    //Race::Pony => "A Pony",
+                    Race::Rat => "A rat",
+                    Race::Goblin => "Goblin",
+                    Race::Human => "Human",
+                    Race::Elf => "Elf",
+                    Race::Dwarf => "Dwarf",
+                }.to_string())
+                )
+            } else {
+                None
+            };
+
+        match (tile_type, feature_descr, actor_descr, item_descr) {
+
+            (_, _, Some(a_descr), _) => a_descr,
+            (_, _, _, Some(i_descr)) => i_descr,
+            (_, Some(f_descr), _, _) => f_descr.to_string(),
+            (tile::Wall, _, _, _) => {
+                "a wall".to_string()
+            },
+            (tile::Empty, _, _, _) => {
+                match tile.area.and_then(|a| Some(a.type_)) {
+                    Some(area::Room(_)) => "room".to_string(),
+                    None => "nothing".to_string()
+                }
+            },
+            _ => {
+                "Indescribable".to_string()
+            },
+        }
+    }
+
+    fn draw_log(&mut self, _ : &Actor, gstate : &game::Location) {
+        let window = self.windows.log.window;
+
+        let cpair = nc::COLOR_PAIR(self.calloc.borrow_mut().get(color::VISIBLE_FG, color::BACKGROUND_BG));
+        nc::wbkgd(window, ' ' as nc::chtype | cpair as nc::chtype);
+        nc::werase(window);
+        nc::wmove(window, 0, 0);
+        let mut last_turn = None;
+
+        for i in &self.log {
+            if let Some(last_turn) = last_turn {
+                if last_turn != i.turn && nc::getcurx(window) != 0 {
+                    nc::waddstr(window, "\n");
+                }
+            }
+            last_turn = Some(i.turn);
+
+            if nc::getcury(window) == nc::getmaxy(window) - 1 {
+                break;
+            }
+
+            if let Some(color) = self.turn_to_color(i.turn, &self.calloc, gstate) {
+                let cpair = nc::COLOR_PAIR(color);
+                nc::wattron(window, cpair as i32);
+                nc::waddstr(window, &format!(
+                        "{} ", i.text.as_str()
+                        ));
+            }
+        }
+
+        nc::wnoutrefresh(window);
+    }
+
+    fn draw_intro(&mut self) {
+        let window = self.windows.full.window;
+        let mut calloc = self.calloc.borrow_mut();
+        let cpair = nc::COLOR_PAIR(calloc.get(color::VISIBLE_FG, color::BACKGROUND_BG));
+        nc::wbkgd(window, ' ' as nc::chtype | cpair as nc::chtype);
+        nc::werase(window);
+        nc::wmove(window, 0, 0);
+
+        nc::waddstr(window, "Long, long ago in a galaxy far, far away...\n\n");
+        nc::waddstr(window, &format!("You can press {} in the game for help.\n\n",  KEY_HELP as u8 as char));
+        nc::waddstr(window, "Press anything to start.");
+        nc::wnoutrefresh(window);
+    }
+
+    fn draw_help( &mut self) {
+        let window = self.windows.full.window;
+        let mut calloc = self.calloc.borrow_mut();
+        let cpair = nc::COLOR_PAIR(calloc.get(color::VISIBLE_FG, color::BACKGROUND_BG));
+        nc::wbkgd(window, ' ' as nc::chtype | cpair as nc::chtype);
+        nc::werase(window);
+        nc::wmove(window, 0, 0);
+
+        nc::waddstr(window, "This game is still incomplete. Sorry for that.\n\n");
+        nc::waddstr(window, "= (more or less) Implemented actions = \n\n");
+        nc::waddstr(window, "Move: hjklui\n");
+        nc::waddstr(window, "Wait: .\n");
+        nc::waddstr(window, "Pick: ,\n");
+        nc::waddstr(window, "Fire/Throw: f\n");
+        nc::waddstr(window, "Autoexplore: O\n");
+        nc::waddstr(window, "Examine: x\n");
+        nc::waddstr(window, "Equip: E\n");
+        nc::waddstr(window, "Inventory: I\n");
+        nc::waddstr(window, "Quit: q\n");
+        nc::wnoutrefresh(window);
+    }
+
+    fn draw_quit( &mut self) {
+        let window = self.windows.full.window;
+        let mut calloc = self.calloc.borrow_mut();
+        let cpair = nc::COLOR_PAIR(
+            calloc.get(color::VISIBLE_FG, color::BACKGROUND_BG)
+            );
+
+        let mut max_x = 0;
+        let mut max_y = 0;
+        nc::getmaxyx(nc::stdscr, &mut max_y, &mut max_x);
+        let text = "Quit. Are you sure?";
+
+        nc::wbkgd(window, ' ' as nc::chtype | cpair as nc::chtype);
+        nc::werase(window);
+        nc::wmove(window, max_y / 2, (max_x  - text.chars().count() as i32) / 2);
+
+        nc::waddstr(window, text);
+        nc::wnoutrefresh(window);
+    }
+
+    fn event(&mut self, event : Event, gstate : &game::Location) {
+        match event {
+            Event::Log(logev) => match logev {
+                LogEvent::AutoExploreDone => self.log("Nothing else to explore.", gstate),
+            }
+        }
+    }
+
+}
+
+
+impl Drop for Ui {
+    fn drop(&mut self) {
+        nc::clear();
+        nc::refresh();
+        nc::endwin();
+    }
+}
+
+//        . . .
+//       . . . .
+//      . . . . .
+//       . . . .
+//        . . .
+pub fn item_to_str(t : item::Category) -> &'static str {
+    match t {
+        item::Category::Weapon => ")",
+        item::Category::Armor => "[",
+        item::Category::Misc => "\"",
+        item::Category::Consumable => "%",
+    }
+}
+
+
