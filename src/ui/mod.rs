@@ -27,32 +27,12 @@ pub enum Action {
     Game(game::Action),
 }
 
-pub enum LogEvent {
-    AutoExploreDone,
-}
-
-pub enum Event {
-    Log(LogEvent)
-}
-
-#[derive(Copy, Clone, PartialEq, Eq)]
-pub enum AutoMoveType {
-    Explore,
-    Walk,
-}
-
 /// Generic UI logic
 pub struct Ui<U : UiFrontend> {
     frontend : U,
     automoving : Option<AutoMoveType>,
     automove_turn : u64,
     last_redraw_ns : u64,
-}
-
-pub enum AutoMoveAction {
-    Action(game::Action),
-    Finish,
-    Blocked,
 }
 
 impl<U : UiFrontend> Ui<U> {
@@ -63,91 +43,6 @@ impl<U : UiFrontend> Ui<U> {
             automoving : None,
             automove_turn: 0,
             last_redraw_ns: 0,
-        }
-    }
-
-    pub fn should_stop_automoving(
-        &self, astate : &actor::State, gstate : &game::State) -> bool {
-
-        !astate.was_attacked_by.is_empty() ||
-        astate.discovered_areas.iter().any(|_| true ) ||
-        astate.visible.iter().any(|&coord|
-                                  gstate.at(coord)
-                                  .actor_map_or(false, |a| a.race == actor::Race::Rat)
-                                 ) ||
-        astate.discovered.iter().any(|&coord|
-                                     gstate.at(coord)
-                                     .item_map_or(false, |_| true)
-                                    ) ||
-        astate.heared.iter()
-//        .filter(|&(c, t)| *c != astate.pos.coord && *t != Noise::Creature(Race::Pony))
-        .any(|(c, _)| !astate.sees(*c)) ||
-        astate.discovered_stairs(gstate)
-    }
-
-    pub fn automove_action(
-        &self, astate : &actor::State, gstate : &game::State,
-        movetype : AutoMoveType,
-        ) -> AutoMoveAction {
-
-        match movetype {
-            AutoMoveType::Explore => self.autoexplore_action(astate, gstate),
-            AutoMoveType::Walk => {
-                if gstate.at(astate.head()).tile().is_passable() {
-                    AutoMoveAction::Action(game::Action::Move(Angle::Forward))
-                } else {
-                    AutoMoveAction::Finish
-                }
-            }
-        }
-    }
-
-    pub fn autoexplore_action(
-        &self, astate : &actor::State, gstate : &game::State,
-        ) -> AutoMoveAction {
-
-        let start = astate.pos.coord;
-
-        let mut bfs = bfs::Traverser::new(
-            |c| c == start || gstate.at(c).tile().is_passable(),
-            |c| !astate.knows(c),
-            start
-            );
-
-        if let Some(dst) = bfs.find() {
-            if let Some(neigh) = bfs.backtrace_last(dst) {
-
-                let ndir = astate.pos.coord.direction_to_cw(neigh).expect("bfs gave me trash");
-                if ndir == astate.pos.dir {
-                    if gstate.at(neigh).is_occupied() {
-                        AutoMoveAction::Blocked
-                    } else {
-                        AutoMoveAction::Action(game::Action::Move(Angle::Forward))
-                    }
-                } else {
-                    AutoMoveAction::Action(game::Action::Turn(ndir - astate.pos.dir))
-                }
-            } else {
-                AutoMoveAction::Finish
-            }
-        } else {
-           AutoMoveAction::Finish
-        }
-    }
-
-    pub fn redraw(&mut self, req : &Option<Request>) {
-        if let &Some((id, ref gstate)) = req {
-            let now = time::precise_time_ns();
-
-            if self.automoving.is_some() &&
-                self.last_redraw_ns + 50 * 1000 * 1000 > now {
-                return
-            }
-
-            self.last_redraw_ns = now;
-
-            let astate = &gstate.actors_byid[&id];
-            self.frontend.draw(&astate, &gstate);
         }
     }
 

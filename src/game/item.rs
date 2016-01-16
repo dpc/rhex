@@ -1,4 +1,4 @@
-use actor::{self, Slot};
+use super::actor::{self, Actor, Slot};
 use rand::{self, Rng};
 
 use core::cmp;
@@ -122,7 +122,7 @@ impl Item {
     /// Use item
     ///
     /// Returns: true if the item was consumed in the process.
-    pub fn use_(&self, astate : &mut actor::State) -> bool {
+    pub fn use_(&self, astate : &mut Actor) -> bool {
         match self.type_ {
             HealthPotion => {
                 astate.hp += 5;
