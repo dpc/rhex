@@ -230,8 +230,8 @@ impl Ui {
             game_action_queue : VecDeque::new(),
             game : game::Engine::new(),
         };
-        let cur_loc = ui.engine.current_location().clone();
-        ui.engine_change(cur_loc.player_id());
+        let player_id = ui.engine.current_location().player_id();
+        ui.engine_change(player_id);
         Ok(ui)
     }
 
@@ -369,7 +369,7 @@ impl Ui {
         let player_id = cur_loc.player_id();
         let player = cur_loc.actors_byid[&player_id].clone();
 
-        self.update(&player, &cur_loc);
+        self.update();
 
         if let Some(movetype) = self.automoving {
             if self.automoving_stopped_turn != self.engine.turn() &&
@@ -642,62 +642,64 @@ impl Ui {
     }
 
     // TODO: break into smaller stuff?
-    fn update(&mut self, astate : &Actor, gstate : &game::Location) {
-        if astate.is_dead() {
+    fn update(&mut self) {
+        let cur_loc = &self.engine.current_location().clone();
+        let player = cur_loc.player().clone();
+        if player.is_dead() {
             return;
         }
 
-        let discoviered_areas = astate.discovered_areas.iter()
-            .filter_map(|coord| gstate.at(*coord).tile().area)
+        let discoviered_areas = player.discovered_areas.iter()
+            .filter_map(|coord| cur_loc.at(*coord).tile().area)
             ;
 
         if let Some(s) = self.format_areas(discoviered_areas.map(|area| area.type_)) {
-            self.log(&s, gstate);
+            self.log(&s, cur_loc);
         }
 
-        for item_coord in astate.discovered.iter().filter(|&coord|
-                                      gstate.at(*coord).item_map_or(false, |_| true)
+        for item_coord in player.discovered.iter().filter(|&coord|
+                                      cur_loc.at(*coord).item_map_or(false, |_| true)
                                       ) {
-            let item_descr = gstate.at(*item_coord).item_map_or("".to_string(), |i| i.description().to_string());
-            self.log(&format!("You've found {}.", item_descr), gstate);
+            let item_descr = cur_loc.at(*item_coord).item_map_or("".to_string(), |i| i.description().to_string());
+            self.log(&format!("You've found {}.", item_descr), cur_loc);
         }
 
-        if astate.discovered_stairs(gstate) {
-            self.log("You've found stairs.", gstate);
+        if player.discovered_stairs(cur_loc) {
+            self.log("You've found stairs.", cur_loc);
         }
 
-        for res in &astate.was_attacked_by {
+        for res in &player.was_attacked_by {
             if res.success {
                 self.log(&format!(
                         "{} hit you {}for {} dmg.",
                         res.who,
                         if res.behind { "from behind " } else { "" },
                         res.dmg
-                        ), gstate);
+                        ), cur_loc);
             } else {
-                self.log(&format!("{} missed you.", res.who), gstate);
+                self.log(&format!("{} missed you.", res.who), cur_loc);
             }
         }
 
-        for res in &astate.did_attack {
+        for res in &player.did_attack {
             if res.success {
                 self.log(&format!(
                         "You hit {} {}for {} dmg.",
                         res.who,
                         if res.behind { "from behind " } else { "" },
                         res.dmg
-                        ), gstate);
+                        ), cur_loc);
             } else {
-                self.log(&format!("You missed {}.", res.who), gstate);
+                self.log(&format!("You missed {}.", res.who), cur_loc);
             }
         }
 
-        let noises = astate.heared.iter()
-            .filter(|&(c, _) | *c != astate.pos.coord)
-            .filter(|&(c, _) | !astate.sees(*c));
+        let noises = player.heared.iter()
+            .filter(|&(c, _) | *c != player.pos.coord)
+            .filter(|&(c, _) | !player.sees(*c));
 
         for (_, &noise) in noises {
-            self.log(&format!("You hear {}.", noise.description()), gstate);
+            self.log(&format!("You hear {}.", noise.description()), cur_loc);
         }
     }
 

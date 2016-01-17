@@ -70,6 +70,10 @@ impl Location {
         self.player_id.unwrap()
     }
 
+    pub fn player(&self) -> &Actor {
+        &self.actors_byid[&self.player_id.unwrap()]
+    }
+
     /*
     pub fn next_level(&self) -> Location {
         let cp = Coordinate::new(0, 0);
