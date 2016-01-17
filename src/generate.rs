@@ -37,7 +37,7 @@ impl DungeonGenerator {
             map: HashMap::new(),
             endpoints:  VecDeque::new(),
             actors: Default::default(),
-            items: HashMap::new(),
+            items: Default::default(),
         }
     }
 }

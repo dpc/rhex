@@ -44,10 +44,10 @@ impl Noise {
 }
 
 
-pub type Visibility = HashSet<Coordinate>;
-pub type NoiseMap = HashMap<Coordinate, Noise>;
-pub type Map = SimpleMap<Coordinate, Tile>;
+pub type Visibility = HashSet<Coordinate, DefaultState<FnvHasher>>;
+pub type NoiseMap = HashMap<Coordinate, Noise, DefaultState<FnvHasher>>;
+pub type Map = SimpleMap<Coordinate, Tile, DefaultState<FnvHasher>>;
 pub type Actors = HashMap<Coordinate, Actor, DefaultState<FnvHasher>>;
-pub type Items = HashMap<Coordinate, Box<Item>>;
-pub type LightMap = SimpleMap<Coordinate, u32>;
+pub type Items = HashMap<Coordinate, Box<Item>, DefaultState<FnvHasher>>;
+pub type LightMap = SimpleMap<Coordinate, u32, DefaultState<FnvHasher>>;
 

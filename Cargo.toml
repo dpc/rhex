@@ -4,6 +4,13 @@ name = "rhex"
 version = "0.0.1"
 authors = ["Dawid Ciężarkiewicz <dpc@ucore.info>"]
 
+[profile.dev]
+opt-level = 1
+debug = true
+lto = false
+debug-assertions = true
+
+
 [dependencies]
 num = "*"
 rand = "*"

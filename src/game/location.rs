@@ -228,7 +228,7 @@ impl Location {
         astate.pre_own_tick();
         let pos = astate.pos;
         astate.moved(self, pos);
-        astate.post_own_tick();
+        astate.post_own_tick(self);
         self.actors_byid.insert(id, astate);
         self.post_any_tick();
 
@@ -246,7 +246,7 @@ impl Location {
         self.pre_any_tick();
         let mut actor = self.actors_byid.remove(&id).unwrap();
         actor.pre_own_tick();
-        actor.post_own_tick();
+        actor.post_own_tick(self);
         self.actors_byid.insert(id, actor);
         self.post_any_tick();
     }
@@ -340,7 +340,7 @@ impl Location {
                     // we hit the wall or something
                 }
         }
-        actor.post_own_tick();
+        actor.post_own_tick(self);
         self.actors_byid.insert(id, actor);
         self.actors_byid.get_mut(&id).unwrap().post_action(action);
         self.post_any_tick();

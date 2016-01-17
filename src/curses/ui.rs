@@ -1,5 +1,7 @@
 use std::cell::RefCell;
 use std::collections::{VecDeque, HashMap, HashSet};
+use std::collections::hash_state::{DefaultState};
+use fnv::FnvHasher;
 use std::env;
 use std;
 use std::{thread, cmp, fmt};
@@ -723,7 +725,7 @@ impl Ui {
 
         let window = self.windows.map.window;
 
-        let actors_aheads : HashMap<Coordinate, Coordinate> =
+        let actors_aheads : HashMap<Coordinate, Coordinate, DefaultState<FnvHasher>> =
             gstate.actors_byid.iter()
             .filter(|&(_, a)| !a.is_dead())
             .map(|(_, a)| (a.head(), a.pos.coord)).collect();
@@ -793,12 +795,19 @@ impl Ui {
                     let t = gstate.map[c].clone();
                     let tt = t.type_;
 
+                    let visible = astate.sees(c) || astate.is_dead();
+                    let light = if visible {
+                        gstate.at(c).light_as_seen_by(astate)
+                    } else {
+                        0
+                    };
+
                     (
-                        astate.sees(c) || astate.is_dead(),
+                        visible,
                         astate.in_los(c) || astate.is_dead(),
                         astate.knows(c),
                         Some(tt), Some(t),
-                        gstate.at(c).light_as_seen_by(astate)
+                        light
                     )
                 } else {
                     // Paint a glue characters between two real characters
@@ -807,8 +816,6 @@ impl Ui {
 
                     let low_opaq1 = astate.sees(c1) && gstate.at(c1).tile().opaqueness() <= 1;
                     let low_opaq2 = astate.sees(c2) && gstate.at(c2).tile().opaqueness() <= 1;
-                    let light1 = gstate.at(c1).light_as_seen_by(astate);
-                    let light2 = gstate.at(c2).light_as_seen_by(astate);
 
                     let knows = (astate.knows(c1) && astate.knows(c2)) ||
                         (astate.knows(c1) && low_opaq1) ||
@@ -833,15 +840,25 @@ impl Ui {
                         (astate.in_los(c1) && low_opaq1) ||
                         (astate.in_los(c2) && low_opaq2);
 
-                    let light = if astate.is_dead() {
-                        (light1 + light2) / 2
-                    } else {
-                        match (astate.sees(c1), astate.sees(c2)) {
-                            (true, true) => (light1 + light2) / 2,
-                            (true, false) => light1,
-                            (false, true) => light2,
-                            (false, false) => 0,
+                    let light = if visible {
+                        let (light1, light2) = (
+                            gstate.at(c1).light_as_seen_by(astate),
+                            gstate.at(c2).light_as_seen_by(astate)
+                            );
+
+
+                        if astate.is_dead() {
+                            (light1 + light2) / 2
+                        } else {
+                            match (astate.sees(c1), astate.sees(c2)) {
+                                (true, true) => (light1 + light2) / 2,
+                                (true, false) => light1,
+                                (false, true) => light2,
+                                (false, false) => 0,
+                            }
                         }
+                    } else {
+                        0
                     };
 
                     (

@@ -1,4 +1,6 @@
 use std::collections::{HashMap, HashSet};
+use std::collections::hash_state::{DefaultState};
+use fnv::FnvHasher;
 use std::ops::{Add, Sub};
 use std::cmp;
 
@@ -199,7 +201,7 @@ pub struct Actor {
     pub saved_sp: i32,
 
     pub player : bool,
-    pub pre_pos : Position,
+    pub pre_pos : Option<Position>,
     pub pos : Position,
     pub acted : bool,
 
@@ -251,7 +253,7 @@ impl Actor {
         Actor {
             race: race,
             player: false,
-            pos: pos, pre_pos: pos,
+            pos: pos, pre_pos: None,
             base_stats: stats,        // base stats
             mod_stats: Default::default(), // from items etc.
             stats: Default::default(),     // effective stats
@@ -260,13 +262,13 @@ impl Actor {
             visible: Default::default(),
             known: Default::default(),
             known_areas: Default::default(),
-            heared: HashMap::new(),
+            heared: Default::default(),
             noise_emision: 0,
             discovered: Default::default(),
             discovered_areas: Default::default(),
             light_emision: 0,
-            items_backpack: HashMap::new(),
-            items_equipped: HashMap::new(),
+            items_backpack: Default::default(),
+            items_equipped: Default::default(),
             items_letters: Default::default(),
             action_cd: 0,
             was_attacked_by: Vec::new(),
@@ -401,7 +403,7 @@ impl Actor {
     // Could this actor have seen action/movement
     // of another actor (given by id)
     pub fn could_have_seen(&self, actor : &Actor) -> bool {
-        self.sees(actor.pos.coord) || self.sees(actor.pre_pos.coord)
+        self.sees(actor.pos.coord) || self.sees(actor.pre_pos.unwrap().coord)
     }
 
     // Save some stats for a reference
@@ -423,7 +425,7 @@ impl Actor {
     }
 
     pub fn pre_any_tick(&mut self) {
-        self.pre_pos = self.pos;
+        self.pre_pos = Some(self.pos);
         self.did_attack = Vec::new();
         self.was_attacked_by = Vec::new();
         self.temporary_los = Default::default();
@@ -432,7 +434,7 @@ impl Actor {
         self.discovered_areas = Default::default();
 
         self.noise_emision = 0;
-        self.heared = HashMap::new();
+        self.heared = Default::default();
     }
 
     pub fn pre_own_tick(&mut self) {
@@ -445,11 +447,13 @@ impl Actor {
         }
     }
 
-    pub fn post_own_tick(&mut self) {
+    pub fn post_own_tick(&mut self, loc : &Location) {
+        if self.pre_pos != Some(self.pos) {
+            self.postprocess_visibile(loc);
+        }
     }
 
-    pub fn post_any_tick(&mut self, loc : &Location) {
-        self.postprocess_visibile(loc);
+    pub fn post_any_tick(&mut self, _loc : &Location) {
         self.recalculate_stats();
     }
 
@@ -570,7 +574,7 @@ impl Actor {
 
         let (ac, ev) = (target.stats.base.ac, target.stats.base.ev);
 
-        let from_behind = match dir - target.pre_pos.dir {
+        let from_behind = match dir - target.pos.dir {
             Angle::Forward|Angle::Left|Angle::Right => true,
             _ => false,
         };
