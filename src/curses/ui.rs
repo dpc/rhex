@@ -1312,8 +1312,6 @@ impl Ui {
         nc::wmove(window, 0, 0);
 
         for i in &self.log {
-            nc::waddstr(window, "\n");
-
             if nc::getcury(window) == nc::getmaxy(window) - 1 {
                 break;
             }
@@ -1325,6 +1323,7 @@ impl Ui {
                         "{} ", i.text.as_str()
                         ));
             }
+            nc::waddstr(window, "\n");
         }
 
         nc::wnoutrefresh(window);
@@ -1358,7 +1357,7 @@ impl Ui {
         nc::waddstr(window, "Wait: .\n");
         nc::waddstr(window, "Pick: ,\n");
         nc::waddstr(window, "Fire/Throw: f\n");
-        nc::waddstr(window, "Autoexplore: O\n");
+        nc::waddstr(window, "Autoexplore: o\n");
         nc::waddstr(window, "Examine: x\n");
         nc::waddstr(window, "Equip: E\n");
         nc::waddstr(window, "Inventory: I\n");
