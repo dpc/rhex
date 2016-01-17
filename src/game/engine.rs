@@ -1,4 +1,5 @@
 use super::{Location, Action};
+use super::{actor};
 use util;
 use ai::{self, Ai};
 
@@ -6,7 +7,7 @@ pub struct Engine {
     location_cur : usize,
     locations : Vec<Location>,
 
-    player_move : bool,
+    ids_to_move : Vec<actor::Id>,
 }
 
 impl Engine {
@@ -15,7 +16,7 @@ impl Engine {
         Engine {
             location_cur : 0,
             locations: vec!(location),
-            player_move: true,
+            ids_to_move: vec!(),
         }
     }
 
@@ -37,9 +38,16 @@ impl Engine {
     }
 
     pub fn needs_player_input(&self) -> bool {
-        self.player_move
+        self.ids_to_move.is_empty()
     }
 
+    pub fn checks_after_act(&mut self) {
+        if self.ids_to_move.is_empty() {
+            self.current_location_mut().post_turn()
+        }
+    }
+
+    // player first move
     pub fn player_act(&mut self, action : Action) {
         assert!(self.needs_player_input());
 
@@ -47,22 +55,29 @@ impl Engine {
 
         self.current_location_mut().act(player_id, action);
 
-        self.player_move = false;
+        self.ids_to_move = self.current_location().actors_alive_ids()
+            .iter()
+            .cloned()
+            .filter(|&id| id != player_id).collect();
+
+        self.checks_after_act()
     }
 
-    pub fn tick(&mut self) {
+    // then everybody else one by one
+    pub fn one_actor_act(&mut self) -> actor::Id {
         assert!(!self.needs_player_input());
 
-        let player_id = self.current_location().player_id();
+        let actor_id = self.ids_to_move.pop().unwrap();
 
-        for id in self.current_location().actors_alive_ids() {
-            if id != player_id {
-                let mut ai = ai::Simple;
-                let action = ai.action(id, self);
-                self.current_location_mut().act(id, action);
-            }
-        }
-        self.current_location_mut().post_turn();
-        self.player_move = true;
+        let player_id = self.current_location().player_id();
+        assert!(actor_id != player_id);
+
+        let mut ai = ai::Simple;
+        let action = ai.action(actor_id, self);
+        self.current_location_mut().act(actor_id, action);
+
+        self.checks_after_act();
+
+        actor_id
     }
 }
