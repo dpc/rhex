@@ -201,6 +201,7 @@ pub struct Actor {
     pub player : bool,
     pub pre_pos : Position,
     pub pos : Position,
+    pub acted : bool,
 
     pub race : Race,
     pub base_stats : Stats,
@@ -276,6 +277,7 @@ impl Actor {
             saved_hp: stats.max_hp,
             saved_mp: stats.max_mp,
             saved_sp: stats.max_sp,
+            acted: false,
         }
     }
 
@@ -333,9 +335,16 @@ impl Actor {
             },
             Action::Charge => {
                 self.sp = cmp::max(0, self.sp - self.charge_sp_cost());
+                self.acted = true;
             },
-            _ => {}
+            _ => {
+                self.acted = true;
+            }
         }
+    }
+
+    pub fn acted_last_turn(&self) -> bool {
+        self.acted
     }
 
     fn los_to_visible(&self, loc: &game::Location, los : &Visibility ) -> Visibility {
@@ -389,6 +398,12 @@ impl Actor {
         self.visible = visible;
     }
 
+    // Could this actor have seen action/movement
+    // of another actor (given by id)
+    pub fn could_have_seen(&self, actor : &Actor) -> bool {
+        self.sees(actor.pos.coord) || self.sees(actor.pre_pos.coord)
+    }
+
     // Save some stats for a reference
     pub fn save_stats(&mut self) {
         self.saved_hp = self.hp;
@@ -407,7 +422,7 @@ impl Actor {
         self.heared.insert(coord, type_);
     }
 
-    pub fn pre_any_action(&mut self) {
+    pub fn pre_any_tick(&mut self) {
         self.pre_pos = self.pos;
         self.did_attack = Vec::new();
         self.was_attacked_by = Vec::new();
@@ -420,19 +435,20 @@ impl Actor {
         self.heared = HashMap::new();
     }
 
-    pub fn pre_own_action(&mut self) {
+    pub fn pre_own_tick(&mut self) {
+        if self.action_cd > 0 {
+            self.action_cd -= 1;
+        }
+        self.acted = false;
         if self.can_perform_action() {
             self.save_stats();
         }
     }
 
-    pub fn post_own_action(&mut self) {
-        if self.action_cd > 0 {
-            self.action_cd -= 1;
-        }
+    pub fn post_own_tick(&mut self) {
     }
 
-    pub fn post_any_action(&mut self, loc : &Location) {
+    pub fn post_any_tick(&mut self, loc : &Location) {
         self.postprocess_visibile(loc);
         self.recalculate_stats();
     }
@@ -631,6 +647,10 @@ impl Actor {
 
     pub fn can_attack(&self) -> bool {
         self.action_cd == 0 &&  self.can_attack_sp()
+    }
+
+    pub fn can_act(&self) -> bool {
+        self.action_cd == 0
     }
 
     pub fn moved(&mut self, loc: &Location, new_pos : Position) {

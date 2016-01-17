@@ -215,18 +215,18 @@ impl Location {
             // TODO: Find an alternative place
             unimplemented!();
         }
-        self.pre_any_action();
+        self.pre_any_tick();
         let id = self.actors_counter;
         self.actors_counter += 1;
 
         debug_assert!(!self.actors_coord_to_id.contains_key(&astate.pos.coord));
         self.actors_coord_to_id.insert(astate.pos.coord, id);
-        astate.pre_own_action();
+        astate.pre_own_tick();
         let pos = astate.pos;
         astate.moved(self, pos);
-        astate.post_own_action();
+        astate.post_own_tick();
         self.actors_byid.insert(id, astate);
-        self.post_any_action();
+        self.post_any_tick();
 
         id
     }
@@ -238,8 +238,17 @@ impl Location {
         self.player_id = Some(self.spawn(actor));
     }
 
+    pub fn skip_act(&mut self, id : u32) {
+        self.pre_any_tick();
+        let mut actor = self.actors_byid.remove(&id).unwrap();
+        actor.pre_own_tick();
+        actor.post_own_tick();
+        self.actors_byid.insert(id, actor);
+        self.post_any_tick();
+    }
+
     pub fn act(&mut self, id : u32, action : Action) {
-        self.pre_any_action();
+        self.pre_any_tick();
         let mut actor = self.actors_byid.remove(&id).unwrap();
 
         if !actor.can_perform_action() {
@@ -247,7 +256,7 @@ impl Location {
             return;
         }
 
-        actor.pre_own_action();
+        actor.pre_own_tick();
 
         let new_pos = actor.pos_after_action(action);
 
@@ -327,24 +336,24 @@ impl Location {
                     // we hit the wall or something
                 }
         }
-        actor.post_own_action();
+        actor.post_own_tick();
         self.actors_byid.insert(id, actor);
         self.actors_byid.get_mut(&id).unwrap().post_action(action);
-        self.post_any_action();
+        self.post_any_tick();
     }
 
-    pub fn pre_any_action(&mut self) {
+    pub fn pre_any_tick(&mut self) {
         for id in self.actors_alive_ids() {
             let mut actor = self.actors_byid.remove(&id).unwrap();
-            actor.pre_any_action();
+            actor.pre_any_tick();
             self.actors_byid.insert(id, actor);
         }
     }
 
-    pub fn post_any_action(&mut self) {
+    pub fn post_any_tick(&mut self) {
         for id in self.actors_alive_ids() {
             let mut actor = self.actors_byid.remove(&id).unwrap();
-            actor.post_any_action(self);
+            actor.post_any_tick(self);
             self.actors_byid.insert(id, actor);
         }
 

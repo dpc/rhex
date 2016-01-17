@@ -43,8 +43,22 @@ impl Engine {
 
     pub fn checks_after_act(&mut self) {
         if self.ids_to_move.is_empty() {
-            self.current_location_mut().post_turn()
+            self.current_location_mut().post_turn();
+            let player_id = self.current_location().player_id();
+            let player = &self.current_location().actors_byid[&player_id].clone();
+            if !player.can_act() {
+                self.current_location_mut().skip_act(player_id);
+                self.reload_actors_ids_to_move();
+            }
         }
+    }
+
+    pub fn reload_actors_ids_to_move(&mut self) {
+        let player_id = self.current_location().player_id();
+        self.ids_to_move = self.current_location().actors_alive_ids()
+            .iter()
+            .cloned()
+            .filter(|&id| id != player_id).collect();
     }
 
     // player first move
@@ -55,16 +69,13 @@ impl Engine {
 
         self.current_location_mut().act(player_id, action);
 
-        self.ids_to_move = self.current_location().actors_alive_ids()
-            .iter()
-            .cloned()
-            .filter(|&id| id != player_id).collect();
+        self.checks_after_act();
 
-        self.checks_after_act()
+        self.reload_actors_ids_to_move();
     }
 
     // then everybody else one by one
-    pub fn one_actor_act(&mut self) -> actor::Id {
+    pub fn one_actor_tick(&mut self) -> actor::Id {
         assert!(!self.needs_player_input());
 
         let actor_id = self.ids_to_move.pop().unwrap();
@@ -72,9 +83,14 @@ impl Engine {
         let player_id = self.current_location().player_id();
         assert!(actor_id != player_id);
 
-        let mut ai = ai::Simple;
-        let action = ai.action(actor_id, self);
-        self.current_location_mut().act(actor_id, action);
+        let actor = &self.current_location().actors_byid[&actor_id].clone();
+        if actor.can_act() {
+            let mut ai = ai::Simple;
+            let action = ai.action(actor_id, self);
+            self.current_location_mut().act(actor_id, action);
+        } else {
+            self.current_location_mut().skip_act(actor_id);
+        }
 
         self.checks_after_act();
 
