@@ -202,7 +202,7 @@ impl Ui {
 
         nc::doupdate();
 
-        Ok(Ui {
+        let mut ui = Ui {
             calloc: RefCell::new(calloc),
             windows : Windows::after_resize(),
             mode: Mode::FullScreen(FSMode::Intro),
@@ -226,7 +226,9 @@ impl Ui {
 
             game_action_queue : VecDeque::new(),
             game : game::Engine::new(),
-        })
+        };
+        ui.engine_change();
+        Ok(ui)
     }
 
     pub fn resize(&mut self) {
@@ -358,6 +360,23 @@ impl Ui {
         self.automoving_stopped_turn = self.engine.turn()
     }
 
+    fn engine_change(&mut self) {
+        let cur_loc = self.engine.current_location().clone();
+        let player_id = cur_loc.player_id();
+        let player = cur_loc.actors_byid[&player_id].clone();
+
+        self.update(&player, &cur_loc);
+
+        if let Some(movetype) = self.automoving {
+            if self.automoving_stopped_turn != self.engine.turn() &&
+                self.should_stop_automoving(&player, &cur_loc) {
+                    self.automoving_stop();
+                }
+        }
+
+        self.redraw();
+    }
+
     pub fn run(&mut self) {
         let mut game_delay = 0;
         while !self.exit {
@@ -370,48 +389,32 @@ impl Ui {
 
                 if self.engine.needs_player_input() {
                     if let Some(movetype) = self.automoving {
-                        if self.automoving_stopped_turn != self.engine.turn() &&
-                            self.should_stop_automoving(&player, &cur_loc) {
-                            self.automoving_stop();
-                            self.redraw();
-                        } else {
-                            match self.automove_action(&player, &cur_loc, movetype) {
-                                AutoMoveAction::Blocked => {
-                                    self.automoving_stop();
-                                    self.redraw();
-                                },
-                                AutoMoveAction::Action(action) => {
-                                    self.engine.player_act(action);
-                                },
-                                AutoMoveAction::Finish => {
-                                    if movetype == AutoMoveType::Explore {
-                                        self.event(
-                                            Event::Log(LogEvent::AutoExploreDone), &cur_loc
-                                            );
-                                    }
-                                    self.automoving_stop();
-                                    self.redraw();
+                        match self.automove_action(&player, &cur_loc, movetype) {
+                            AutoMoveAction::Blocked => {
+                                self.automoving_stop();
+                                self.redraw();
+                            },
+                            AutoMoveAction::Action(action) => {
+                                self.engine.player_act(action);
+                                self.engine_change();
+                            },
+                            AutoMoveAction::Finish => {
+                                if movetype == AutoMoveType::Explore {
+                                    self.event(
+                                        Event::Log(LogEvent::AutoExploreDone), &cur_loc
+                                        );
                                 }
+                                self.automoving_stop();
+                                self.redraw();
                             }
                         }
                     } else if let Some(action) = self.game_action_queue.pop_front() {
                         self.engine.player_act(action);
-
-                        let cur_loc = self.engine.current_location().clone();
-                        let player_id = cur_loc.player_id();
-                        let player = cur_loc.actors_byid[&player_id].clone();
-                        self.update(&player, &cur_loc);
-                        self.redraw();
+                        self.engine_change();
                     }
                 } else {
                     let _actor_id = self.engine.one_actor_act();
-
-                    let cur_loc = self.engine.current_location().clone();
-                    let player_id = cur_loc.player_id();
-                    let player = cur_loc.actors_byid[&player_id].clone();
-                    self.update(&player, &cur_loc);
-
-                    self.redraw();
+                    self.engine_change();
                 }
                 self.game_delay = if self.is_automoving() { 10 } else { 50 };
             }
