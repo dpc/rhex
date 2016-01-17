@@ -367,31 +367,26 @@ impl Actor {
 
         let visible = self.los_to_visible(loc, &self.temporary_los);
 
-        let mut discovered : HashSet<_> = Default::default();
-        let mut discovered_areas : HashSet<_> = Default::default();
-
-        for i in total_visible.iter().chain(visible.iter()) {
-            if !self.known.contains(i) {
-                self.known.insert(*i);
-                discovered.insert(*i);
+        for &i in total_visible.iter().chain(visible.iter()) {
+            if !self.known.contains(&i) {
+                self.known.insert(i);
+                self.discovered.insert(i);
             }
         }
 
-        for &coord in &discovered {
+        for &coord in self.discovered.iter() {
             if let Some(area) = loc.at(coord).tile().area {
                 let area_center = area.center;
 
                 if !self.known_areas.contains(&area_center) {
                     self.known_areas.insert(area_center);
-                    discovered_areas.insert(area_center);
+                    self.discovered_areas.insert(area_center);
                 }
             }
         }
 
         self.in_los = self.temporary_los.clone();
         self.visible = visible;
-        self.discovered_areas = discovered_areas;
-        self.discovered = discovered;
     }
 
     // Save some stats for a reference
@@ -412,27 +407,33 @@ impl Actor {
         self.heared.insert(coord, type_);
     }
 
-    pub fn pre_act(&mut self) {
+    pub fn pre_any_action(&mut self) {
         self.pre_pos = self.pos;
         self.did_attack = Vec::new();
         self.was_attacked_by = Vec::new();
         self.temporary_los = Default::default();
 
-        if self.can_perform_action() {
-            self.save_stats();
-        }
+        self.discovered = Default::default();
+        self.discovered_areas = Default::default();
 
         self.noise_emision = 0;
         self.heared = HashMap::new();
     }
 
-    pub fn post_act(&mut self, loc : &Location) {
-        self.postprocess_visibile(loc);
+    pub fn pre_own_action(&mut self) {
+        if self.can_perform_action() {
+            self.save_stats();
+        }
+    }
 
+    pub fn post_own_action(&mut self) {
         if self.action_cd > 0 {
             self.action_cd -= 1;
         }
+    }
 
+    pub fn post_any_action(&mut self, loc : &Location) {
+        self.postprocess_visibile(loc);
         self.recalculate_stats();
     }
 

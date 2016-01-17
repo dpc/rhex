@@ -215,15 +215,18 @@ impl Location {
             // TODO: Find an alternative place
             unimplemented!();
         }
+        self.pre_any_action();
         let id = self.actors_counter;
         self.actors_counter += 1;
 
         debug_assert!(!self.actors_coord_to_id.contains_key(&astate.pos.coord));
         self.actors_coord_to_id.insert(astate.pos.coord, id);
+        astate.pre_own_action();
         let pos = astate.pos;
         astate.moved(self, pos);
-        astate.post_act(self);
+        astate.post_own_action();
         self.actors_byid.insert(id, astate);
+        self.post_any_action();
 
         id
     }
@@ -236,14 +239,16 @@ impl Location {
     }
 
     pub fn act(&mut self, id : u32, action : Action) {
+        self.pre_any_action();
         let mut actor = self.actors_byid.remove(&id).unwrap();
 
-        actor.pre_act();
         if !actor.can_perform_action() {
-            actor.post_act(self);
             self.actors_byid.insert(id, actor);
             return;
         }
+
+        actor.pre_own_action();
+
         let new_pos = actor.pos_after_action(action);
 
         for &new_pos in &new_pos {
@@ -322,22 +327,27 @@ impl Location {
                     // we hit the wall or something
                 }
         }
-        actor.post_act(self);
+        actor.post_own_action();
         self.actors_byid.insert(id, actor);
         self.actors_byid.get_mut(&id).unwrap().post_action(action);
-        self.post_act();
+        self.post_any_action();
     }
 
-    /*
-    pub fn pre_tick(&mut self) {
+    pub fn pre_any_action(&mut self) {
         for id in self.actors_alive_ids() {
             let mut actor = self.actors_byid.remove(&id).unwrap();
-            actor.pre_tick(self);
+            actor.pre_any_action();
             self.actors_byid.insert(id, actor);
         }
-    }*/
+    }
 
-    pub fn post_act(&mut self) {
+    pub fn post_any_action(&mut self) {
+        for id in self.actors_alive_ids() {
+            let mut actor = self.actors_byid.remove(&id).unwrap();
+            actor.post_any_action(self);
+            self.actors_byid.insert(id, actor);
+        }
+
         for id in &self.actors_ids() {
             if self.actors_byid[id].is_dead() && !self.actors_dead.contains(&id){
                 let mut a = self.actors_byid.remove(&id).unwrap();
