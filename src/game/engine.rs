@@ -69,9 +69,9 @@ impl Engine {
 
         self.current_location_mut().act(player_id, action);
 
-        self.checks_after_act();
-
         self.reload_actors_ids_to_move();
+
+        self.checks_after_act();
     }
 
     // then everybody else one by one
