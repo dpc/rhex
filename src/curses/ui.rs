@@ -256,18 +256,18 @@ impl Ui {
         (max_y, max_y)
     }
 
-    pub fn redraw_now(&mut self, astate : &Actor, gstate : &game::Location) {
+    pub fn redraw_now(&mut self) {
         match self.mode {
             Mode::Normal|Mode::Examine|Mode::Inventory(_)|Mode::Target(_) => {
                 if let Mode::Inventory(_) = self.mode {
-                    self.draw_inventory(astate, gstate);
+                    self.draw_inventory();
                 } else {
-                    self.draw_map(astate, gstate);
+                    self.draw_map();
                 }
 
-                self.draw_log(astate, gstate);
+                self.draw_log();
 
-                self.draw_stats(astate, gstate);
+                self.draw_stats();
             },
             Mode::FullScreen(fs_mode) => match fs_mode {
                 FSMode::Help => {
@@ -381,12 +381,22 @@ impl Ui {
                 }
         }
         let actor = &cur_loc.actors_byid[&actor_id];
-        if player.could_have_seen(actor) &&
+        if actor_id == player_id {
+            self.after_action_delay += if self.is_automoving() { 5 } else { 0 };
+        } else if player.could_have_seen(actor) &&
             actor.acted_last_turn() {
-            self.after_action_delay += if self.is_automoving() { 10 } else { 100 };
+            self.after_action_delay += if self.is_automoving() { 5 } else { 100 };
         }
 
         self.redraw();
+    }
+
+    pub fn player(&self) -> &Actor {
+        let player_id = self.engine.current_location().player_id();
+        &self.engine.current_location().actors_byid[&player_id]
+    }
+    pub fn current_location(&self) -> &Location {
+        self.engine.current_location()
     }
 
     pub fn run_once(&mut self) {
@@ -428,14 +438,11 @@ impl Ui {
             }
         }
         {
-            let player_id = self.engine.current_location().player_id();
-            let player = self.engine.current_location().actors_byid[&player_id].clone();
-
-            self.input_handle(&player);
+            self.input_handle();
             if self.needs_redraw {
                 self.needs_redraw = false;
                 let cur_loc = &self.engine.current_location().clone();
-                self.redraw_now(&player, cur_loc);
+                self.redraw_now();
             }
         }
     }
@@ -457,7 +464,7 @@ impl Ui {
     }
 
     /// Handle input.
-    pub fn input_handle(&mut self, actor : &Actor) {
+    pub fn input_handle(&mut self) {
         loop {
             let ch = nc::getch();
             if ch == nc::KEY_RESIZE {
@@ -472,7 +479,7 @@ impl Ui {
                 continue;
             }
 
-            self.input_handle_key(actor, ch);
+            self.input_handle_key(ch);
         }
     }
 
@@ -521,7 +528,7 @@ impl Ui {
         self.action_push(game::Action::Equip(ch))
     }
 
-    pub fn input_handle_key(&mut self, astate : &Actor, ch : i32) {
+    pub fn input_handle_key(&mut self, ch : i32) {
         match self.mode {
             Mode::FullScreen(fs_mode) => match fs_mode {
                 FSMode::Quit => match ch {
@@ -568,7 +575,7 @@ impl Ui {
             Mode::Inventory(InvMode::Equip) => match ch {
                 ch => match ch as u8 as char {
                     'a'...'z'|'A'...'Z' => {
-                        if astate.item_letter_taken(ch as u8 as char) {
+                        if self.player().item_letter_taken(ch as u8 as char) {
                             self.queue_equip(ch as u8 as char)
                         }
                     },
@@ -584,7 +591,7 @@ impl Ui {
                 }
             },
             Mode::Examine => {
-                let pos = self.target_pos.unwrap();
+                let pos = self.target_pos.unwrap_or(self.player().pos);
 
                 match ch {
                     KEY_ESC | KEY_LOWX | KEY_LOWQ => {
@@ -613,8 +620,8 @@ impl Ui {
                 }
             },
             Mode::Target(_) => {
-                let pos = self.target_pos.unwrap();
-                let center = astate.pos;
+                let center = self.player().pos;
+                let pos = self.target_pos.unwrap_or(center);
 
                 match ch  {
                     KEY_ESC | KEY_LOWX | KEY_LOWQ => {
@@ -730,20 +737,19 @@ impl Ui {
         self.mode = Mode::FullScreen(FSMode::Intro);
     }
 
-    fn draw_map(
-        &mut self,
-        astate : &Actor, gstate : &game::Location,
-        )
-    {
+    fn draw_map(&self) {
+        let player = self.player();
+        let cur_loc = self.current_location();
+
         let mut calloc = self.calloc.borrow_mut();
 
         let window = self.windows.map.window;
 
         let actors_aheads : HashMap<Coordinate, Coordinate, DefaultState<FnvHasher>> =
-            gstate.actors_byid.iter()
+            cur_loc.actors_byid.iter()
             .filter(|&(_, a)| !a.is_dead())
             .map(|(_, a)| (a.head(), a.pos.coord)).collect();
-        let astate_ahead = astate.pos.coord + astate.pos.dir;
+        let player_ahead = player.pos.coord + player.pos.dir;
 
         /* Get the screen bounds. */
         let mut max_x = 0;
@@ -761,8 +767,7 @@ impl Ui {
             Mode::Examine => {
                 match self.target_pos {
                     None => {
-                        self.target_pos = Some(astate.pos);
-                        (astate.pos.coord, astate.pos.coord + astate.pos.dir)
+                        (player.pos.coord, player.pos.coord + player.pos.dir)
                     },
                     Some(pos) => {
                         (pos.coord, pos.coord + pos.dir)
@@ -772,16 +777,15 @@ impl Ui {
             Mode::Target(_) => {
                 match self.target_pos {
                     None => {
-                        self.target_pos = Some(astate.pos);
-                        (astate.pos.coord, astate.pos.coord + astate.pos.dir)
+                        (player.pos.coord, player.pos.coord + player.pos.dir)
                     },
                     Some(pos) => {
-                        (astate.pos.coord, pos.coord)
+                        (player.pos.coord, pos.coord)
                     },
                 }
             },
             _ => {
-                (astate.pos.coord, astate.pos.coord + astate.pos.dir)
+                (player.pos.coord, player.pos.coord + player.pos.dir)
             }
         };
 
@@ -806,20 +810,20 @@ impl Ui {
 
                 let (visible, _in_los, knows, tt, t, light) = if is_proper_coord {
 
-                    let t = gstate.map[c].clone();
+                    let t = cur_loc.map[c].clone();
                     let tt = t.type_;
 
-                    let visible = astate.sees(c) || astate.is_dead();
+                    let visible = player.sees(c) || player.is_dead();
                     let light = if visible {
-                        gstate.at(c).light_as_seen_by(astate)
+                        cur_loc.at(c).light_as_seen_by(player)
                     } else {
                         0
                     };
 
                     (
                         visible,
-                        astate.in_los(c) || astate.is_dead(),
-                        astate.knows(c),
+                        player.in_los(c) || player.is_dead(),
+                        player.knows(c),
                         Some(tt), Some(t),
                         light
                     )
@@ -828,43 +832,43 @@ impl Ui {
                     let c1 = c;
                     let (c2, _) = Coordinate::from_pixel_integer(SPACING, (cvx + 1, cvy));
 
-                    let low_opaq1 = astate.sees(c1) && gstate.at(c1).tile().opaqueness() <= 1;
-                    let low_opaq2 = astate.sees(c2) && gstate.at(c2).tile().opaqueness() <= 1;
+                    let low_opaq1 = player.sees(c1) && cur_loc.at(c1).tile().opaqueness() <= 1;
+                    let low_opaq2 = player.sees(c2) && cur_loc.at(c2).tile().opaqueness() <= 1;
 
-                    let knows = (astate.knows(c1) && astate.knows(c2)) ||
-                        (astate.knows(c1) && low_opaq1) ||
-                        (astate.knows(c2) && low_opaq2);
+                    let knows = (player.knows(c1) && player.knows(c2)) ||
+                        (player.knows(c1) && low_opaq1) ||
+                        (player.knows(c2) && low_opaq2);
 
                     let (e1, e2) = (
-                        gstate.at(c1).tile().ascii_expand(),
-                        gstate.at(c2).tile().ascii_expand(),
+                        cur_loc.at(c1).tile().ascii_expand(),
+                        cur_loc.at(c2).tile().ascii_expand(),
                         );
 
                     let c = Some(if e1 > e2 { c1 } else { c2 });
 
-                    let tt = c.map_or(None, |c| Some(gstate.at(c).tile().type_));
+                    let tt = c.map_or(None, |c| Some(cur_loc.at(c).tile().type_));
 
-                    let visible = astate.is_dead() ||
-                        (astate.sees(c1) && astate.sees(c2)) ||
-                        (astate.sees(c1) && low_opaq1) ||
-                        (astate.sees(c2) && low_opaq2);
+                    let visible = player.is_dead() ||
+                        (player.sees(c1) && player.sees(c2)) ||
+                        (player.sees(c1) && low_opaq1) ||
+                        (player.sees(c2) && low_opaq2);
 
-                    let in_los = astate.is_dead() ||
-                        (astate.in_los(c1) && astate.in_los(c2)) ||
-                        (astate.in_los(c1) && low_opaq1) ||
-                        (astate.in_los(c2) && low_opaq2);
+                    let in_los = player.is_dead() ||
+                        (player.in_los(c1) && player.in_los(c2)) ||
+                        (player.in_los(c1) && low_opaq1) ||
+                        (player.in_los(c2) && low_opaq2);
 
                     let light = if visible {
                         let (light1, light2) = (
-                            gstate.at(c1).light_as_seen_by(astate),
-                            gstate.at(c2).light_as_seen_by(astate)
+                            cur_loc.at(c1).light_as_seen_by(player),
+                            cur_loc.at(c2).light_as_seen_by(player)
                             );
 
 
-                        if astate.is_dead() {
+                        if player.is_dead() {
                             (light1 + light2) / 2
                         } else {
-                            match (astate.sees(c1), astate.sees(c2)) {
+                            match (player.sees(c1), player.sees(c2)) {
                                 (true, true) => (light1 + light2) / 2,
                                 (true, false) => light1,
                                 (false, true) => light2,
@@ -883,22 +887,22 @@ impl Ui {
 
                 let mut draw = knows;
 
-                if visible { debug_assert!(knows || astate.is_dead()); }
+                if visible { debug_assert!(knows || player.is_dead()); }
 
                 let mut bold = false;
-                let occupied = gstate.at(c).is_occupied();
+                let occupied = cur_loc.at(c).is_occupied();
                 let (fg, bg, mut glyph) =
                     if is_proper_coord && visible && occupied {
-                        let fg = match gstate.at(c).actor_map_or(Race::Rat, |a| a.race) {
+                        let fg = match cur_loc.at(c).actor_map_or(Race::Rat, |a| a.race) {
                             Race::Human | Race::Elf | Race::Dwarf => color::CHAR_SELF_FG,
                             //Race::Pony => color::CHAR_ALLY_FG,
                             Race::Rat | Race::Goblin => color::CHAR_ENEMY_FG,
                         };
                         (fg, color::CHAR_BG, "@")
-                    } else if is_proper_coord && visible && gstate.at(c).item().is_some() {
-                        let item = gstate.at(c).item().unwrap();
+                    } else if is_proper_coord && visible && cur_loc.at(c).item().is_some() {
+                        let item = cur_loc.at(c).item().unwrap();
                         let s = item_to_str(item.category());
-                        if astate.discovered.contains(&c) {
+                        if player.discovered.contains(&c) {
                             bold = true;
                         }
                         (color::WALL_FG, color::EMPTY_BG, s)
@@ -967,20 +971,20 @@ impl Ui {
                     }
                 }
 
-                if is_proper_coord && visible && gstate.at(c).actor_map_or(0, |a| a.light_emision) > 0u32 {
+                if is_proper_coord && visible && cur_loc.at(c).actor_map_or(0, |a| a.light_emision) > 0u32 {
                     bg = color::LIGHTSOURCE;
                 }
 
                 if is_proper_coord && actors_aheads.contains_key(&c) &&
-                    astate.sees(*actors_aheads.get(&c).unwrap()) {
+                    player.sees(*actors_aheads.get(&c).unwrap()) {
                         bold = true;
-                        let color = if c == astate_ahead {
+                        let color = if c == player_ahead {
                             color::TARGET_SELF_FG
                         } else {
                             color::TARGET_ENEMY_FG
                         };
 
-                        if astate.knows(c) {
+                        if player.knows(c) {
                             fg = color;
                         } else {
                             draw = true;
@@ -989,7 +993,7 @@ impl Ui {
                         }
                     }
 
-                if is_proper_coord && c != center && !visible && astate.hears(c) {
+                if is_proper_coord && c != center && !visible && player.hears(c) {
                     bg = color::NOISE_BG;
                     draw = true;
                 }
@@ -1001,7 +1005,7 @@ impl Ui {
                         draw = true;
                     } else if is_proper_coord && c == head {
                         bold = true;
-                        if astate.knows(c) {
+                        if player.knows(c) {
                             fg = color::TARGET_SELF_FG;
                         } else {
                             draw = true;
@@ -1016,7 +1020,7 @@ impl Ui {
                         if c == head {
                             fg = color::TARGET_SELF_FG;
                         }
-                        if !gstate.at(c).tile().is_passable() {
+                        if !cur_loc.at(c).tile().is_passable() {
                             bg = color::BLOCKED_BG;
                         }
                     }
@@ -1045,7 +1049,7 @@ impl Ui {
         nc::wnoutrefresh(window);
     }
 
-    fn draw_stats_bar(&mut self, window : nc::WINDOW, name : &str,
+    fn draw_stats_bar(&self, window : nc::WINDOW, name : &str,
                       cur : i32, prev : i32, max : i32) {
 
         let mut max_x = 0;
@@ -1123,26 +1127,27 @@ impl Ui {
         nc::waddstr(window, &format!("{:^13}", item));
     }
 
-    fn draw_inventory(&mut self, astate : &Actor, _gstate : &game::Location) {
+    fn draw_inventory(&self) {
         let window = self.windows.map.window;
+        let player = self.player();
 
         let cpair = self.text_color;
         nc::wbkgd(window, ' ' as nc::chtype | cpair as nc::chtype);
 
         nc::werase(window);
         nc::wmove(window, 0, 0);
-        if !astate.items_equipped.is_empty() {
+        if !player.items_equipped.is_empty() {
             nc::waddstr(window, &format!("Equipped: \n"));
-            for (slot, &(ref ch, ref i)) in &astate.items_equipped {
+            for (slot, &(ref ch, ref i)) in &player.items_equipped {
                 nc::waddstr(window, &format!(" {} - {} [{:?}]\n", ch, i.description(), slot));
             }
             nc::waddstr(window, &format!("\n"));
         }
 
-        if !astate.items_backpack.is_empty() {
+        if !player.items_backpack.is_empty() {
             nc::waddstr(window, &format!("Inventory: \n"));
 
-            for (ch, i) in &astate.items_backpack {
+            for (ch, i) in &player.items_backpack {
                 nc::waddstr(window, &format!(" {} - {}\n", ch, i.description()));
             }
             nc::waddstr(window, &format!("\n"));
@@ -1151,12 +1156,14 @@ impl Ui {
         nc::wnoutrefresh(window);
     }
 
-    fn draw_stats(&mut self, astate : &Actor, gstate : &game::Location) {
+    fn draw_stats(&self) {
         let window = self.windows.stats.window;
+        let player = self.player();
+        let cur_loc = self.current_location();
 
-        let (ac, ev) = (astate.stats.base.ac, astate.stats.base.ev);
+        let (ac, ev) = (player.stats.base.ac, player.stats.base.ev);
         let (dmg, acc) =
-            (astate.stats.melee_dmg, astate.stats.melee_acc);
+            (player.stats.melee_dmg, player.stats.melee_acc);
 
         let cpair = self.text_color;
         nc::wbkgd(window, ' ' as nc::chtype | cpair as nc::chtype);
@@ -1170,7 +1177,7 @@ impl Ui {
 
         let mut y = 0;
         nc::wmove(window, y, 0);
-        self.draw_val(window, "Str", astate.stats.base.str_);
+        self.draw_val(window, "Str", player.stats.base.str_);
         nc::wmove(window, y, 7);
         self.draw_val(window, "DMG", dmg);
         nc::wmove(window, y, 15);
@@ -1178,7 +1185,7 @@ impl Ui {
 
         y += 1;
         nc::wmove(window, y, 0);
-        self.draw_val(window, "Int", astate.stats.base.int);
+        self.draw_val(window, "Int", player.stats.base.int);
         nc::wmove(window, y, 7);
         self.draw_val(window, " AC", ac);
         nc::wmove(window, y, 15);
@@ -1186,26 +1193,26 @@ impl Ui {
 
         y += 1;
         nc::wmove(window, y, 0);
-        self.draw_val(window, "Dex", astate.stats.base.dex);
+        self.draw_val(window, "Dex", player.stats.base.dex);
 
         y += 1;
         nc::wmove(window, y, 0);
 
         self.draw_stats_bar(window, "HP",
-                            astate.hp, astate.saved_hp,
-                            astate.stats.base.max_hp);
+                            player.hp, player.saved_hp,
+                            player.stats.base.max_hp);
 
         y += 1;
         nc::wmove(window, y, 0);
         self.draw_stats_bar(window, "MP",
-                            astate.mp, astate.saved_mp,
-                            astate.stats.base.max_mp);
+                            player.mp, player.saved_mp,
+                            player.stats.base.max_mp);
 
         y += 1;
         nc::wmove(window, y, 0);
         self.draw_stats_bar(window, "SP",
-                            astate.sp, astate.saved_sp,
-                            astate.stats.base.max_sp);
+                            player.sp, player.saved_sp,
+                            player.stats.base.max_sp);
 
         let slots = [
             ("R", Slot::RHand),
@@ -1225,28 +1232,28 @@ impl Ui {
                 nc::wmove(window, y, 14);
             }
 
-            self.draw_item(window, astate, string, slot);
+            self.draw_item(window, player, string, slot);
         }
 
         y += 1;
         nc::wmove(window, y, 0);
 
         let pos = if self.mode == Mode::Examine {
-            self.target_pos.unwrap()
+            self.target_pos.unwrap_or(self.player().pos)
         } else {
-            astate.pos
+            player.pos
         };
 
         let head = pos.coord + pos.dir;
-        let descr = self.tile_description(head, astate, gstate);
+        let descr = self.tile_description(head, player, cur_loc);
         self.draw_label(window, "In front");
         nc::wattron(window, self.text_color as i32);
         nc::waddstr(window, &format!(" {}", descr));
 
         y += 1;
         nc::wmove(window, y, 0);
-        self.draw_turn(window, "Turn", gstate.turn);
-        self.draw_turn(window, "Level", gstate.level);
+        self.draw_turn(window, "Turn", cur_loc.turn);
+        self.draw_turn(window, "Level", cur_loc.level);
 
         nc::wnoutrefresh(window);
     }
@@ -1346,8 +1353,9 @@ impl Ui {
         }
     }
 
-    fn draw_log(&mut self, _ : &Actor, gstate : &game::Location) {
+    fn draw_log(&self) {
         let window = self.windows.log.window;
+        let cur_loc = self.current_location();
 
         let cpair = nc::COLOR_PAIR(self.calloc.borrow_mut().get(color::VISIBLE_FG, color::BACKGROUND_BG));
         nc::wbkgd(window, ' ' as nc::chtype | cpair as nc::chtype);
@@ -1359,7 +1367,7 @@ impl Ui {
                 break;
             }
 
-            if let Some(color) = self.turn_to_color(i.turn, &self.calloc, gstate) {
+            if let Some(color) = self.turn_to_color(i.turn, &self.calloc, cur_loc) {
                 let cpair = nc::COLOR_PAIR(color);
                 nc::wattron(window, cpair as i32);
                 nc::waddstr(window, &format!(
