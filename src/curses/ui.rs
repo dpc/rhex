@@ -235,22 +235,22 @@ impl Ui {
         Ok(ui)
     }
 
-    pub fn resize(&mut self) {
-        self.windows = Windows::after_resize()
-    }
-
-
-    /// Mark the screen for redraw
-    pub fn redraw(&mut self) {
-        self.needs_redraw = true;
-    }
-
     pub fn screen_size(&self) -> (i32, i32) {
         let mut max_x = 0;
         let mut max_y = 0;
         nc::getmaxyx(nc::stdscr, &mut max_y, &mut max_x);
 
         (max_y, max_y)
+    }
+
+    pub fn resize(&mut self) {
+        self.windows = Windows::after_resize();
+        self.redraw();
+    }
+
+    /// Mark the screen for redraw
+    pub fn redraw(&mut self) {
+        self.needs_redraw = true;
     }
 
     pub fn redraw_now(&mut self) {
