@@ -12,7 +12,7 @@ extern crate libc;
 extern crate rand;
 extern crate num;
 extern crate schedule_recv;
-extern crate time;
+extern crate chrono;
 #[macro_use]
 extern crate log;
 extern crate fern;
