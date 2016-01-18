@@ -1,6 +1,4 @@
 use std::collections::{HashMap, HashSet};
-use std::collections::hash_state::{DefaultState};
-use fnv::FnvHasher;
 use std::ops::{Add, Sub};
 use std::cmp;
 

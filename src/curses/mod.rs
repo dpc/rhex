@@ -1,7 +1,6 @@
 use game;
 
 mod color;
-use self::color::*;
 
 mod consts;
 

@@ -13,7 +13,7 @@ use chrono;
 use num::integer::Integer;
 
 use ncurses as nc;
-use hex2d::{Position, Direction, Coordinate, Angle, Left, Right, Forward, Back, ToCoordinate};
+use hex2d::{Position, Coordinate, Angle, Left, Right, Forward, Back, ToCoordinate};
 
 use hex2dext::algo::{bfs};
 
@@ -139,8 +139,6 @@ pub struct Ui {
     engine : game::Engine,
     exit : bool,
     needs_redraw : bool,
-    game : game::Engine,
-    game_delay : i32,
 
     automoving : Option<AutoMoveType>,
     automoving_stopped_turn : u64,
@@ -222,7 +220,6 @@ impl Ui {
 
             exit : false,
             needs_redraw : true,
-            game_delay : 0,
 
             engine : engine,
             automoving: None,
@@ -231,8 +228,8 @@ impl Ui {
             after_action_delay: 0,
 
             game_action_queue : VecDeque::new(),
-            game : game::Engine::new(),
         };
+        ui.display_intro();
         let player_id = ui.engine.current_location().player_id();
         ui.engine_change(player_id);
         Ok(ui)
@@ -293,34 +290,33 @@ impl Ui {
         self.automoving.is_some()
     }
 
-    pub fn should_stop_automoving(
-        &self, astate : &Actor, gstate : &game::Location) -> bool {
+    pub fn should_stop_automoving(&self) -> bool {
+        let player = self.player();
+        let cur_loc = self.current_location();
 
-        !astate.was_attacked_by.is_empty() ||
-        astate.discovered_areas.iter().any(|_| true ) ||
-        astate.visible.iter().any(|&coord|
-                                  gstate.at(coord)
+        !player.was_attacked_by.is_empty() ||
+        player.discovered_areas.iter().any(|_| true ) ||
+        player.visible.iter().any(|&coord|
+                                  cur_loc.at(coord)
                                   .actor_map_or(false, |a| a.race == actor::Race::Rat)
                                  ) ||
-        astate.discovered.iter().any(|&coord|
-                                     gstate.at(coord)
+        player.discovered.iter().any(|&coord|
+                                     cur_loc.at(coord)
                                      .item_map_or(false, |_| true)
                                     ) ||
-        astate.heared.iter()
-//        .filter(|&(c, t)| *c != astate.pos.coord && *t != Noise::Creature(Race::Pony))
-        .any(|(c, _)| !astate.sees(*c)) ||
-        astate.discovered_stairs(gstate)
+        player.heared.iter()
+//        .filter(|&(c, t)| *c != player.pos.coord && *t != Noise::Creature(Race::Pony))
+        .any(|(c, _)| !player.sees(*c)) ||
+        player.discovered_stairs(cur_loc)
     }
 
-    pub fn automove_action(
-        &self, astate : &Actor, gstate : &game::Location,
-        movetype : AutoMoveType,
-        ) -> AutoMoveAction {
-
+    pub fn automove_action(&self, movetype : AutoMoveType) -> AutoMoveAction {
+        let player = self.player();
+        let cur_loc = self.current_location();
         match movetype {
-            AutoMoveType::Explore => self.autoexplore_action(astate, gstate),
+            AutoMoveType::Explore => self.autoexplore_action(),
             AutoMoveType::Walk => {
-                if gstate.at(astate.head()).tile().is_passable() {
+                if cur_loc.at(player.head()).tile().is_passable() {
                     AutoMoveAction::Action(game::Action::Move(Angle::Forward))
                 } else {
                     AutoMoveAction::Finish
@@ -329,30 +325,30 @@ impl Ui {
         }
     }
 
-    pub fn autoexplore_action(
-        &self, astate : &Actor, gstate : &game::Location,
-        ) -> AutoMoveAction {
+    pub fn autoexplore_action(&self) -> AutoMoveAction {
+        let player = self.player();
+        let cur_loc = self.current_location();
 
-        let start = astate.pos.coord;
+        let start = player.pos.coord;
 
         let mut bfs = bfs::Traverser::new(
-            |c| c == start || gstate.at(c).tile().is_passable(),
-            |c| !astate.knows(c),
+            |c| c == start || cur_loc.at(c).tile().is_passable(),
+            |c| !player.knows(c),
             start
             );
 
         if let Some(dst) = bfs.find() {
             if let Some(neigh) = bfs.backtrace_last(dst) {
 
-                let ndir = astate.pos.coord.direction_to_cw(neigh).expect("bfs gave me trash");
-                if ndir == astate.pos.dir {
-                    if gstate.at(neigh).is_occupied() {
+                let ndir = player.pos.coord.direction_to_cw(neigh).expect("bfs gave me trash");
+                if ndir == player.pos.dir {
+                    if cur_loc.at(neigh).is_occupied() {
                         AutoMoveAction::Blocked
                     } else {
                         AutoMoveAction::Action(game::Action::Move(Angle::Forward))
                     }
                 } else {
-                    AutoMoveAction::Action(game::Action::Turn(ndir - astate.pos.dir))
+                    AutoMoveAction::Action(game::Action::Turn(ndir - player.pos.dir))
                 }
             } else {
                 AutoMoveAction::Finish
@@ -368,25 +364,29 @@ impl Ui {
     }
 
     fn engine_change(&mut self, actor_id : actor::Id) {
-        let cur_loc = self.engine.current_location().clone();
-        let player_id = cur_loc.player_id();
-        let player = cur_loc.actors_byid[&player_id].clone();
-
         self.update();
 
-        if let Some(movetype) = self.automoving {
+        if self.automoving.is_some() {
             if self.automoving_stopped_turn != self.engine.turn() &&
-                self.should_stop_automoving(&player, &cur_loc) {
+                self.should_stop_automoving() {
                     self.automoving_stop();
                 }
         }
-        let actor = &cur_loc.actors_byid[&actor_id];
-        if actor_id == player_id {
-            self.after_action_delay += if self.is_automoving() { 5 } else { 0 };
-        } else if player.could_have_seen(actor) &&
-            actor.acted_last_turn() {
-            self.after_action_delay += if self.is_automoving() { 5 } else { 100 };
-        }
+        self.after_action_delay += {
+            let cur_loc = self.current_location();
+            let player = self.player();
+            let player_id = cur_loc.player_id();
+
+            let actor = &cur_loc.actors_byid[&actor_id];
+            if actor_id == player_id {
+                if self.is_automoving() { 5 } else { 0 }
+            } else if player.could_have_seen(actor) &&
+                actor.acted_last_turn() {
+                if self.is_automoving() { 5 } else { 100 }
+            } else {
+                0
+            }
+        };
 
         self.redraw();
     }
@@ -403,13 +403,11 @@ impl Ui {
         if self.after_action_delay > 0 {
             self.after_action_delay -= 1;
         } else {
-            let cur_loc = self.engine.current_location().clone();
-            let player_id = cur_loc.player_id();
-            let player = cur_loc.actors_byid[&player_id].clone();
+            let player_id = self.current_location().player_id();
 
             if self.engine.needs_player_input() {
                 if let Some(movetype) = self.automoving {
-                    match self.automove_action(&player, &cur_loc, movetype) {
+                    match self.automove_action(movetype) {
                         AutoMoveAction::Blocked => {
                             self.automoving_stop();
                             self.redraw();
@@ -420,9 +418,7 @@ impl Ui {
                         },
                         AutoMoveAction::Finish => {
                             if movetype == AutoMoveType::Explore {
-                                self.event(
-                                    Event::Log(LogEvent::AutoExploreDone), &cur_loc
-                                    );
+                                self.event(Event::Log(LogEvent::AutoExploreDone));
                             }
                             self.automoving_stop();
                             self.redraw();
@@ -441,7 +437,6 @@ impl Ui {
             self.input_handle();
             if self.needs_redraw {
                 self.needs_redraw = false;
-                let cur_loc = &self.engine.current_location().clone();
                 self.redraw_now();
             }
         }
@@ -487,7 +482,7 @@ impl Ui {
         self.game_action_queue.push_back(action);
     }
 
-    pub fn mode_switch_to(&mut self, mode : Mode) {
+    fn mode_switch_to(&mut self, mode : Mode) {
         self.mode = mode;
         self.redraw();
     }
@@ -677,18 +672,18 @@ impl Ui {
             ;
 
         if let Some(s) = self.format_areas(discoviered_areas.map(|area| area.type_)) {
-            self.log(&s, cur_loc);
+            self.log(&s);
         }
 
         for item_coord in player.discovered.iter().filter(|&coord|
                                       cur_loc.at(*coord).item_map_or(false, |_| true)
                                       ) {
             let item_descr = cur_loc.at(*item_coord).item_map_or("".to_string(), |i| i.description().to_string());
-            self.log(&format!("You've found {}.", item_descr), cur_loc);
+            self.log(&format!("You've found {}.", item_descr));
         }
 
         if player.discovered_stairs(cur_loc) {
-            self.log("You've found stairs.", cur_loc);
+            self.log("You've found stairs.");
         }
 
         for res in &player.was_attacked_by {
@@ -698,9 +693,9 @@ impl Ui {
                         res.who,
                         if res.behind { "from behind " } else { "" },
                         res.dmg
-                        ), cur_loc);
+                        ));
             } else {
-                self.log(&format!("{} missed you.", res.who), cur_loc);
+                self.log(&format!("{} missed you.", res.who));
             }
         }
 
@@ -711,9 +706,9 @@ impl Ui {
                         res.who,
                         if res.behind { "from behind " } else { "" },
                         res.dmg
-                        ), cur_loc);
+                        ));
             } else {
-                self.log(&format!("You missed {}.", res.who), cur_loc);
+                self.log(&format!("You missed {}.", res.who));
             }
         }
 
@@ -722,14 +717,15 @@ impl Ui {
             .filter(|&(c, _) | !player.sees(*c));
 
         for (_, &noise) in noises {
-            self.log(&format!("You hear {}.", noise.description()), cur_loc);
+            self.log(&format!("You hear {}.", noise.description()));
         }
     }
 
 
-    pub fn log(&mut self, s : &str, gstate : &game::Location) {
+    pub fn log(&mut self, s : &str) {
+        let turn = self.current_location().turn.clone();
         self.log.push_front(LogEntry{
-            text: s.to_string(), turn: gstate.turn
+            text: s.to_string(), turn: turn
         });
     }
 
@@ -1436,10 +1432,10 @@ impl Ui {
         nc::wnoutrefresh(window);
     }
 
-    fn event(&mut self, event : Event, gstate : &game::Location) {
+    fn event(&mut self, event : Event) {
         match event {
             Event::Log(logev) => match logev {
-                LogEvent::AutoExploreDone => self.log("Nothing else to explore.", gstate),
+                LogEvent::AutoExploreDone => self.log("Nothing else to explore."),
             }
         }
     }

@@ -3,7 +3,6 @@ use std::collections::hash_state::{DefaultState};
 use std::sync::Arc;
 
 use generate;
-use util;
 use fnv::FnvHasher;
 
 use hex2dext::algo;
@@ -49,7 +48,7 @@ impl Location {
             actors_counter += 1;
         }
 
-        let mut loc = Location {
+        let loc = Location {
             actors_byid: actors,
             actors_coord_to_id: actors_pos,
             actors_counter: actors_counter,
@@ -382,9 +381,9 @@ impl Location {
         }
 
         self.actors_coord_to_id = self.actors_coord_to_id.iter()
-            .filter(|&(coord, id)| {
+            .filter(|&(_, id)| {
                 !self.actors_byid[id].is_dead()
-            }).map(|(coord, id)| {
+            }).map(|(_, id)| {
                 (
                     self.actors_byid[id].pos.coord,
                     *id,

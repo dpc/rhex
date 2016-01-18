@@ -11,7 +11,7 @@ use hex2d::{ToCoordinate, Direction, Position, Coordinate};
 use game::tile;
 use game::{Map, Actors, Items};
 use game::area;
-use game::{actor, item};
+use game::{item};
 use game::actor::{Race, Actor};
 
 type EndpointQueue = VecDeque<h2d::Position>;

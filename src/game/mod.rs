@@ -1,19 +1,11 @@
 use std::collections::{HashMap, HashSet};
 use std::collections::hash_state::{DefaultState};
 use simplemap::SimpleMap;
-use std::sync::{Arc};
 use fnv::FnvHasher;
 
-use hex2dext::algo::bfs;
-use hex2d::{Coordinate, Direction, Angle, Position};
-use hex2d::Angle::{Left, Right, Forward};
+use hex2d::{Coordinate};
 
-use generate;
-use hex2dext::algo;
 use game::item::Item;
-use util::random_pos;
-
-use self::tile::{Feature};
 
 pub mod area;
 pub mod actor;
