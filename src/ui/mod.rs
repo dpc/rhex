@@ -79,7 +79,7 @@ impl<U : UiFrontend> Ui<U> {
                                      gstate.at(coord)
                                      .item_map_or(false, |_| true)
                                     ) ||
-        astate.heared.iter()
+        astate.heard.iter()
 //        .filter(|&(c, t)| *c != astate.pos.coord && *t != Noise::Creature(Race::Pony))
         .any(|(c, _)| !astate.sees(*c)) ||
         astate.discovered_stairs(gstate)
