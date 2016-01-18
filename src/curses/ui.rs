@@ -9,6 +9,7 @@ use std::io::Write;
 use std::fmt::Write as FmtWrite;
 use core::str::StrExt;
 
+use chrono;
 use num::integer::Integer;
 
 use ncurses as nc;
@@ -388,57 +389,70 @@ impl Ui {
         self.redraw();
     }
 
+    pub fn run_once(&mut self) {
+        if self.after_action_delay > 0 {
+            self.after_action_delay -= 1;
+        } else {
+            let cur_loc = self.engine.current_location().clone();
+            let player_id = cur_loc.player_id();
+            let player = cur_loc.actors_byid[&player_id].clone();
+
+            if self.engine.needs_player_input() {
+                if let Some(movetype) = self.automoving {
+                    match self.automove_action(&player, &cur_loc, movetype) {
+                        AutoMoveAction::Blocked => {
+                            self.automoving_stop();
+                            self.redraw();
+                        },
+                        AutoMoveAction::Action(action) => {
+                            self.engine.player_act(action);
+                            self.engine_change(player_id);
+                        },
+                        AutoMoveAction::Finish => {
+                            if movetype == AutoMoveType::Explore {
+                                self.event(
+                                    Event::Log(LogEvent::AutoExploreDone), &cur_loc
+                                    );
+                            }
+                            self.automoving_stop();
+                            self.redraw();
+                        }
+                    }
+                } else if let Some(action) = self.game_action_queue.pop_front() {
+                    self.engine.player_act(action);
+                    self.engine_change(player_id);
+                }
+            } else {
+                let actor_id = self.engine.one_actor_tick();
+                self.engine_change(actor_id);
+            }
+        }
+        {
+            let player_id = self.engine.current_location().player_id();
+            let player = self.engine.current_location().actors_byid[&player_id].clone();
+
+            self.input_handle(&player);
+            if self.needs_redraw {
+                self.needs_redraw = false;
+                let cur_loc = &self.engine.current_location().clone();
+                self.redraw_now(&player, cur_loc);
+            }
+        }
+    }
+
     pub fn run(&mut self) {
         while !self.exit {
-            if self.after_action_delay > 0 {
-                self.after_action_delay -= 1;
-            } else {
-                let cur_loc = self.engine.current_location().clone();
-                let player_id = cur_loc.player_id();
-                let player = cur_loc.actors_byid[&player_id].clone();
-
-                if self.engine.needs_player_input() {
-                    if let Some(movetype) = self.automoving {
-                        match self.automove_action(&player, &cur_loc, movetype) {
-                            AutoMoveAction::Blocked => {
-                                self.automoving_stop();
-                                self.redraw();
-                            },
-                            AutoMoveAction::Action(action) => {
-                                self.engine.player_act(action);
-                                self.engine_change(player_id);
-                            },
-                            AutoMoveAction::Finish => {
-                                if movetype == AutoMoveType::Explore {
-                                    self.event(
-                                        Event::Log(LogEvent::AutoExploreDone), &cur_loc
-                                        );
-                                }
-                                self.automoving_stop();
-                                self.redraw();
-                            }
-                        }
-                    } else if let Some(action) = self.game_action_queue.pop_front() {
-                        self.engine.player_act(action);
-                        self.engine_change(player_id);
-                    }
-                } else {
-                    let actor_id = self.engine.one_actor_tick();
-                    self.engine_change(actor_id);
-                }
+            let start = chrono::Local::now();
+            self.run_once();
+            let end = chrono::Local::now();
+            if (end - start) < chrono::Duration::milliseconds(1) {
+                let nanosecs = (chrono::Duration::milliseconds(1) - (end - start)).num_nanoseconds().unwrap();
+                assert!(nanosecs > 0);
+                thread::sleep(std::time::Duration::new(
+                        0,
+                        nanosecs as u32,
+                        ));
             }
-            {
-                let cur_loc = self.engine.current_location().clone();
-                let player_id = cur_loc.player_id();
-                let player = cur_loc.actors_byid[&player_id].clone();
-
-                self.input_handle(&player);
-                if self.needs_redraw {
-                    self.needs_redraw = false;
-                    self.redraw_now(&player, &cur_loc);
-                }
-            }
-            thread::sleep_ms(1);
         }
     }
 
