@@ -641,7 +641,7 @@ impl Actor {
 
     // Can attack considering only sp?
     pub fn can_attack_sp(&self) -> bool {
-        self.sp > self.melee_sp_cost()
+        self.sp >= self.melee_sp_cost()
     }
 
     // Can attack considering only sp?
