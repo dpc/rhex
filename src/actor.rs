@@ -239,7 +239,7 @@ pub struct State {
     /// Just discovered areas
     pub discovered_areas: Visibility,
 
-    pub heared: NoiseMap,
+    pub heard: NoiseMap,
     pub noise_emision: i32,
 
     pub light_emision : u32,
@@ -270,7 +270,7 @@ impl State {
             visible: Default::default(),
             known: Default::default(),
             known_areas: Default::default(),
-            heared: HashMap::new(),
+            heard: HashMap::new(),
             noise_emision: 0,
             discovered: Default::default(),
             discovered_areas: Default::default(),
@@ -303,7 +303,7 @@ impl State {
     }
 
     pub fn hears(&self, coord : Coordinate) -> bool {
-        self.heared.contains_key(&coord)
+        self.heard.contains_key(&coord)
     }
 
     pub fn coord(&self) -> Coordinate {
@@ -424,7 +424,7 @@ impl State {
         }
 
         self.noise_emision = 0;
-        self.heared = HashMap::new();
+        self.heard = HashMap::new();
     }
 
     pub fn noise_makes(&mut self, noise : i32) {
@@ -434,7 +434,7 @@ impl State {
     }
 
     pub fn noise_hears(&mut self, coord : Coordinate, type_ : Noise) {
-        self.heared.insert(coord, type_);
+        self.heard.insert(coord, type_);
     }
 
     pub fn post_tick(&mut self, gstate : &game::State) {

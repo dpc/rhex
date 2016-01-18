@@ -1089,7 +1089,7 @@ impl ui::UiFrontend for CursesUI {
             }
         }
 
-        let noises = astate.heared.iter()
+        let noises = astate.heard.iter()
             .filter(|&(c, _) | *c != astate.pos.coord)
             .filter(|&(c, _) | !astate.sees(*c));
 
