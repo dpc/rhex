@@ -109,7 +109,7 @@ fn go_to(c: Coordinate, astate : &actor::Actor, gstate : &game::Location) -> gam
     }
 }
 
-fn pony_follow(astate : &actor::Actor, gstate : &game::Location) -> game::Action {
+fn _pony_follow(astate : &actor::Actor, gstate : &game::Location) -> game::Action {
     let start = astate.pos.coord;
 
     let player_pos = closest_reachable(gstate, start, 10,
