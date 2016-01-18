@@ -14,7 +14,7 @@ debug-assertions = true
 [dependencies]
 num = "*"
 rand = "*"
-time = "*"
+chrono = "*"
 hex2d = "*"
 hex2d-dpcext = { git = "https://github.com/dpc/hex2d-dpcext-rs" }
 log = "*"
