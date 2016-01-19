@@ -45,7 +45,7 @@ impl Engine {
 
     pub fn checks_after_act(&mut self) {
         if self.ids_to_move.is_empty() {
-            self.current_location_mut().post_turn();
+            self.end_turn();
             let player_id = self.current_location().player_id();
             let player = &self.current_location().actors_byid[&player_id].clone();
             if !player.can_act() {
@@ -99,7 +99,7 @@ impl Engine {
         actor_id
     }
 
-    pub fn post_turn(&mut self) {
+    pub fn end_turn(&mut self) {
         self.turn += 1;
         self.current_location_mut().post_turn()
     }
