@@ -4,6 +4,7 @@ use util;
 use ai::{self, Ai};
 
 pub struct Engine {
+    turn : u64,
     location_cur : usize,
     locations : Vec<Location>,
 
@@ -17,6 +18,7 @@ impl Engine {
             location_cur : 0,
             locations: vec!(location),
             ids_to_move: vec!(),
+            turn: 0,
         }
     }
 
@@ -30,7 +32,7 @@ impl Engine {
 
     // TODO: Move field to engine
     pub fn turn(&self) -> u64 {
-        self.current_location().turn
+        self.turn
     }
 
     pub fn spawn(&mut self) {
@@ -95,5 +97,10 @@ impl Engine {
         self.checks_after_act();
 
         actor_id
+    }
+
+    pub fn post_turn(&mut self) {
+        self.turn += 1;
+        self.current_location_mut().post_turn()
     }
 }
