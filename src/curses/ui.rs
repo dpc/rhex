@@ -722,7 +722,7 @@ impl Ui {
 
 
     pub fn log(&self, s : &str) {
-        let turn = self.current_location().turn.clone();
+        let turn = self.engine.turn();
         self.log.borrow_mut().push_front(LogEntry{
             text: s.to_string(), turn: turn
         });
@@ -1156,6 +1156,7 @@ impl Ui {
     }
 
     fn draw_stats(&self) {
+        let turn = self.engine.turn();
         let window = self.windows.stats.window;
         let player = self.player();
         let cur_loc = self.current_location();
@@ -1251,7 +1252,7 @@ impl Ui {
 
         y += 1;
         nc::wmove(window, y, 0);
-        self.draw_turn(window, "Turn", cur_loc.turn);
+        self.draw_turn(window, "Turn", turn);
         self.draw_turn(window, "Level", cur_loc.level);
 
         nc::wnoutrefresh(window);
@@ -1280,12 +1281,11 @@ impl Ui {
         }
 
     fn turn_to_color(
-        &self, turn : u64, calloc : &RefCell<color::Allocator>,
-        gstate : &game::Location) -> Option<i16>
+        &self, turn : u64, calloc : &RefCell<color::Allocator>) -> Option<i16>
     {
         let mut calloc = calloc.borrow_mut();
 
-        let dturn = gstate.turn - turn;
+        let dturn = self.engine.turn() - turn;
 
         let fg = if dturn < 1 {
             Some(color::LOG_1_FG)
@@ -1366,7 +1366,7 @@ impl Ui {
                 break;
             }
 
-            if let Some(color) = self.turn_to_color(i.turn, &self.calloc, cur_loc) {
+            if let Some(color) = self.turn_to_color(i.turn, &self.calloc) {
                 let cpair = nc::COLOR_PAIR(color);
                 nc::wattron(window, cpair as i32);
                 nc::waddstr(window, &format!(

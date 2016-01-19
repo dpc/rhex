@@ -25,7 +25,6 @@ pub struct Location {
     pub map : Arc<Map>,
     pub items: Items, // items on the floor
     pub light_map: LightMap, // light intensity at a given coordinate
-    pub turn : u64,
     descend : bool,
     pub level : i32,
     player_id : Option<actor::Id>,
@@ -55,7 +54,6 @@ impl Location {
             actors_dead: Default::default(),
             items: items,
             map: Arc::new(map),
-            turn: 0,
             level: 0,
             descend: false,
             light_map: LightMap::new(),
@@ -115,7 +113,6 @@ impl Location {
             actors_dead: Default::default(),
             items: items,
             map: Arc::new(map),
-            turn: self.turn,
             descend: false,
             level: self.level + 1,
             light_map: Default::default(),
@@ -405,7 +402,6 @@ impl Location {
     }
 
     pub fn post_turn(&mut self) {
-        self.turn += 1;
     }
 
     pub fn at(&self, coord: Coordinate) -> At {
