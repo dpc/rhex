@@ -374,7 +374,6 @@ impl Ui {
         }
         self.after_action_delay += {
             let cur_loc = self.current_location();
-            let player = self.player();
             let player_id = cur_loc.player_id();
 
             let actor = &cur_loc.actors_byid[&actor_id];
