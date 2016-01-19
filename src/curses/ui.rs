@@ -126,7 +126,7 @@ pub struct Ui {
     windows : Windows,
 
     mode : Mode,
-    log : VecDeque<LogEntry>,
+    log : RefCell<VecDeque<LogEntry>>,
     target_pos : Option<Position>,
     dot : &'static str,
 
@@ -210,7 +210,7 @@ impl Ui {
             mode: Mode::FullScreen(FSMode::Intro),
             target_pos: None,
             dot: if term_putty { NORMAL_DOT } else { UNICODE_DOT },
-            log: VecDeque::new(),
+            log: RefCell::new(VecDeque::new()),
 
             label_color: label_color,
             text_color: text_color,
@@ -379,10 +379,7 @@ impl Ui {
 
             let actor = &cur_loc.actors_byid[&actor_id];
             if actor_id == player_id {
-                if self.is_automoving() { 5 } else { 0 }
-            } else if player.could_have_seen(actor) &&
-                actor.acted_last_turn() {
-                if self.is_automoving() { 5 } else { 100 }
+                if self.is_automoving() { 20 } else { 0 }
             } else {
                 0
             }
@@ -661,8 +658,10 @@ impl Ui {
 
     // TODO: break into smaller stuff?
     fn update(&mut self) {
-        let cur_loc = &self.engine.current_location().clone();
-        let player = cur_loc.player().clone();
+
+        let cur_loc = self.current_location();
+        let player = self.player();
+
         if player.is_dead() {
             return;
         }
@@ -722,9 +721,9 @@ impl Ui {
     }
 
 
-    pub fn log(&mut self, s : &str) {
+    pub fn log(&self, s : &str) {
         let turn = self.current_location().turn.clone();
-        self.log.push_front(LogEntry{
+        self.log.borrow_mut().push_front(LogEntry{
             text: s.to_string(), turn: turn
         });
     }
@@ -981,7 +980,11 @@ impl Ui {
                         };
 
                         if player.knows(c) {
-                            fg = color;
+                            if occupied {
+                                bg = color;
+                            } else {
+                                fg = color;
+                            }
                         } else {
                             draw = true;
                             glyph = " ";
@@ -1358,7 +1361,7 @@ impl Ui {
         nc::werase(window);
         nc::wmove(window, 0, 0);
 
-        for i in &self.log {
+        for i in self.log.borrow().iter() {
             if nc::getcury(window) == nc::getmaxy(window) - 1 {
                 break;
             }
