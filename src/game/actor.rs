@@ -343,7 +343,7 @@ impl Actor {
         }
     }
 
-    pub fn acted_last_turn(&self) -> bool {
+    pub fn acted_last_tick(&self) -> bool {
         self.acted
     }
 
@@ -433,13 +433,14 @@ impl Actor {
 
         self.noise_emision = 0;
         self.heared = Default::default();
+
+        self.acted = false;
     }
 
     pub fn pre_own_tick(&mut self) {
         if self.action_cd > 0 {
             self.action_cd -= 1;
         }
-        self.acted = false;
         if self.can_perform_action() {
             self.save_stats();
         }
