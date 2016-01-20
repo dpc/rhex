@@ -56,6 +56,7 @@ pub struct Stats {
     pub ev: i32,
     pub infravision : i32,
     pub vision : i32,
+    pub regeneration : u32,
 }
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
@@ -64,6 +65,7 @@ pub struct EffectiveStats {
     pub melee_dmg: i32,
     pub melee_acc: i32,
     pub melee_str_req: i32,
+    pub light_emision : u32,
 }
 
 impl Stats {
@@ -91,6 +93,7 @@ impl Default for Stats {
             max_hp: 0, max_mp: 0, max_sp: 0,
             ac: 0, ev: 0,
             infravision: 0, vision: 0,
+            regeneration: 0,
         }
     }
 }
@@ -102,6 +105,7 @@ impl Default for EffectiveStats {
             melee_dmg: 0,
             melee_acc: 0,
             melee_str_req: 0,
+            light_emision: 0,
         }
     }
 }
@@ -121,6 +125,7 @@ impl Add for Stats {
             ev: self.ev + s.ev,
             infravision: self.infravision + s.infravision,
             vision : self.vision + s.vision,
+            regeneration: self.regeneration + s.regeneration,
         }
     }
 }
@@ -134,6 +139,7 @@ impl Add for EffectiveStats {
             melee_dmg: self.melee_dmg + s.melee_dmg,
             melee_acc: self.melee_acc + s.melee_acc,
             melee_str_req: self.melee_str_req + s.melee_str_req,
+            light_emision: self.light_emision + s.light_emision,
         }
     }
 }
@@ -153,6 +159,7 @@ impl Sub for Stats {
             ev: self.ev - s.ev,
             infravision: self.infravision - s.infravision,
             vision: self.vision - s.vision,
+            regeneration: self.regeneration - self.regeneration,
         }
     }
 }
@@ -161,11 +168,12 @@ impl Sub for EffectiveStats {
     type Output = EffectiveStats;
 
     fn sub(self, s : Self) -> Self {
-        EffectiveStats{
+        EffectiveStats {
             base : self.base - s.base,
             melee_dmg: self.melee_dmg - s.melee_dmg,
             melee_acc: self.melee_acc - s.melee_acc,
             melee_str_req: self.melee_str_req- s.melee_str_req,
+            light_emision: self.light_emision - s.light_emision,
         }
     }
 }
@@ -234,8 +242,6 @@ pub struct Actor {
     pub heard: NoiseMap,
     pub noise_emision: i32,
 
-    pub light_emision : u32,
-
     pub action_cd : i32,
 
     pub items_letters: HashSet<char>,
@@ -266,7 +272,6 @@ impl Actor {
             noise_emision: 0,
             discovered: Default::default(),
             discovered_areas: Default::default(),
-            light_emision: 0,
             items_backpack: Default::default(),
             items_equipped: Default::default(),
             items_letters: Default::default(),
@@ -454,6 +459,12 @@ impl Actor {
         if self.sp < self.stats.base.max_sp {
             if rand::thread_rng().gen_weighted_bool(20) {
                 self.sp += 1
+            }
+        }
+
+        if self.hp < self.stats.base.max_hp {
+            if rand::thread_rng().gen_range(0, 50) < self.stats.base.regeneration {
+                self.hp += 1
             }
         }
 
@@ -707,5 +718,9 @@ impl Actor {
 
     pub fn descended(&self) -> bool {
         self.descended
+    }
+
+    pub fn light_emision(&self) -> u32 {
+        self.stats.light_emision
     }
 }
