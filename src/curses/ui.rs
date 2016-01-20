@@ -372,11 +372,11 @@ impl Ui {
                     self.automoving_stop();
                 }
         }
+
         self.after_action_delay += {
             let cur_loc = self.current_location();
             let player_id = cur_loc.player_id();
 
-            let actor = &cur_loc.actors_byid[&actor_id];
             if actor_id == player_id {
                 if self.is_automoving() { 20 } else { 0 }
             } else {
@@ -965,7 +965,7 @@ impl Ui {
                     }
                 }
 
-                if is_proper_coord && visible && cur_loc.at(c).actor_map_or(0, |a| a.light_emision) > 0u32 {
+                if is_proper_coord && visible && cur_loc.at(c).actor_map_or(0, |a| a.light_emision()) > 0u32 {
                     bg = color::LIGHTSOURCE;
                 }
 

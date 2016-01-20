@@ -1,10 +1,12 @@
 use super::actor::{self, Actor, Slot};
-use rand::{self, Rng};
+use rand::{self, Rng, Rand};
 
 use core::cmp;
+use std::fmt::{self, Write};
 
 use self::Category::*;
 use self::Type::*;
+use self::Feature::*;
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub enum Category {
@@ -29,20 +31,9 @@ pub enum Type {
     Cloak,
 }
 
-#[derive(Copy, Clone, Eq, PartialEq, Debug)]
-pub struct Item  {
-    type_ : Type,
-
-}
-
-impl Item {
-
-    pub fn new(t : Type) -> Item {
-        Item { type_: t }
-    }
-
+impl Type {
     pub fn description(&self) -> &str {
-        match self.type_ {
+        match *self {
             Junk => "junk",
             Knife => "knife",
             Sword => "sword",
@@ -55,6 +46,82 @@ impl Item {
             Buckler => "buckler",
             Cloak => "cloak",
         }
+    }
+}
+
+impl fmt::Display for Type {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.description())
+    }
+}
+
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
+pub enum Feature {
+    Infravision,
+    Light,
+    Regeneration,
+}
+
+impl Feature {
+    pub fn description(&self) -> &str {
+        match *self {
+            Infravision => "infravision",
+            Light => "light",
+            Regeneration => "regeneration",
+        }
+    }
+
+
+    pub fn stats(&self) -> actor::EffectiveStats {
+        let mut s : actor::EffectiveStats = Default::default();
+
+        match *self {
+            Infravision => s.base.infravision += 1,
+            Light => s.light_emision += 1,
+            Regeneration => s.base.regeneration += 1,
+        }
+
+        s
+    }
+}
+
+impl fmt::Display for Feature {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.description())
+    }
+}
+
+impl Rand for Feature {
+    fn rand<R: Rng>(rng: &mut R) -> Self {
+        match rng.gen_range(0, 3) {
+            0 => Infravision,
+            1 => Light,
+            2 => Regeneration,
+            _ => panic!(),
+        }
+    }
+}
+
+#[derive(Clone, Eq, PartialEq, Debug)]
+pub struct Item  {
+    type_ : Type,
+    features : Vec<Feature>,
+}
+
+impl Item {
+    pub fn new(t : Type, features : Vec<Feature>) -> Item {
+        Item {
+            type_: t,
+            features : features,
+        }
+    }
+
+    pub fn description(&self) -> String {
+        let mut s = String::new();
+
+        write!(s, "{}", *self).unwrap();
+
+        s
     }
 
     pub fn category(&self) -> Category {
@@ -112,6 +179,9 @@ impl Item {
             _ => {},
         }
 
+        for feature in &self.features {
+            s = s + feature.stats()
+        }
         s
     }
 
@@ -136,6 +206,19 @@ impl Item {
     }
 }
 
+impl fmt::Display for Item {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        try!(write!(f, "{}", self.type_));
+
+        for feature in &self.features {
+            try!(write!(f, " of {}", feature));
+        }
+
+        Ok(())
+    }
+}
+
+
 pub fn random(level : i32) -> Box<Item> {
 
     let a = -(level / 2);
@@ -145,17 +228,30 @@ pub fn random(level : i32) -> Box<Item> {
         rand::thread_rng().gen_range(a, b) +
         rand::thread_rng().gen_range(a, b);
 
-    Box::new(match r {
-        0 => Item::new(HealthPotion),
-        1 => Item::new(Knife),
-        2 => Item::new(Cloak),
-        3 => Item::new(Sword),
-        4 => Item::new(Helmet),
-        5 => Item::new(Leather),
-        6 => Item::new(Boots),
-        7 => Item::new(Axe),
-        8 => Item::new(Buckler),
-        9 => Item::new(Plate),
-        _ => Item::new(Junk),
-    })
+    let mut features = vec!();
+    let mut count = 0;
+    let mut chance = level;
+    const PER_LOOP : i32 = 30;
+    loop {
+        if rand::thread_rng().gen_range(0, PER_LOOP) < chance {
+            features.push(rand::thread_rng().gen::<Feature>());
+            chance = cmp::max(0, chance - PER_LOOP);
+        } else {
+            break;
+        }
+    }
+
+    Box::new(Item::new(match r {
+        0 => HealthPotion,
+        1 => Knife,
+        2 => Cloak,
+        3 => Sword,
+        4 => Helmet,
+        5 => Leather,
+        6 => Boots,
+        7 => Axe,
+        8 => Buckler,
+        9 => Plate,
+        _ => Junk,
+    }, features))
 }

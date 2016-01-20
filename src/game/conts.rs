@@ -11,6 +11,7 @@ pub const ELF_STATS : actor::Stats = actor::Stats {
     ev: 2,
     infravision : 3,
     vision : 15,
+    regeneration : 0,
 };
 
 pub const HUMAN_STATS : actor::Stats =  actor::Stats {
@@ -24,6 +25,7 @@ pub const HUMAN_STATS : actor::Stats =  actor::Stats {
     ev: 1,
     infravision : 1,
     vision : 10,
+    regeneration : 0,
 };
 
 
@@ -38,6 +40,7 @@ pub const DWARF_STATS : actor::Stats =  actor::Stats {
     ev: 0,
     infravision : 2,
     vision : 10,
+    regeneration : 0,
 };
 
 
@@ -52,6 +55,7 @@ pub const RAT_STATS : actor::Stats = actor::Stats {
     ev: 2,
     infravision : 1,
     vision : 6,
+    regeneration : 0,
 };
 
 pub const GOBLIN_STATS : actor::Stats = actor::Stats {
@@ -65,4 +69,5 @@ pub const GOBLIN_STATS : actor::Stats = actor::Stats {
     ev: 1,
     infravision : 2,
     vision : 10,
+    regeneration : 0,
 };

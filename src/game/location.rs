@@ -120,7 +120,7 @@ impl Location {
         for (_, id) in &self.actors_coord_to_id {
             let astate = &self.actors_byid[id];
             let pos = astate.pos.coord;
-            if astate.light_emision > 0 {
+            if astate.light_emision() > 0 {
                 algo::los::los(
                     &|coord| {
                         if coord == pos {
@@ -134,7 +134,7 @@ impl Location {
                            light_map[coord] = light as u32;
                        }
                     },
-                    astate.light_emision as i32, pos, Direction::all()
+                    astate.light_emision() as i32, pos, Direction::all()
                 );
             }
         }
