@@ -58,7 +58,7 @@ impl Engine {
             self.location_cur += 1;
             self.locations.push(Location::new(self.location_cur as u32));
             player.pos = util::random_pos(0, 0);
-            let player = self.current_location_mut().spawn_player(player);
+            let _player = self.current_location_mut().spawn_player(player);
         }
 
         if self.ids_to_move.is_empty() {

@@ -7,7 +7,7 @@ use fnv::FnvHasher;
 
 use hex2dext::algo;
 use simplemap::SimpleMap;
-use hex2d::{Coordinate, Position, Direction};
+use hex2d::{Coordinate, Direction};
 
 use super::tile;
 use super::item::Item;
@@ -32,7 +32,6 @@ pub struct Location {
 impl Location {
     pub fn new(level : u32) -> Location {
 
-        let cp = Coordinate::new(0, 0);
         let (map, gen_actors, items) = generate::gen_level(level);
 
         let mut actors : HashMap<u32, Actor, DefaultState<FnvHasher>> = Default::default();
@@ -154,7 +153,6 @@ impl Location {
         debug_assert!(!self.actors_coord_to_id.contains_key(&astate.pos.coord));
         self.actors_coord_to_id.insert(astate.pos.coord, id);
         astate.pre_own_tick();
-        let pos = astate.pos;
         astate.post_spawn(self);
         astate.post_own_tick(self);
         self.actors_byid.insert(id, astate);

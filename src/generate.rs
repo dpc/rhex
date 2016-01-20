@@ -182,11 +182,7 @@ impl DungeonGenerator {
         coord.for_each_in_range((r - 1) as i32, |c| {
            if !self.map.contains_key(&c) {
                self.tile_count += 1;
-               if rand::thread_rng().gen_weighted_bool(40) {
-                   self.map.insert(c, *tile::Tile::new(tile::Water).add_area(area));
-               } else {
-                   self.map.insert(c, *tile::Tile::new(tile::Empty).add_area(area));
-               }
+               self.map.insert(c, *tile::Tile::new(tile::Empty).add_area(area));
            }
         });
 
@@ -217,9 +213,12 @@ impl DungeonGenerator {
                 match rand::thread_rng().gen_range(0, 10) {
                     0 => {
                         let pos = Position::new(c, Direction::XY);
-                        self.actors.insert(c,
-                                           Actor::new(Race::Rat, pos)
-                                          );
+                        let race = match rand::thread_rng().gen_range(0, 1 + self.level / 2) {
+                            0 => Race::Rat,
+                            1 => Race::Goblin,
+                            _ => Race::Troll,
+                        };
+                        self.actors.insert(c, Actor::new(race, pos));
                     },
                     _ => {},
                 }
