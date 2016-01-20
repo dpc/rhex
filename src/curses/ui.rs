@@ -887,12 +887,14 @@ impl Ui {
                 let occupied = cur_loc.at(c).is_occupied();
                 let (fg, bg, mut glyph) =
                     if is_proper_coord && visible && occupied {
-                        let fg = match cur_loc.at(c).actor_map_or(Race::Rat, |a| a.race) {
-                            Race::Human | Race::Elf | Race::Dwarf => color::CHAR_SELF_FG,
-                            //Race::Pony => color::CHAR_ALLY_FG,
-                            Race::Rat | Race::Goblin => color::CHAR_ENEMY_FG,
+                        let (fg, glyph) = match cur_loc.at(c).actor_map_or(Race::Rat, |a| a.race) {
+                            Race::Human | Race::Elf | Race::Dwarf =>
+                                (color::CHAR_SELF_FG, "@"),
+                            Race::Rat => (color::CHAR_ENEMY_FG, "r"),
+                            Race::Goblin => (color::CHAR_ENEMY_FG, "g"),
+                            Race::Troll => (color::CHAR_ENEMY_FG, "T"),
                         };
-                        (fg, color::CHAR_BG, "@")
+                        (fg, color::CHAR_BG, glyph)
                     } else if is_proper_coord && visible && cur_loc.at(c).item().is_some() {
                         let item = cur_loc.at(c).item().unwrap();
                         let s = item_to_str(item.category());
@@ -1327,6 +1329,7 @@ impl Ui {
                     //Race::Pony => "A Pony",
                     Race::Rat => "A rat",
                     Race::Goblin => "Goblin",
+                    Race::Troll => "Troll",
                     Race::Human => "Human",
                     Race::Elf => "Elf",
                     Race::Dwarf => "Dwarf",
@@ -1358,7 +1361,6 @@ impl Ui {
 
     fn draw_log(&self) {
         let window = self.windows.log.window;
-        let cur_loc = self.current_location();
 
         let cpair = nc::COLOR_PAIR(self.calloc.borrow_mut().get(color::VISIBLE_FG, color::BACKGROUND_BG));
         nc::wbkgd(window, ' ' as nc::chtype | cpair as nc::chtype);

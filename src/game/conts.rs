@@ -71,3 +71,17 @@ pub const GOBLIN_STATS : actor::Stats = actor::Stats {
     vision : 10,
     regeneration : 0,
 };
+
+pub const TROLL_STATS : actor::Stats = actor::Stats {
+    int : 2,
+    dex : 2,
+    str_ : 5,
+    max_hp : 35,
+    max_mp : 10,
+    max_sp : 10,
+    ac: 3,
+    ev: 1,
+    infravision : 2,
+    vision : 10,
+    regeneration : 10,
+};

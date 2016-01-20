@@ -229,7 +229,6 @@ pub fn random(level : i32) -> Box<Item> {
         rand::thread_rng().gen_range(a, b);
 
     let mut features = vec!();
-    let mut count = 0;
     let mut chance = level;
     const PER_LOOP : i32 = 30;
     loop {

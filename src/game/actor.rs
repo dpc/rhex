@@ -30,16 +30,18 @@ pub enum Race {
     Dwarf,
     Rat,
     Goblin,
+    Troll,
 }
 
 impl Race {
     pub fn description(&self) -> String {
         match *self {
-            Race::Human => "Human",
-            Race::Elf => "Elf",
-            Race::Dwarf => "Dwarf",
-            Race::Rat => "Rat",
-            Race::Goblin => "Goblin",
+            Race::Human => "human",
+            Race::Elf => "elf",
+            Race::Dwarf => "dwarf",
+            Race::Rat => "rat",
+            Race::Goblin => "goblin",
+            Race::Troll => "troll",
         }.to_string()
     }
 }
@@ -76,6 +78,7 @@ impl Stats {
             Elf => ELF_STATS,
             Human => HUMAN_STATS,
             Dwarf => DWARF_STATS,
+            Troll => TROLL_STATS,
         }
     }
 
@@ -456,20 +459,22 @@ impl Actor {
     }
 
     pub fn post_own_tick(&mut self, loc : &Location) {
-        if self.sp < self.stats.base.max_sp {
-            if rand::thread_rng().gen_weighted_bool(20) {
-                self.sp += 1
+        if !self.is_dead() {
+            if self.sp < self.stats.base.max_sp {
+                if rand::thread_rng().gen_weighted_bool(20) {
+                    self.sp += 1
+                }
             }
-        }
 
-        if self.hp < self.stats.base.max_hp {
-            if rand::thread_rng().gen_range(0, 50) < self.stats.base.regeneration {
-                self.hp += 1
+            if self.hp < self.stats.base.max_hp {
+                if rand::thread_rng().gen_range(0, 50) < self.stats.base.regeneration {
+                    self.hp += 1
+                }
             }
-        }
 
-        if self.pre_pos != Some(self.pos) {
-            self.postprocess_visibile(loc);
+            if self.pre_pos != Some(self.pos) {
+                self.postprocess_visibile(loc);
+            }
         }
     }
 
@@ -682,18 +687,13 @@ impl Actor {
     }
 
     pub fn can_act(&self) -> bool {
-        self.action_cd == 0
+        self.action_cd == 0 && !self.is_dead()
     }
 
     pub fn moved(&mut self, loc: &Location, new_pos : Position) {
         self.pos = new_pos;
         self.add_current_los_to_temporary_los(loc);
         self.noise_makes(2);
-    }
-
-    pub fn changed_level(&mut self) {
-        self.known = Default::default();
-        self.known_areas = Default::default();
     }
 
     pub fn is_player(&self) -> bool {
