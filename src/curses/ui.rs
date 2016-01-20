@@ -1393,7 +1393,7 @@ impl Ui {
         nc::werase(window);
         nc::wmove(window, 0, 0);
 
-        nc::waddstr(window, "Long, long ago in a galaxy far, far away...\n\n");
+        nc::waddstr(window, "A long time ago in a dungeon deep, deep underground...\n\n");
         nc::waddstr(window, &format!("You can press {} in the game for help.\n\n",  KEY_HELP as u8 as char));
         nc::waddstr(window, "Press anything to start.");
         nc::wnoutrefresh(window);
@@ -1409,14 +1409,17 @@ impl Ui {
 
         nc::waddstr(window, "This game is still incomplete. Sorry for that.\n\n");
         nc::waddstr(window, "= (more or less) Implemented actions = \n\n");
-        nc::waddstr(window, "Move: hjklui\n");
+        nc::waddstr(window, "Move/attack: hjklui\n");
+        nc::waddstr(window, "Strafe/attack: Shift + h/l\n");
+        nc::waddstr(window, "Charge: c\n");
         nc::waddstr(window, "Wait: .\n");
-        nc::waddstr(window, "Pick: ,\n");
-        nc::waddstr(window, "Fire/Throw: f\n");
         nc::waddstr(window, "Autoexplore: o\n");
+        nc::waddstr(window, "Automove: shift + k\n");
         nc::waddstr(window, "Examine: x\n");
+        nc::waddstr(window, "Pick item in front: ,\n");
         nc::waddstr(window, "Equip: E\n");
         nc::waddstr(window, "Inventory: I\n");
+        nc::waddstr(window, "Fire/Throw: f (not fully working)\n");
         nc::waddstr(window, "Quit: q\n");
         nc::wnoutrefresh(window);
     }
