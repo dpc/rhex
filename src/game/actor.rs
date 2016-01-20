@@ -231,7 +231,7 @@ pub struct Actor {
     /// Just discovered areas
     pub discovered_areas: Visibility,
 
-    pub heared: NoiseMap,
+    pub heard: NoiseMap,
     pub noise_emision: i32,
 
     pub light_emision : u32,
@@ -262,7 +262,7 @@ impl Actor {
             visible: Default::default(),
             known: Default::default(),
             known_areas: Default::default(),
-            heared: Default::default(),
+            heard: Default::default(),
             noise_emision: 0,
             discovered: Default::default(),
             discovered_areas: Default::default(),
@@ -297,7 +297,7 @@ impl Actor {
     }
 
     pub fn hears(&self, coord : Coordinate) -> bool {
-        self.heared.contains_key(&coord)
+        self.heard.contains_key(&coord)
     }
 
     pub fn coord(&self) -> Coordinate {
@@ -422,7 +422,7 @@ impl Actor {
     }
 
     pub fn noise_hears(&mut self, coord : Coordinate, type_ : Noise) {
-        self.heared.insert(coord, type_);
+        self.heard.insert(coord, type_);
     }
 
     pub fn pre_any_tick(&mut self) {
@@ -435,7 +435,7 @@ impl Actor {
         self.discovered_areas = Default::default();
 
         self.noise_emision = 0;
-        self.heared = Default::default();
+        self.heard = Default::default();
 
         self.acted = false;
         self.descended = false;
@@ -451,6 +451,12 @@ impl Actor {
     }
 
     pub fn post_own_tick(&mut self, loc : &Location) {
+        if self.sp < self.stats.base.max_sp {
+            if rand::thread_rng().gen_weighted_bool(20) {
+                self.sp += 1
+            }
+        }
+
         if self.pre_pos != Some(self.pos) {
             self.postprocess_visibile(loc);
         }
@@ -661,7 +667,7 @@ impl Actor {
     }
 
     pub fn can_attack(&self) -> bool {
-        self.action_cd == 0 &&  self.can_attack_sp()
+        self.action_cd == 0
     }
 
     pub fn can_act(&self) -> bool {

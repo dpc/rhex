@@ -208,7 +208,8 @@ impl DungeonGenerator {
 
 
         coord.for_each_in_range(r as i32 / 2, |c| {
-            if self.map.get(&c).map(|t| t.is_passable()).unwrap_or(false) {
+            if c != coord &&
+                self.map.get(&c).map(|t| t.is_passable()).unwrap_or(false) {
                 match rand::thread_rng().gen_range(0, 10) {
                     0 => {
                         let pos = Position::new(c, Direction::XY);

@@ -65,7 +65,7 @@ fn grue(astate : &actor::Actor, gstate : &game::Location) -> game::Action {
         }
     }
 
-    for (&coord, _) in &astate.heared {
+    for (&coord, _) in &astate.heard {
         if astate.pos.coord != coord {
             return go_to(coord, astate, gstate);
         }

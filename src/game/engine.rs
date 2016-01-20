@@ -44,7 +44,11 @@ impl Engine {
     }
 
     pub fn needs_player_input(&self) -> bool {
-        self.ids_to_move.is_empty()
+        self.ids_to_move.is_empty() && !self.player().is_dead()
+    }
+
+    pub fn player(&self) -> &Actor {
+        self.current_location().player()
     }
 
     pub fn checks_after_act(&mut self, actor_id : actor::Id) {
