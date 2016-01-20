@@ -1318,7 +1318,7 @@ impl Ui {
 
         let tile_type = gstate.at(coord).tile().type_;
         let tile = gstate.at(coord).tile();
-        let feature_descr = tile.feature.map(|f| f.description());
+        let feature_descr = tile.feature.map(|f| f.description().to_string());
         let item_descr = gstate.at(coord).item_map_or(None, |i| Some(i.description().to_string()));
 
         let actor_descr =
@@ -1351,7 +1351,7 @@ impl Ui {
                 }
             },
             _ => {
-                "Indescribable".to_string()
+                tile.type_.description().to_string()
             },
         }
     }
