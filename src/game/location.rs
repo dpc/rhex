@@ -25,7 +25,6 @@ pub struct Location {
     pub map : Arc<Map>,
     pub items: Items, // items on the floor
     pub light_map: LightMap, // light intensity at a given coordinate
-    descend : bool,
     pub level : i32,
     player_id : Option<actor::Id>,
 }
@@ -55,7 +54,6 @@ impl Location {
             items: items,
             map: Arc::new(map),
             level: 0,
-            descend: false,
             light_map: LightMap::new(),
             player_id: None,
         };
@@ -223,7 +221,7 @@ impl Location {
         self.actors_coord_to_id.insert(astate.pos.coord, id);
         astate.pre_own_tick();
         let pos = astate.pos;
-        astate.moved(self, pos);
+        astate.post_spawn(self);
         astate.post_own_tick(self);
         self.actors_byid.insert(id, astate);
         self.post_any_tick();
@@ -231,11 +229,24 @@ impl Location {
         id
     }
 
-    pub fn spawn_player(&mut self, pos : Position) {
-        assert!(self.player_id.is_none());
-        let mut actor = Actor::new(actor::Race::Human, pos);
-        actor.set_player();
+    pub fn remove(&mut self, id : actor::Id) -> Option<Actor> {
+        let actor = self.actors_byid.remove(&id);
+
+        let actor = if let Some(actor) = actor {
+            actor
+        } else {
+            return None
+        };
+
+        self.actors_coord_to_id.remove(&actor.pos.coord);
+
+        Some(actor)
+    }
+
+    pub fn spawn_player(&mut self, actor : Actor) -> actor::Id {
+        assert!(actor.is_player());
         self.player_id = Some(self.spawn(actor));
+        self.player_id.unwrap()
     }
 
     pub fn skip_act(&mut self, id : u32) {
@@ -282,7 +293,7 @@ impl Location {
                     },
                     Action::Descend => {
                         if self.at(actor.coord()).tile().feature == Some(tile::Feature::Stairs) {
-                            self.descend = true;
+                            actor.descend();
                         }
                     },
                     _ => {}
