@@ -304,7 +304,7 @@ impl Ui {
                                      cur_loc.at(coord)
                                      .item_map_or(false, |_| true)
                                     ) ||
-        player.heared.iter()
+        player.heard.iter()
 //        .filter(|&(c, t)| *c != player.pos.coord && *t != Noise::Creature(Race::Pony))
         .any(|(c, _)| !player.sees(*c)) ||
         player.discovered_stairs(cur_loc)
@@ -710,7 +710,7 @@ impl Ui {
             }
         }
 
-        let noises = player.heared.iter()
+        let noises = player.heard.iter()
             .filter(|&(c, _) | *c != player.pos.coord)
             .filter(|&(c, _) | !player.sees(*c));
 
