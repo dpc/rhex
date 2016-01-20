@@ -182,7 +182,11 @@ impl DungeonGenerator {
         coord.for_each_in_range((r - 1) as i32, |c| {
            if !self.map.contains_key(&c) {
                self.tile_count += 1;
-               self.map.insert(c, *tile::Tile::new(tile::Empty).add_area(area));
+               if rand::thread_rng().gen_weighted_bool(40) {
+                   self.map.insert(c, *tile::Tile::new(tile::Water).add_area(area));
+               } else {
+                   self.map.insert(c, *tile::Tile::new(tile::Empty).add_area(area));
+               }
            }
         });
 

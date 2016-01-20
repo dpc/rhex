@@ -3,12 +3,32 @@ pub use self::Type::*;
 pub use self::Feature::*;
 pub use super::area;
 
+use std::fmt;
+
 #[derive(Copy, Clone, Eq, PartialEq, Debug, Hash)]
 pub enum Type {
     Wall,
     Empty,
     Water
 }
+
+impl Type {
+    pub fn description(&self) -> &str {
+        match *self {
+            Wall => "wall",
+            Empty => "nothing",
+            Water => "water",
+        }
+    }
+}
+
+
+impl fmt::Display for Type {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.description())
+    }
+}
+
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug, Hash)]
 pub enum Feature {
@@ -18,12 +38,20 @@ pub enum Feature {
 }
 
 impl Feature {
-    pub fn description(&self) -> String {
+    pub fn description(&self) -> &str {
         match *self {
-            Door(_) => "a door",
-            Stairs => "a stairs",
-            Statue => "a statue",
-        }.to_string()
+            Door(true) => "open door",
+            Door(false) => "closed door",
+            Stairs => "stairs down",
+            Statue => "statue",
+        }
+    }
+}
+
+
+impl fmt::Display for Feature {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.description())
     }
 }
 
