@@ -202,11 +202,13 @@ pub struct Actor {
     pub pre_pos : Option<Position>,
     pub pos : Position,
     pub acted : bool,
+    descended : bool,
 
     pub race : Race,
     pub base_stats : Stats,
     pub mod_stats : EffectiveStats,
     pub stats : EffectiveStats,
+
 
     /// LoS at the end of the tick
     pub in_los: Visibility,
@@ -278,6 +280,7 @@ impl Actor {
             saved_mp: stats.max_mp,
             saved_sp: stats.max_sp,
             acted: false,
+            descended: false,
         }
     }
 
@@ -435,6 +438,7 @@ impl Actor {
         self.heared = Default::default();
 
         self.acted = false;
+        self.descended = false;
     }
 
     pub fn pre_own_tick(&mut self) {
@@ -454,6 +458,14 @@ impl Actor {
 
     pub fn post_any_tick(&mut self, _loc : &Location) {
         self.recalculate_stats();
+    }
+
+    pub fn post_spawn(&mut self, loc : &Location) {
+        // TODO: save & restore, using global location uuids ?
+        self.known = Default::default();
+        self.known_areas = Default::default();
+        let pos = self.pos;
+        self.moved(loc, pos)
     }
 
     pub fn add_item(&mut self, item : Box<Item>) -> bool {
@@ -681,5 +693,13 @@ impl Actor {
 
     pub fn description(&self) -> String {
         self.race.description()
+    }
+
+    pub fn descend(&mut self) {
+        self.descended = true;
+    }
+
+    pub fn descended(&self) -> bool {
+        self.descended
     }
 }

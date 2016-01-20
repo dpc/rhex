@@ -200,7 +200,7 @@ impl Ui {
 
         let mut engine =  game::Engine::new();
 
-        engine.spawn();
+        engine.initial_spawn();
 
         nc::doupdate();
 

@@ -1,5 +1,5 @@
 use super::{Location, Action};
-use super::{actor};
+use super::actor::{self, Actor};
 use util;
 use ai::{self, Ai};
 
@@ -35,15 +35,28 @@ impl Engine {
         self.turn
     }
 
-    pub fn spawn(&mut self) {
-        self.current_location_mut().spawn_player(util::random_pos(0, 0));
+    pub fn initial_spawn(&mut self) {
+        let pos = util::random_pos(0, 0);
+        let mut player = Actor::new(actor::Race::Human, pos);
+        player.set_player();
+
+        self.current_location_mut().spawn_player(player);
     }
 
     pub fn needs_player_input(&self) -> bool {
         self.ids_to_move.is_empty()
     }
 
-    pub fn checks_after_act(&mut self) {
+    pub fn checks_after_act(&mut self, actor_id : actor::Id) {
+        if actor_id == self.current_location().player_id() &&
+            self.current_location().player().descended() {
+            let mut player = self.current_location_mut().remove(actor_id).unwrap();
+            self.locations.push(Location::new());
+            self.location_cur += 1;
+            player.pos = util::random_pos(0, 0);
+            let player = self.current_location_mut().spawn_player(player);
+        }
+
         if self.ids_to_move.is_empty() {
             self.end_turn();
             let player_id = self.current_location().player_id();
@@ -73,7 +86,7 @@ impl Engine {
 
         self.reload_actors_ids_to_move();
 
-        self.checks_after_act();
+        self.checks_after_act(player_id);
     }
 
     // then everybody else one by one
@@ -94,7 +107,7 @@ impl Engine {
             self.current_location_mut().skip_act(actor_id);
         }
 
-        self.checks_after_act();
+        self.checks_after_act(actor_id);
 
         actor_id
     }
