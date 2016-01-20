@@ -1054,6 +1054,11 @@ impl Ui {
         let mut max_y = 0;
         nc::getmaxyx(window, &mut max_y, &mut max_x);
 
+        if max_x < 6 || max_y < 1 {
+            // Don't draw anything on too small window
+            return;
+        }
+
         let cur = cmp::max(cur, 0) as u32;
         let prev = cmp::max(prev, 0) as u32;
         let max = cmp::max(max, 1) as u32;

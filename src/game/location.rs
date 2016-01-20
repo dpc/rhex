@@ -30,10 +30,10 @@ pub struct Location {
 }
 
 impl Location {
-    pub fn new() -> Location {
+    pub fn new(level : u32) -> Location {
 
         let cp = Coordinate::new(0, 0);
-        let (map, gen_actors, items) = generate::DungeonGenerator::new(0).generate_map(cp, 400);
+        let (map, gen_actors, items) = generate::gen_level(level);
 
         let mut actors : HashMap<u32, Actor, DefaultState<FnvHasher>> = Default::default();
         let mut actors_pos : HashMap<Coordinate, u32, _> = Default::default();
@@ -69,72 +69,6 @@ impl Location {
         &self.actors_byid[&self.player_id.unwrap()]
     }
 
-    /*
-    pub fn next_level(&self) -> Location {
-        let cp = Coordinate::new(0, 0);
-        let (map, gen_actors, items) = generate::DungeonGenerator::new(self.level + 1).generate_map(cp, 400);
-
-        let mut actors : HashMap<u32, Actor, DefaultState<FnvHasher>> = Default::default();
-        let mut actors_pos : HashMap<Coordinate, u32, _> = Default::default();
-
-        let mut actors_counter = 0;
-
-        for (coord, astate) in gen_actors {
-            actors_pos.insert(coord, actors_counter);
-            actors.insert(actors_counter, astate);
-            actors_counter += 1;
-        }
-
-        let mut player = None;
-        let mut pony : Option<Actor> = None;
-
-        for (_, astate) in self.actors_byid.iter() {
-            if astate.is_player() {
-                player = Some(astate.clone());
-                break;
-            }
-        }
-
-        for (_, astate) in self.actors_byid.iter() {
-            /*
-            if astate.race == Race::Pony {
-                pony = Some(astate.clone());
-                break;
-            }
-            */
-        }
-
-        let mut state = Location {
-            actors_byid: actors,
-            actors_coord_to_id: actors_pos,
-            actors_counter: actors_counter,
-            actors_dead: Default::default(),
-            items: items,
-            map: Arc::new(map),
-            descend: false,
-            level: self.level + 1,
-            light_map: Default::default(),
-        };
-
-        {
-            let mut player = player.unwrap();
-            let pos = util::random_pos(0, 0);
-            player.moved(self, pos);
-            player.changed_level();
-            state.spawn(player);
-        }
-
-        if let Some(mut pony) = pony {
-            let pos = util::random_pos(-1, 0);
-            pony.moved(self, pos);
-            pony.changed_level();
-            state.spawn(pony);
-        }
-
-        state
-    }
-
-        */
     pub fn recalculate_noise(&mut self) {
         for id in &self.actors_alive_ids() {
             let source_emission = self.actors_byid[id].noise_emision;

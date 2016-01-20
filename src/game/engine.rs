@@ -13,7 +13,7 @@ pub struct Engine {
 
 impl Engine {
     pub fn new() -> Self {
-        let location = Location::new();
+        let location = Location::new(0);
         Engine {
             location_cur : 0,
             locations: vec!(location),
@@ -51,8 +51,8 @@ impl Engine {
         if actor_id == self.current_location().player_id() &&
             self.current_location().player().descended() {
             let mut player = self.current_location_mut().remove(actor_id).unwrap();
-            self.locations.push(Location::new());
             self.location_cur += 1;
+            self.locations.push(Location::new(self.location_cur as u32));
             player.pos = util::random_pos(0, 0);
             let player = self.current_location_mut().spawn_player(player);
         }

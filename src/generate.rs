@@ -17,7 +17,7 @@ use game::actor::{Race, Actor};
 type EndpointQueue = VecDeque<h2d::Position>;
 
 pub struct DungeonGenerator {
-    level : i32,
+    level : u32,
     start : Option<Coordinate>,
     stairs : Option<Coordinate>,
     tile_count : u32,
@@ -28,7 +28,7 @@ pub struct DungeonGenerator {
 }
 
 impl DungeonGenerator {
-    pub fn new(level : i32) -> DungeonGenerator {
+    pub fn new(level : u32) -> DungeonGenerator {
         DungeonGenerator {
             level: level,
             start: None,
@@ -222,7 +222,7 @@ impl DungeonGenerator {
         });
 
         if rand::thread_rng().gen_weighted_bool(2) {
-            self.items.insert(coord, item::random(self.level));
+            self.items.insert(coord, item::random(self.level as i32));
         }
     }
 
@@ -290,3 +290,8 @@ impl DungeonGenerator {
         return (map, self.actors, self.items);
     }
 }
+
+pub fn gen_level(level : u32) ->  (Map, Actors, Items){
+    DungeonGenerator::new(level).generate_map(Coordinate::new(0, 0), 400 + level * 100)
+}
+
