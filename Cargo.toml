@@ -16,7 +16,7 @@ num = "*"
 rand = "*"
 chrono = "*"
 hex2d = "*"
-hex2d-dpcext = { git = "https://github.com/dpc/hex2d-dpcext-rs" }
+hex2d-dpcext = "*"
 log = "*"
 fern = "*"
 schedule_recv = "*"

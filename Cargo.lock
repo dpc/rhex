@@ -7,7 +7,7 @@ dependencies = [
  "fern 0.3.5 (registry+https://github.com/rust-lang/crates.io-index)",
  "fnv 1.0.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "hex2d 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "hex2d-dpcext 0.0.8 (git+https://github.com/dpc/hex2d-dpcext-rs)",
+ "hex2d-dpcext 0.0.9 (registry+https://github.com/rust-lang/crates.io-index)",
  "log 0.3.5 (registry+https://github.com/rust-lang/crates.io-index)",
  "ncurses 5.80.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "num 0.1.30 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -66,8 +66,8 @@ dependencies = [
 
 [[package]]
 name = "hex2d-dpcext"
-version = "0.0.8"
-source = "git+https://github.com/dpc/hex2d-dpcext-rs#30ef2dbca19a021267f7cc490d16e1d99c29ce99"
+version = "0.0.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "hex2d 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "num 0.1.30 (registry+https://github.com/rust-lang/crates.io-index)",
