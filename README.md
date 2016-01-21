@@ -36,7 +36,7 @@ Rhex is using [hex2d-rs - Hexagonal grid map utillity library][hex2d-rs].
 
 ![RustyHex screenshot][ss]
 
-[ss]: http://i.imgur.com/gb2TZlj.png
+[ss]: http://i.imgur.com/fxCTeiZ.png
 
 Watch *rhex* gameplay video:
 
