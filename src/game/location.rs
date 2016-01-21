@@ -215,13 +215,20 @@ impl Location {
 
                         match item {
                             Some(item) => {
-                                actor.add_item(item);
+                                if let Some(item) = actor.pick_item(item) {
+                                    self.at_mut(head).drop_item(item);
+                                }
                             },
                             None => {},
                         }
                     },
                     Action::Equip(ch) => {
                         actor.equip_switch(ch);
+                    },
+                    Action::Drop_(ch) => {
+                        if let Some(item) = actor.equip_drop(ch) {
+                            self.at_mut(actor.pos.coord).drop_item(item);
+                        }
                     },
                     Action::Descend => {
                         if self.at(actor.coord()).tile().feature == Some(tile::Feature::Stairs) {

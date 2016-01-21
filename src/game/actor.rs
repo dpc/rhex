@@ -320,7 +320,9 @@ impl Actor {
     pub fn pos_after_action(&self, action : Action) -> Vec<Position> {
         let pos = self.pos;
         match action {
-            Action::Wait|Action::Pick|Action::Equip(_)|Action::Descend|Action::Fire(_) => vec!(pos),
+            Action::Wait | Action::Pick |
+                Action::Equip(_) | Action::Descend |
+                Action::Fire(_) | Action::Drop_(_) => vec!(pos),
             Action::Turn(a) => vec!(pos + a),
             Action::Move(a) => vec!(pos + (pos.dir + a).to_coordinate()),
             Action::Charge => if self.can_charge_sp() {
@@ -490,22 +492,21 @@ impl Actor {
         self.moved(loc, pos)
     }
 
-    pub fn add_item(&mut self, item : Box<Item>) -> bool {
+    pub fn pick_item(&mut self, item : Box<Item>) -> Option<Box<Item>> {
         for ch in ('a' as u8..'z' as u8)
             .chain('A' as u8..'Z' as u8) {
             let ch = ch as char;
             if !self.item_letter_taken(ch) {
                 assert!(!self.items_backpack.contains_key(&ch));
-                self.items_letters.insert(ch);
                 self.items_backpack.insert(ch, item);
-                return true;
+                return None
             }
         }
-        false
+        Some(item)
     }
 
     pub fn item_letter_taken(&self, ch : char) -> bool {
-        if self.items_letters.contains(&ch) {
+        if self.items_backpack.contains_key(&ch) {
             return true;
         }
 
@@ -534,6 +535,11 @@ impl Actor {
         } else {
             self.unequip(ch);
         }
+    }
+
+    pub fn equip_drop(&mut self, ch : char) -> Option<Box<Item>> {
+        self.unequip(ch);
+        self.items_backpack.remove(&ch)
     }
 
     pub fn equip(&mut self, item : Box<Item>, ch : char) {

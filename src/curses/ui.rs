@@ -97,6 +97,7 @@ impl Windows {
 enum InvMode {
     View,
     Equip,
+    Drop_,
 }
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
@@ -568,6 +569,10 @@ impl Ui {
         self.action_push(game::Action::Equip(ch))
     }
 
+    pub fn queue_drop(&mut self, ch : char) {
+        self.action_push(game::Action::Drop_(ch))
+    }
+
     pub fn input_handle_key(&mut self, ch : i32) {
         match self.mode {
             Mode::FullScreen(fs_mode) => match fs_mode {
@@ -598,6 +603,7 @@ impl Ui {
                     KEY_LOWQ => self.mode_switch_to(Mode::FullScreen(FSMode::Quit)),
                     KEY_CAPI => self.mode_switch_to(Mode::Inventory(InvMode::View)),
                     KEY_CAPE => self.mode_switch_to(Mode::Inventory(InvMode::Equip)),
+                    KEY_CAPD => self.mode_switch_to(Mode::Inventory(InvMode::Drop_)),
                     KEY_LOWX => {
                         self.target_pos = None;
                         self.mode_switch_to(Mode::Examine);
@@ -627,6 +633,17 @@ impl Ui {
             Mode::Inventory(InvMode::View) => match ch {
                 ch => match ch as u8 as char {
                     'a'...'z'|'A'...'Z' => { },
+                    '\x1b' => self.mode_switch_to(Mode::Normal),
+                    _ => {},
+                }
+            },
+            Mode::Inventory(InvMode::Drop_) => match ch {
+                ch => match ch as u8 as char {
+                    'a'...'z'|'A'...'Z' => {
+                        if self.player().item_letter_taken(ch as u8 as char) {
+                            self.queue_drop(ch as u8 as char)
+                        }
+                    },
                     '\x1b' => self.mode_switch_to(Mode::Normal),
                     _ => {},
                 }
@@ -1208,9 +1225,8 @@ impl Ui {
             nc::waddstr(window, &format!("\n"));
         }
 
+        nc::waddstr(window, &format!("Inventory: \n"));
         if !player.items_backpack.is_empty() {
-            nc::waddstr(window, &format!("Inventory: \n"));
-
             for (ch, i) in &player.items_backpack {
                 nc::waddstr(window, &format!(" {} - {}\n", ch, i.description()));
             }
@@ -1426,8 +1442,17 @@ impl Ui {
         nc::werase(window);
         nc::wmove(window, 0, 0);
 
-        if self.mode == Mode::GoTo {
-            nc::waddstr(window, &format!("Go to where?\n"));
+        match self.mode {
+            Mode::GoTo => {
+                nc::waddstr(window, &format!("Go to where?\n"));
+            },
+            Mode::Inventory(InvMode::Drop_) => {
+                nc::waddstr(window, &format!("Drop what?\n"));
+            },
+            Mode::Inventory(InvMode::Equip) => {
+                nc::waddstr(window, &format!("Equip/use what?\n"));
+            },
+            _ => {},
         }
 
         for i in self.log.borrow().iter() {
@@ -1480,8 +1505,9 @@ impl Ui {
         nc::waddstr(window, "Go to: G (only '>' follow-up implemented)\n");
         nc::waddstr(window, "Examine: x\n");
         nc::waddstr(window, "Pick item in front: ,\n");
-        nc::waddstr(window, "Equip: E\n");
         nc::waddstr(window, "Inventory: I\n");
+        nc::waddstr(window, "Equip: E\n");
+        nc::waddstr(window, "Drop: D\n");
         nc::waddstr(window, "Fire/Throw: f (not fully working)\n");
         nc::waddstr(window, "Quit: q\n");
         nc::wnoutrefresh(window);

@@ -8,6 +8,7 @@ pub enum Action {
     Charge,
     Spin(Angle),
     Equip(char),
+    Drop_(char),
     Fire(Coordinate),
     Pick,
     Descend,

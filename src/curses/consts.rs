@@ -30,6 +30,7 @@ pub const KEY_CAPY : i32 = 'Y' as i32;
 pub const KEY_CAPH : i32 = 'H' as i32;
 pub const KEY_CAPL : i32 = 'L' as i32;
 pub const KEY_CAPE : i32 = 'E' as i32;
+pub const KEY_CAPD : i32 = 'D' as i32;
 pub const KEY_CAPI : i32 = 'I' as i32;
 pub const KEY_CAPK : i32 = 'K' as i32;
 pub const KEY_CAPJ : i32 = 'J' as i32;
