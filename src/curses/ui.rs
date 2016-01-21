@@ -716,6 +716,7 @@ impl Ui {
                     }
                     _ => {}
                 }
+                self.redraw();
             }
             Mode::Target(_) => {
                 let center = self.player().pos;
@@ -734,22 +735,19 @@ impl Ui {
                     }
                     KEY_LOWH => {
                         self.target_pos = Some(util::circular_move(center, pos, Angle::Left));
-                        self.redraw();
                     }
                     KEY_LOWL => {
                         self.target_pos = Some(util::circular_move(center, pos, Angle::Right));
-                        self.redraw();
                     }
                     KEY_LOWJ => {
                         self.target_pos = Some(util::circular_move(center, pos, Angle::Back));
-                        self.redraw();
                     }
                     KEY_LOWK => {
                         self.target_pos = Some(util::circular_move(center, pos, Angle::Forward));
-                        self.redraw();
                     }
                     _ => {}
                 }
+                self.redraw();
             }
             Mode::GoTo => {
                 match ch {
