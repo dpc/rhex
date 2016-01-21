@@ -14,7 +14,8 @@
 
 Simple ASCII terminal hexagonal map  roguelike written in Rust [Rust][rust-home].
 
-~~You can try it out by pointing your **ssh client** to: rhex [at] rhex.dpc.pw (password is obvious).~~ (temporary unavailable) Note: **Make sure your terminal supports 256 colors and exports `TERM=xterm-256color`!**
+You can try the game without installing anything. Check
+[rhex demo server](https://github.com/dpc/rhex/wiki/Demo-server) instructions.
 
 The core goal of the project:
 
@@ -55,9 +56,10 @@ Game requires terminal with 256-color support, and basic Unicode font.
 The game is playable but not feature and gameplay wise complete.
 
 *rhex* is actively seeking collaborators. If you'd like to practice your Rust
-or/and find roguelikes interesting ping `@dpc` on [rhex gitter channel] and we
+or/and find roguelikes interesting ping `@dpc` on [rhex gitter channel][rhex-gitter] and we
 can get your started.
 
 [Report problems and ideas][issues]
 
 [issues]: https://github.com/dpc/rhex/issues
+[rhex-gitter]: https://gitter.im/dpc/rhex
