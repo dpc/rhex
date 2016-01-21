@@ -13,6 +13,7 @@ pub use self::ui::*;
 
 pub enum LogEvent {
     AutoExploreDone,
+    AutoExploreBlocked,
 }
 
 pub enum Event {
@@ -26,15 +27,20 @@ pub struct LogEntry {
 
 pub enum AutoMoveAction {
     Action(game::Action),
-    Finish,
-    Blocked,
+    Finish, // Reached destination
+    Blocked, // Blocked by something
 }
 
+#[derive(Copy, Clone, PartialEq, Eq)]
+pub enum GoToType {
+    Stairs
+}
 
 #[derive(Copy, Clone, PartialEq, Eq)]
 pub enum AutoMoveType {
     Explore,
     Walk,
+    GoTo(GoToType),
 }
 
 

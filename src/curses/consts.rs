@@ -36,6 +36,7 @@ pub const KEY_CAPJ : i32 = 'J' as i32;
 pub const KEY_DOT  : i32 = '.' as i32;
 pub const KEY_COMMA   : i32 = ',' as i32;
 pub const KEY_HELP    : i32 = '?' as i32;
+pub const KEY_GOTO : i32 = 'G' as i32;
 pub const KEY_DESCEND : i32 = '>' as i32;
 
 

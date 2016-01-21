@@ -19,7 +19,7 @@ use hex2dext::algo::{bfs};
 
 use super::consts::*;
 use super::color;
-use super::{LogEntry, AutoMoveType, AutoMoveAction, LogEvent, Event};
+use super::{LogEntry, AutoMoveType, AutoMoveAction, LogEvent, Event, GoToType};
 use super::Result;
 
 use game::{actor, Location, Actor, item, area};
@@ -115,6 +115,7 @@ enum TargetMode {
 enum Mode {
     Normal,
     Examine,
+    GoTo,
     Target(TargetMode),
     FullScreen(FSMode),
     Inventory(InvMode),
@@ -255,7 +256,7 @@ impl Ui {
 
     pub fn redraw_now(&mut self) {
         match self.mode {
-            Mode::Normal|Mode::Examine|Mode::Inventory(_)|Mode::Target(_) => {
+            Mode::Normal|Mode::Examine|Mode::Inventory(_)|Mode::Target(_)|Mode::GoTo => {
                 if let Mode::Inventory(_) = self.mode {
                     self.draw_inventory();
                 } else {
@@ -315,6 +316,7 @@ impl Ui {
         let cur_loc = self.current_location();
         match movetype {
             AutoMoveType::Explore => self.autoexplore_action(),
+            AutoMoveType::GoTo(gototype) => self.goto_action(gototype),
             AutoMoveType::Walk => {
                 if cur_loc.at(player.head()).tile().is_passable() {
                     AutoMoveAction::Action(game::Action::Move(Angle::Forward))
@@ -322,6 +324,44 @@ impl Ui {
                     AutoMoveAction::Finish
                 }
             }
+        }
+    }
+
+    pub fn goto_action(&self, gototype : GoToType) -> AutoMoveAction {
+        let player = self.player();
+        let cur_loc = self.current_location();
+
+        let start = player.pos.coord;
+
+        let mut bfs = bfs::Traverser::new(
+            |c| c == start ||
+            (cur_loc.at(c).tile().is_passable() &&
+             player.knows(c)),
+            |c| cur_loc.at(c).tile().feature == Some(tile::Feature::Stairs),
+            start
+            );
+
+        if let Some(dst) = bfs.find() {
+            if let Some(neigh) = bfs.backtrace_last(dst) {
+
+                if let Some(ndir) = player.pos.coord.direction_to_cw(neigh) {
+                    if ndir == player.pos.dir {
+                        if cur_loc.at(neigh).is_occupied() {
+                            AutoMoveAction::Blocked
+                        } else {
+                            AutoMoveAction::Action(game::Action::Move(Angle::Forward))
+                        }
+                    } else {
+                        AutoMoveAction::Action(game::Action::Turn(ndir - player.pos.dir))
+                    }
+                } else {
+                    AutoMoveAction::Finish
+                }
+            } else {
+                AutoMoveAction::Finish
+            }
+        } else {
+           AutoMoveAction::Blocked
         }
     }
 
@@ -405,6 +445,12 @@ impl Ui {
                 if let Some(movetype) = self.automoving {
                     match self.automove_action(movetype) {
                         AutoMoveAction::Blocked => {
+                            match movetype {
+                                AutoMoveType::Explore | AutoMoveType::GoTo(_) => {
+                                    self.event(Event::Log(LogEvent::AutoExploreBlocked));
+                                },
+                                _ => {}
+                            }
                             self.automoving_stop();
                             self.redraw();
                         },
@@ -413,8 +459,11 @@ impl Ui {
                             self.engine_change(player_id);
                         },
                         AutoMoveAction::Finish => {
-                            if movetype == AutoMoveType::Explore {
-                                self.event(Event::Log(LogEvent::AutoExploreDone));
+                            match movetype {
+                                AutoMoveType::Explore => {
+                                    self.event(Event::Log(LogEvent::AutoExploreDone));
+                                },
+                                _ => {}
                             }
                             self.automoving_stop();
                             self.redraw();
@@ -560,6 +609,7 @@ impl Ui {
                     KEY_HELP => {
                         self.mode_switch_to(Mode::FullScreen(FSMode::Help));
                     },
+                    KEY_GOTO => self.mode_switch_to(Mode::GoTo),
                     _ => { }
                 }
             },
@@ -651,6 +701,15 @@ impl Ui {
                     },
                     _ => { }
                 }
+            },
+            Mode::GoTo => {
+                match ch {
+                    KEY_DESCEND => self.automoving = Some(
+                        AutoMoveType::GoTo(GoToType::Stairs)
+                        ),
+                        _ => {}
+                }
+                self.mode_switch_to(Mode::Normal);
             }
         }
     }
@@ -1367,11 +1426,14 @@ impl Ui {
         nc::werase(window);
         nc::wmove(window, 0, 0);
 
+        if self.mode == Mode::GoTo {
+            nc::waddstr(window, &format!("Go to where?\n"));
+        }
+
         for i in self.log.borrow().iter() {
             if nc::getcury(window) == nc::getmaxy(window) - 1 {
                 break;
             }
-
             if let Some(color) = self.turn_to_color(i.turn, &self.calloc) {
                 let cpair = nc::COLOR_PAIR(color);
                 nc::wattron(window, cpair as i32);
@@ -1415,6 +1477,7 @@ impl Ui {
         nc::waddstr(window, "Wait: .\n");
         nc::waddstr(window, "Autoexplore: o\n");
         nc::waddstr(window, "Automove: shift + k\n");
+        nc::waddstr(window, "Go to: G (only '>' follow-up implemented)\n");
         nc::waddstr(window, "Examine: x\n");
         nc::waddstr(window, "Pick item in front: ,\n");
         nc::waddstr(window, "Equip: E\n");
@@ -1448,6 +1511,7 @@ impl Ui {
         match event {
             Event::Log(logev) => match logev {
                 LogEvent::AutoExploreDone => self.log("Nothing else to explore."),
+                LogEvent::AutoExploreBlocked => self.log("Can't get there."),
             }
         }
     }
