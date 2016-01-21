@@ -35,9 +35,9 @@ impl Engine {
         self.turn
     }
 
-    pub fn initial_spawn(&mut self) {
+    pub fn initial_spawn(&mut self, race : actor::Race) {
         let pos = util::random_pos(0, 0);
-        let mut player = Actor::new(actor::Race::Human, pos);
+        let mut player = Actor::new(race, pos);
         player.set_player();
 
         self.current_location_mut().spawn_player(player);

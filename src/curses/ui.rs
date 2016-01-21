@@ -104,6 +104,7 @@ enum InvMode {
 enum FSMode {
     Help,
     Intro,
+    PickRace,
     Quit,
 }
 
@@ -141,6 +142,7 @@ pub struct Ui {
     engine : game::Engine,
     exit : bool,
     needs_redraw : bool,
+    spawned : bool,
 
     automoving : Option<AutoMoveType>,
     automoving_stopped_turn : u64,
@@ -202,8 +204,6 @@ impl Ui {
 
         let mut engine =  game::Engine::new();
 
-        engine.initial_spawn();
-
         nc::doupdate();
 
         let mut ui = Ui {
@@ -222,6 +222,7 @@ impl Ui {
 
             exit : false,
             needs_redraw : true,
+            spawned : false,
 
             engine : engine,
             automoving: None,
@@ -232,9 +233,14 @@ impl Ui {
             game_action_queue : VecDeque::new(),
         };
         ui.display_intro();
-        let player_id = ui.engine.current_location().player_id();
-        ui.engine_change(player_id);
         Ok(ui)
+    }
+
+    pub fn initial_spawn(&mut self, race : actor::Race) {
+        self.engine.initial_spawn(race);
+        let player_id = self.engine.current_location().player_id();
+        self.engine_change(player_id);
+        self.spawned = true;
     }
 
     pub fn screen_size(&self) -> (i32, i32) {
@@ -277,6 +283,9 @@ impl Ui {
                 },
                 FSMode::Intro => {
                     self.draw_intro();
+                },
+                FSMode::PickRace => {
+                    self.draw_pickrace();
                 },
             },
         }
@@ -439,7 +448,7 @@ impl Ui {
     pub fn run_once(&mut self) {
         if self.after_action_delay > 0 {
             self.after_action_delay -= 1;
-        } else {
+        } else if self.spawned {
             let player_id = self.current_location().player_id();
 
             if self.engine.needs_player_input() {
@@ -579,6 +588,24 @@ impl Ui {
                 FSMode::Quit => match ch {
                     KEY_LOWY|KEY_CAPY => self.exit = true,
                     _ => self.mode_switch_to(Mode::Normal),
+                },
+                FSMode::Intro => match ch {
+                    _ => self.mode_switch_to(Mode::FullScreen(FSMode::PickRace)),
+                },
+                FSMode::PickRace => match ch {
+                    KEY_LOWA => {
+                        self.initial_spawn(Race::Human);
+                        self.mode_switch_to(Mode::Normal);
+                    },
+                    KEY_LOWB => {
+                        self.initial_spawn(Race::Elf);
+                        self.mode_switch_to(Mode::Normal);
+                    }
+                    KEY_LOWC => {
+                        self.initial_spawn(Race::Dwarf);
+                        self.mode_switch_to(Mode::Normal);
+                    },
+                    _ => {},
                 },
                 _ => match ch {
                     _ => self.mode_switch_to(Mode::Normal),
@@ -1483,6 +1510,22 @@ impl Ui {
         nc::waddstr(window, "A long time ago in a dungeon deep, deep underground...\n\n");
         nc::waddstr(window, &format!("You can press {} in the game for help.\n\n",  KEY_HELP as u8 as char));
         nc::waddstr(window, "Press anything to start.");
+        nc::wnoutrefresh(window);
+    }
+
+    fn draw_pickrace(&mut self) {
+        let window = self.windows.full.window;
+        let mut calloc = self.calloc.borrow_mut();
+        let cpair = nc::COLOR_PAIR(calloc.get(color::VISIBLE_FG, color::BACKGROUND_BG));
+        nc::wbkgd(window, ' ' as nc::chtype | cpair as nc::chtype);
+        nc::werase(window);
+        nc::wmove(window, 0, 0);
+
+        nc::waddstr(window, "Pick your race\n\n");
+        nc::waddstr(window, "a) Human\n");
+        nc::waddstr(window, "b) Elf\n");
+        nc::waddstr(window, "c) Dwarf\n");
+
         nc::wnoutrefresh(window);
     }
 
