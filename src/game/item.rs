@@ -226,19 +226,18 @@ pub fn random(level: i32) -> Box<Item> {
 
     let a = -(level / 2);
     let b = level + 1;
-    let r = rand::thread_rng().gen_range(a, b) + rand::thread_rng().gen_range(a, b) +
-            rand::thread_rng().gen_range(a, b) + rand::thread_rng().gen_range(a, b);
+    let mut rng = rand::thread_rng();
+    let lvrange = rand::distributions::Range::new(a, b);
+    let r = lvrange.ind_sample(&mut rng) + lvrange.ind_sample(&mut rng) +
+            lvrange.ind_sample(&mut rng) + lvrange.ind_sample(&mut rng);
 
     let mut features = vec![];
     let mut chance = level;
     const PER_LOOP: i32 = 30;
-    loop {
-        if rand::thread_rng().gen_range(0, PER_LOOP) < chance {
-            features.push(rand::thread_rng().gen::<Feature>());
-            chance = cmp::max(0, chance - PER_LOOP);
-        } else {
-            break;
-        }
+    let looprange = rand::distributions::Range::new(0, PER_LOOP);
+    while looprange.ind_sample(&mut rng) < chance {
+        features.push(rng.gen::<Feature>());
+        chance = cmp::max(0, chance - PER_LOOP);
     }
 
     Box::new(Item::new(match r {
