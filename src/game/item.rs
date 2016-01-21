@@ -1,5 +1,6 @@
 use super::actor::{self, Actor, Slot};
 use rand::{self, Rng, Rand};
+use rand::distributions::IndependentSample;
 
 use core::cmp;
 use std::fmt::{self, Write};
