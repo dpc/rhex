@@ -18,12 +18,13 @@ impl Action {
     pub fn could_be_attack(&self) -> bool {
         match *self {
             Action::Charge => true,
-            Action::Move(angle) => match angle {
-                Left|Right|Forward => true,
-                _ => false,
-            },
+            Action::Move(angle) => {
+                match angle {
+                    Left | Right | Forward => true,
+                    _ => false,
+                }
+            }
             _ => false,
         }
     }
 }
-

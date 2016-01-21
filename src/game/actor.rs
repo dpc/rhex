@@ -6,7 +6,7 @@ use hex2d::{Coordinate, Angle, Position, ToCoordinate, Direction};
 use hex2dext::algo;
 
 use game::{self, Action};
-use game::tile::{Feature};
+use game::tile::Feature;
 use util;
 use super::item::Item;
 
@@ -42,36 +42,37 @@ impl Race {
             Race::Rat => "rat",
             Race::Goblin => "goblin",
             Race::Troll => "troll",
-        }.to_string()
+        }
+        .to_string()
     }
 }
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub struct Stats {
-    pub int : i32,
-    pub dex : i32,
-    pub str_ : i32,
-    pub max_hp : i32,
-    pub max_mp : i32,
-    pub max_sp : i32,
+    pub int: i32,
+    pub dex: i32,
+    pub str_: i32,
+    pub max_hp: i32,
+    pub max_mp: i32,
+    pub max_sp: i32,
     pub ac: i32,
     pub ev: i32,
-    pub infravision : i32,
-    pub vision : i32,
-    pub regeneration : u32,
+    pub infravision: i32,
+    pub vision: i32,
+    pub regeneration: u32,
 }
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub struct EffectiveStats {
-    pub base : Stats,
+    pub base: Stats,
     pub melee_dmg: i32,
     pub melee_acc: i32,
     pub melee_str_req: i32,
-    pub light_emision : u32,
+    pub light_emision: u32,
 }
 
 impl Stats {
-    pub fn new(race : Race) -> Stats {
+    pub fn new(race: Race) -> Stats {
         match race {
             Goblin => GOBLIN_STATS,
             Rat => RAT_STATS,
@@ -92,10 +93,16 @@ impl Stats {
 impl Default for Stats {
     fn default() -> Self {
         Stats {
-            int: 0, dex: 0, str_: 0,
-            max_hp: 0, max_mp: 0, max_sp: 0,
-            ac: 0, ev: 0,
-            infravision: 0, vision: 0,
+            int: 0,
+            dex: 0,
+            str_: 0,
+            max_hp: 0,
+            max_mp: 0,
+            max_sp: 0,
+            ac: 0,
+            ev: 0,
+            infravision: 0,
+            vision: 0,
             regeneration: 0,
         }
     }
@@ -116,18 +123,18 @@ impl Default for EffectiveStats {
 impl Add for Stats {
     type Output = Stats;
 
-    fn add(self, s : Self) -> Self {
+    fn add(self, s: Self) -> Self {
         Stats {
             int: self.int + s.int,
             dex: self.dex + s.dex,
             str_: self.str_ + s.str_,
             max_hp: self.max_hp + s.max_hp,
             max_mp: self.max_mp + s.max_mp,
-            max_sp:  self.max_sp + s.max_sp,
+            max_sp: self.max_sp + s.max_sp,
             ac: self.ac + s.ac,
             ev: self.ev + s.ev,
             infravision: self.infravision + s.infravision,
-            vision : self.vision + s.vision,
+            vision: self.vision + s.vision,
             regeneration: self.regeneration + s.regeneration,
         }
     }
@@ -136,7 +143,7 @@ impl Add for Stats {
 impl Add for EffectiveStats {
     type Output = EffectiveStats;
 
-    fn add(self, s : Self) -> Self {
+    fn add(self, s: Self) -> Self {
         EffectiveStats {
             base: self.base + s.base,
             melee_dmg: self.melee_dmg + s.melee_dmg,
@@ -150,14 +157,14 @@ impl Add for EffectiveStats {
 impl Sub for Stats {
     type Output = Stats;
 
-    fn sub(self, s : Self) -> Self {
+    fn sub(self, s: Self) -> Self {
         Stats {
             int: self.int - s.int,
             dex: self.dex - s.dex,
             str_: self.str_ - s.str_,
             max_hp: self.max_hp - s.max_hp,
             max_mp: self.max_mp - s.max_mp,
-            max_sp:  self.max_sp - s.max_sp,
+            max_sp: self.max_sp - s.max_sp,
             ac: self.ac - s.ac,
             ev: self.ev - s.ev,
             infravision: self.infravision - s.infravision,
@@ -170,12 +177,12 @@ impl Sub for Stats {
 impl Sub for EffectiveStats {
     type Output = EffectiveStats;
 
-    fn sub(self, s : Self) -> Self {
+    fn sub(self, s: Self) -> Self {
         EffectiveStats {
-            base : self.base - s.base,
+            base: self.base - s.base,
             melee_dmg: self.melee_dmg - s.melee_dmg,
             melee_acc: self.melee_acc - s.melee_acc,
-            melee_str_req: self.melee_str_req- s.melee_str_req,
+            melee_str_req: self.melee_str_req - s.melee_str_req,
             light_emision: self.light_emision - s.light_emision,
         }
     }
@@ -194,10 +201,10 @@ pub enum Slot {
 
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub struct AttackResult {
-    pub success : bool,
-    pub dmg : i32,
-    pub who : String,
-    pub behind : bool,
+    pub success: bool,
+    pub dmg: i32,
+    pub who: String,
+    pub behind: bool,
 }
 
 #[derive(Clone, Debug)]
@@ -209,17 +216,16 @@ pub struct Actor {
     pub saved_mp: i32,
     pub saved_sp: i32,
 
-    pub player : bool,
-    pub pre_pos : Option<Position>,
-    pub pos : Position,
-    pub acted : bool,
-    descended : bool,
+    pub player: bool,
+    pub pre_pos: Option<Position>,
+    pub pos: Position,
+    pub acted: bool,
+    descended: bool,
 
-    pub race : Race,
-    pub base_stats : Stats,
-    pub mod_stats : EffectiveStats,
-    pub stats : EffectiveStats,
-
+    pub race: Race,
+    pub base_stats: Stats,
+    pub mod_stats: EffectiveStats,
+    pub stats: EffectiveStats,
 
     /// LoS at the end of the tick
     pub in_los: Visibility,
@@ -245,27 +251,28 @@ pub struct Actor {
     pub heard: NoiseMap,
     pub noise_emision: i32,
 
-    pub action_cd : i32,
+    pub action_cd: i32,
 
     pub items_letters: HashSet<char>,
-    pub items_equipped : HashMap<Slot, (char, Box<Item>)>,
-    pub items_backpack : HashMap<char, Box<Item>>,
+    pub items_equipped: HashMap<Slot, (char, Box<Item>)>,
+    pub items_backpack: HashMap<char, Box<Item>>,
 
-    pub was_attacked_by : Vec<AttackResult>,
-    pub did_attack : Vec<AttackResult>,
+    pub was_attacked_by: Vec<AttackResult>,
+    pub did_attack: Vec<AttackResult>,
 }
 
 impl Actor {
-    pub fn new(race : Race, pos : Position) -> Self {
+    pub fn new(race: Race, pos: Position) -> Self {
         let stats = Stats::new(race);
 
         Actor {
             race: race,
             player: false,
-            pos: pos, pre_pos: None,
-            base_stats: stats,        // base stats
+            pos: pos,
+            pre_pos: None,
+            base_stats: stats, // base stats
             mod_stats: Default::default(), // from items etc.
-            stats: Default::default(),     // effective stats
+            stats: Default::default(), // effective stats
             in_los: Default::default(),
             temporary_los: Default::default(),
             visible: Default::default(),
@@ -292,19 +299,19 @@ impl Actor {
         }
     }
 
-    pub fn sees(&self, pos : Coordinate) -> bool {
+    pub fn sees(&self, pos: Coordinate) -> bool {
         self.visible.contains(&pos)
     }
 
-    pub fn in_los(&self, pos : Coordinate) -> bool {
+    pub fn in_los(&self, pos: Coordinate) -> bool {
         self.in_los.contains(&pos)
     }
 
-    pub fn knows(&self, pos : Coordinate) -> bool {
+    pub fn knows(&self, pos: Coordinate) -> bool {
         self.known.contains(&pos)
     }
 
-    pub fn hears(&self, coord : Coordinate) -> bool {
+    pub fn hears(&self, coord: Coordinate) -> bool {
         self.heard.contains_key(&coord)
     }
 
@@ -317,39 +324,45 @@ impl Actor {
         self.pos.coord + self.pos.dir
     }
 
-    pub fn pos_after_action(&self, action : Action) -> Vec<Position> {
+    pub fn pos_after_action(&self, action: Action) -> Vec<Position> {
         let pos = self.pos;
         match action {
-            Action::Wait | Action::Pick |
-                Action::Equip(_) | Action::Descend |
-                Action::Fire(_) | Action::Drop_(_) => vec!(pos),
-            Action::Turn(a) => vec!(pos + a),
-            Action::Move(a) => vec!(pos + (pos.dir + a).to_coordinate()),
-            Action::Charge => if self.can_charge_sp() {
-                vec!(pos + pos.dir.to_coordinate(),
-                pos + pos.dir.to_coordinate() + pos.dir.to_coordinate())
-            } else {
-                vec!(pos + pos.dir.to_coordinate())
-            },
-            Action::Spin(a) => vec!(pos + (pos.dir + a).to_coordinate() +
-                match a {
-                    Angle::Right => Angle::Left,
-                    Angle::Left => Angle::Right,
-                    _ => return vec!(pos),
+            Action::Wait |
+            Action::Pick |
+            Action::Equip(_) |
+            Action::Descend |
+            Action::Fire(_) |
+            Action::Drop_(_) => vec![pos],
+            Action::Turn(a) => vec![pos + a],
+            Action::Move(a) => vec![pos + (pos.dir + a).to_coordinate()],
+            Action::Charge => {
+                if self.can_charge_sp() {
+                    vec![pos + pos.dir.to_coordinate(),
+                         pos + pos.dir.to_coordinate() + pos.dir.to_coordinate()]
+                } else {
+                    vec![pos + pos.dir.to_coordinate()]
                 }
-            ),
+            }
+            Action::Spin(a) => {
+                vec![pos + (pos.dir + a).to_coordinate() +
+                     match a {
+                         Angle::Right => Angle::Left,
+                         Angle::Left => Angle::Right,
+                         _ => return vec![pos],
+                     }]
+            }
         }
     }
 
-    pub fn post_action(&mut self, action : Action) {
+    pub fn post_action(&mut self, action: Action) {
         match action {
             Action::Wait => {
                 self.sp = cmp::min(self.stats.base.max_sp, self.sp + 1);
-            },
+            }
             Action::Charge => {
                 self.sp = cmp::max(0, self.sp - self.charge_sp_cost());
                 self.acted = true;
-            },
+            }
             _ => {
                 self.acted = true;
             }
@@ -360,8 +373,8 @@ impl Actor {
         self.acted
     }
 
-    fn los_to_visible(&self, loc: &game::Location, los : &Visibility ) -> Visibility {
-        let mut visible : Visibility = Default::default();
+    fn los_to_visible(&self, loc: &game::Location, los: &Visibility) -> Visibility {
+        let mut visible: Visibility = Default::default();
 
         for &coord in los {
             if loc.light_map[coord] > 0 {
@@ -413,7 +426,7 @@ impl Actor {
 
     // Could this actor have seen action/movement
     // of another actor (given by id)
-    pub fn could_have_seen(&self, actor : &Actor) -> bool {
+    pub fn could_have_seen(&self, actor: &Actor) -> bool {
         self.sees(actor.pos.coord) || self.sees(actor.pre_pos.unwrap().coord)
     }
 
@@ -425,13 +438,13 @@ impl Actor {
     }
 
 
-    pub fn noise_makes(&mut self, noise : i32) {
+    pub fn noise_makes(&mut self, noise: i32) {
         if self.noise_emision < noise {
             self.noise_emision = noise;
         }
     }
 
-    pub fn noise_hears(&mut self, coord : Coordinate, type_ : Noise) {
+    pub fn noise_hears(&mut self, coord: Coordinate, type_: Noise) {
         self.heard.insert(coord, type_);
     }
 
@@ -460,7 +473,7 @@ impl Actor {
         }
     }
 
-    pub fn post_own_tick(&mut self, loc : &Location) {
+    pub fn post_own_tick(&mut self, loc: &Location) {
         if !self.is_dead() {
             if self.sp < self.stats.base.max_sp {
                 if rand::thread_rng().gen_weighted_bool(20) {
@@ -480,11 +493,11 @@ impl Actor {
         }
     }
 
-    pub fn post_any_tick(&mut self, _loc : &Location) {
+    pub fn post_any_tick(&mut self, _loc: &Location) {
         self.recalculate_stats();
     }
 
-    pub fn post_spawn(&mut self, loc : &Location) {
+    pub fn post_spawn(&mut self, loc: &Location) {
         // TODO: save & restore, using global location uuids ?
         self.known = Default::default();
         self.known_areas = Default::default();
@@ -492,20 +505,19 @@ impl Actor {
         self.moved(loc, pos)
     }
 
-    pub fn pick_item(&mut self, item : Box<Item>) -> Option<Box<Item>> {
-        for ch in ('a' as u8..'z' as u8)
-            .chain('A' as u8..'Z' as u8) {
+    pub fn pick_item(&mut self, item: Box<Item>) -> Option<Box<Item>> {
+        for ch in ('a' as u8..'z' as u8).chain('A' as u8..'Z' as u8) {
             let ch = ch as char;
             if !self.item_letter_taken(ch) {
                 assert!(!self.items_backpack.contains_key(&ch));
                 self.items_backpack.insert(ch, item);
-                return None
+                return None;
             }
         }
         Some(item)
     }
 
-    pub fn item_letter_taken(&self, ch : char) -> bool {
+    pub fn item_letter_taken(&self, ch: char) -> bool {
         if self.items_backpack.contains_key(&ch) {
             return true;
         }
@@ -519,7 +531,7 @@ impl Actor {
         false
     }
 
-    pub fn equip_switch(&mut self, ch : char) {
+    pub fn equip_switch(&mut self, ch: char) {
         if self.items_backpack.contains_key(&ch) {
             if let Some(item) = self.items_backpack.remove(&ch) {
                 if item.is_usable() {
@@ -537,12 +549,12 @@ impl Actor {
         }
     }
 
-    pub fn equip_drop(&mut self, ch : char) -> Option<Box<Item>> {
+    pub fn equip_drop(&mut self, ch: char) -> Option<Box<Item>> {
         self.unequip(ch);
         self.items_backpack.remove(&ch)
     }
 
-    pub fn equip(&mut self, item : Box<Item>, ch : char) {
+    pub fn equip(&mut self, item: Box<Item>, ch: char) {
         if let Some(slot) = item.slot() {
             self.unequip_slot(slot);
             self.mod_stats = self.mod_stats + item.stats();
@@ -557,20 +569,19 @@ impl Actor {
         }
     }
 
-    fn add_current_los_to_temporary_los(&mut self, loc : &Location) {
+    fn add_current_los_to_temporary_los(&mut self, loc: &Location) {
         let pos = self.pos;
         let vision = self.stats.base.vision;
-        algo::los2::los(
-            &|coord| loc.at(coord).tile().opaqueness(),
-            &mut |coord, _ | {
-                let _ = self.temporary_los.insert(coord);
-            },
-            vision, pos.coord,
-            &[pos.dir]
-            );
+        algo::los2::los(&|coord| loc.at(coord).tile().opaqueness(),
+                        &mut |coord, _| {
+                            let _ = self.temporary_los.insert(coord);
+                        },
+                        vision,
+                        pos.coord,
+                        &[pos.dir]);
     }
 
-    pub fn unequip_slot(&mut self, slot : Slot) {
+    pub fn unequip_slot(&mut self, slot: Slot) {
         if let Some((ch, item)) = self.items_equipped.remove(&slot) {
             self.mod_stats = self.mod_stats - item.stats();
             self.items_backpack.insert(ch, item);
@@ -582,7 +593,7 @@ impl Actor {
         }
     }
 
-    pub fn unequip(&mut self, ch : char) {
+    pub fn unequip(&mut self, ch: char) {
         let mut found_slot = None;
         for (&slot, &(ref item_ch, _)) in &self.items_equipped {
             if ch == *item_ch {
@@ -607,14 +618,14 @@ impl Actor {
         self.stats.base.max_mp += self.stats.base.int * 2;
     }
 
-    pub fn attacks(&mut self, dir : Direction, target : &mut Actor) {
+    pub fn attacks(&mut self, dir: Direction, target: &mut Actor) {
         let mut acc = self.stats.melee_acc;
         let mut dmg = self.stats.melee_dmg;
 
         let (ac, ev) = (target.stats.base.ac, target.stats.base.ev);
 
         let from_behind = match dir - target.pos.dir {
-            Angle::Forward|Angle::Left|Angle::Right => true,
+            Angle::Forward | Angle::Left | Angle::Right => true,
             _ => false,
         };
 
@@ -633,10 +644,8 @@ impl Actor {
 
         let success = util::roll(acc, ev);
 
-        let rand_ac = cmp::max(
-            rand::thread_rng().gen_range(0, ac + 1),
-            rand::thread_rng().gen_range(0, ac + 1),
-            );
+        let rand_ac = cmp::max(rand::thread_rng().gen_range(0, ac + 1),
+                               rand::thread_rng().gen_range(0, ac + 1));
 
         let dmg = cmp::max(0, dmg - rand_ac);
 
@@ -660,10 +669,8 @@ impl Actor {
         });
     }
 
-    pub fn discovered_stairs(&self, loc : &Location) -> bool {
-        self.discovered.iter().any(
-            |c| loc.at(*c).tile().feature == Some(Feature::Stairs)
-            )
+    pub fn discovered_stairs(&self, loc: &Location) -> bool {
+        self.discovered.iter().any(|c| loc.at(*c).tile().feature == Some(Feature::Stairs))
     }
 
     pub fn set_player(&mut self) {
@@ -696,7 +703,7 @@ impl Actor {
         self.action_cd == 0 && !self.is_dead()
     }
 
-    pub fn moved(&mut self, loc: &Location, new_pos : Position) {
+    pub fn moved(&mut self, loc: &Location, new_pos: Position) {
         self.pos = new_pos;
         self.add_current_los_to_temporary_los(loc);
         self.noise_makes(2);

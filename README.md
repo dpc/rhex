@@ -40,7 +40,7 @@ Rhex is using [hex2d-rs - Hexagonal grid map utillity library][hex2d-rs].
 
 Watch *rhex* gameplay video:
 
-[![asciicast](https://asciinema.org/a/16712.png)](https://asciinema.org/a/16712)
+[![asciicast](https://asciinema.org/a/34224.png)](https://asciinema.org/a/34224)
 
 ## Running
 

@@ -9,7 +9,7 @@ use std::fmt;
 pub enum Type {
     Wall,
     Empty,
-    Water
+    Water,
 }
 
 impl Type {
@@ -57,36 +57,41 @@ impl fmt::Display for Feature {
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub struct Tile {
-    pub type_ : Type,
-    pub feature : Option<Feature>,
+    pub type_: Type,
+    pub feature: Option<Feature>,
     pub area: Option<area::Area>,
-    pub light : i32,
+    pub light: i32,
 }
 
 impl Tile {
-    pub fn new(t : Type) -> Tile {
+    pub fn new(t: Type) -> Tile {
         Tile {
             type_: t,
-            feature: None, area: None, light: 0
+            feature: None,
+            area: None,
+            light: 0,
         }
     }
 
-    pub fn add_feature(&mut self, f : Feature) -> &mut Tile {
-        self.feature = Some(f); self
+    pub fn add_feature(&mut self, f: Feature) -> &mut Tile {
+        self.feature = Some(f);
+        self
     }
 
-    pub fn add_light(&mut self, light : i32) -> &mut Tile {
-        self.light = light; self
+    pub fn add_light(&mut self, light: i32) -> &mut Tile {
+        self.light = light;
+        self
     }
 
     pub fn add_area(&mut self, area: area::Area) -> &mut Tile {
-        self.area = Some(area); self
+        self.area = Some(area);
+        self
     }
 
     pub fn is_passable(&self) -> bool {
         match self.feature {
             Some(Statue) => return false,
-            _ => {},
+            _ => {}
         }
 
         self.type_.is_passable()
@@ -96,7 +101,7 @@ impl Tile {
         match self.feature {
             Some(Statue) => return 3,
             Some(Door(false)) => return 1000,
-            _ => {},
+            _ => {}
         }
 
         self.type_.opaqueness()
@@ -104,14 +109,19 @@ impl Tile {
 
     pub fn ascii_expand(&self) -> i32 {
         match self.feature {
-            Some(Door(open)) => return if open { 1 } else { 0 },
+            Some(Door(open)) => {
+                return if open {
+                    1
+                } else {
+                    0
+                }
+            }
             Some(Statue) => return 8,
-            _ => {},
+            _ => {}
         }
 
         self.type_.base_ascii_expand()
     }
-
 }
 
 impl Type {
@@ -126,7 +136,7 @@ impl Type {
     pub fn opaqueness(&self) -> i32 {
         match *self {
             Wall => 1000,
-            Empty|Water => 1,
+            Empty | Water => 1,
         }
     }
 
@@ -143,8 +153,9 @@ impl Default for Tile {
     fn default() -> Tile {
         Tile {
             type_: Wall,
-            feature: None, area: None, light: 0
+            feature: None,
+            area: None,
+            light: 0,
         }
     }
 }
-

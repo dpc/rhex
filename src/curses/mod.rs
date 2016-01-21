@@ -17,12 +17,12 @@ pub enum LogEvent {
 }
 
 pub enum Event {
-    Log(LogEvent)
+    Log(LogEvent),
 }
 
 pub struct LogEntry {
-    turn : u64,
-    text : String,
+    turn: u64,
+    text: String,
 }
 
 pub enum AutoMoveAction {
@@ -33,7 +33,7 @@ pub enum AutoMoveAction {
 
 #[derive(Copy, Clone, PartialEq, Eq)]
 pub enum GoToType {
-    Stairs
+    Stairs,
 }
 
 #[derive(Copy, Clone, PartialEq, Eq)]
@@ -42,5 +42,3 @@ pub enum AutoMoveType {
     Walk,
     GoTo(GoToType),
 }
-
-

@@ -4,20 +4,20 @@ use util;
 use ai::{self, Ai};
 
 pub struct Engine {
-    turn : u64,
-    location_cur : usize,
-    locations : Vec<Location>,
+    turn: u64,
+    location_cur: usize,
+    locations: Vec<Location>,
 
-    ids_to_move : Vec<actor::Id>,
+    ids_to_move: Vec<actor::Id>,
 }
 
 impl Engine {
     pub fn new() -> Self {
         let location = Location::new(0);
         Engine {
-            location_cur : 0,
-            locations: vec!(location),
-            ids_to_move: vec!(),
+            location_cur: 0,
+            locations: vec![location],
+            ids_to_move: vec![],
             turn: 0,
         }
     }
@@ -35,7 +35,7 @@ impl Engine {
         self.turn
     }
 
-    pub fn initial_spawn(&mut self, race : actor::Race) {
+    pub fn initial_spawn(&mut self, race: actor::Race) {
         let pos = util::random_pos(0, 0);
         let mut player = Actor::new(race, pos);
         player.set_player();
@@ -51,9 +51,9 @@ impl Engine {
         self.current_location().player()
     }
 
-    pub fn checks_after_act(&mut self, actor_id : actor::Id) {
+    pub fn checks_after_act(&mut self, actor_id: actor::Id) {
         if actor_id == self.current_location().player_id() &&
-            self.current_location().player().descended() {
+           self.current_location().player().descended() {
             let mut player = self.current_location_mut().remove(actor_id).unwrap();
             self.location_cur += 1;
             self.locations.push(Location::new(self.location_cur as u32));
@@ -74,14 +74,16 @@ impl Engine {
 
     pub fn reload_actors_ids_to_move(&mut self) {
         let player_id = self.current_location().player_id();
-        self.ids_to_move = self.current_location().actors_alive_ids()
-            .iter()
-            .cloned()
-            .filter(|&id| id != player_id).collect();
+        self.ids_to_move = self.current_location()
+                               .actors_alive_ids()
+                               .iter()
+                               .cloned()
+                               .filter(|&id| id != player_id)
+                               .collect();
     }
 
     // player first move
-    pub fn player_act(&mut self, action : Action) {
+    pub fn player_act(&mut self, action: Action) {
         assert!(self.needs_player_input());
 
         let player_id = self.current_location().player_id();

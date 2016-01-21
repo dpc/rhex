@@ -73,7 +73,7 @@ impl Feature {
 
 
     pub fn stats(&self) -> actor::EffectiveStats {
-        let mut s : actor::EffectiveStats = Default::default();
+        let mut s: actor::EffectiveStats = Default::default();
 
         match *self {
             Infravision => s.base.infravision += 1,
@@ -103,16 +103,16 @@ impl Rand for Feature {
 }
 
 #[derive(Clone, Eq, PartialEq, Debug)]
-pub struct Item  {
-    type_ : Type,
-    features : Vec<Feature>,
+pub struct Item {
+    type_: Type,
+    features: Vec<Feature>,
 }
 
 impl Item {
-    pub fn new(t : Type, features : Vec<Feature>) -> Item {
+    pub fn new(t: Type, features: Vec<Feature>) -> Item {
         Item {
             type_: t,
-            features : features,
+            features: features,
         }
     }
 
@@ -126,8 +126,8 @@ impl Item {
 
     pub fn category(&self) -> Category {
         match self.type_ {
-            Knife|Sword|Axe => Weapon,
-            Leather|Plate|Helmet|Boots|Buckler|Cloak => Armor,
+            Knife | Sword | Axe => Weapon,
+            Leather | Plate | Helmet | Boots | Buckler | Cloak => Armor,
             HealthPotion => Consumable,
             Junk => Misc,
         }
@@ -135,8 +135,8 @@ impl Item {
 
     pub fn slot(&self) -> Option<Slot> {
         match self.type_ {
-            Axe|Sword|Knife => Some(Slot::RHand),
-            Leather|Plate => Some(Slot::Body),
+            Axe | Sword | Knife => Some(Slot::RHand),
+            Leather | Plate => Some(Slot::Body),
             Helmet => Some(Slot::Head),
             Boots => Some(Slot::Feet),
             Buckler => Some(Slot::LHand),
@@ -146,37 +146,42 @@ impl Item {
     }
 
     pub fn stats(&self) -> actor::EffectiveStats {
-        let mut s : actor::EffectiveStats = Default::default();
+        let mut s: actor::EffectiveStats = Default::default();
 
         match self.type_ {
             Plate => {
                 s.base.ac = 4;
                 s.base.ev = -2;
-            },
+            }
             Leather => {
                 s.base.ac = 1;
-            },
+            }
             Helmet => {
                 s.base.ac = 1;
                 s.base.vision = -2;
                 s.base.infravision = -1;
             }
             Boots => s.base.ev = 1,
-            Buckler => { s.base.ev = 1; s.base.ac = 1 },
-            Cloak => { s.base.ev = 1; },
+            Buckler => {
+                s.base.ev = 1;
+                s.base.ac = 1
+            }
+            Cloak => {
+                s.base.ev = 1;
+            }
             Knife => {
                 s.melee_dmg = 1;
                 s.melee_str_req = 2;
-            },
+            }
             Sword => {
                 s.melee_dmg += 3;
                 s.melee_str_req = 4;
-            },
+            }
             Axe => {
                 s.melee_dmg += 4;
                 s.melee_str_req = 5;
-            },
-            _ => {},
+            }
+            _ => {}
         }
 
         for feature in &self.features {
@@ -192,16 +197,14 @@ impl Item {
     /// Use item
     ///
     /// Returns: true if the item was consumed in the process.
-    pub fn use_(&self, astate : &mut Actor) -> bool {
+    pub fn use_(&self, astate: &mut Actor) -> bool {
         match self.type_ {
             HealthPotion => {
                 astate.hp += 5;
                 astate.hp = cmp::min(astate.hp, astate.stats.base.max_hp);
                 true
-            },
-            _ => {
-                false
             }
+            _ => false,
         }
     }
 }
@@ -219,18 +222,16 @@ impl fmt::Display for Item {
 }
 
 
-pub fn random(level : i32) -> Box<Item> {
+pub fn random(level: i32) -> Box<Item> {
 
     let a = -(level / 2);
     let b = level + 1;
-    let r = rand::thread_rng().gen_range(a, b) +
-        rand::thread_rng().gen_range(a, b) +
-        rand::thread_rng().gen_range(a, b) +
-        rand::thread_rng().gen_range(a, b);
+    let r = rand::thread_rng().gen_range(a, b) + rand::thread_rng().gen_range(a, b) +
+            rand::thread_rng().gen_range(a, b) + rand::thread_rng().gen_range(a, b);
 
-    let mut features = vec!();
+    let mut features = vec![];
     let mut chance = level;
-    const PER_LOOP : i32 = 30;
+    const PER_LOOP: i32 = 30;
     loop {
         if rand::thread_rng().gen_range(0, PER_LOOP) < chance {
             features.push(rand::thread_rng().gen::<Feature>());
@@ -241,16 +242,17 @@ pub fn random(level : i32) -> Box<Item> {
     }
 
     Box::new(Item::new(match r {
-        0 => HealthPotion,
-        1 => Knife,
-        2 => Cloak,
-        3 => Sword,
-        4 => Helmet,
-        5 => Leather,
-        6 => Boots,
-        7 => Axe,
-        8 => Buckler,
-        9 => Plate,
-        _ => Junk,
-    }, features))
+                           0 => HealthPotion,
+                           1 => Knife,
+                           2 => Cloak,
+                           3 => Sword,
+                           4 => Helmet,
+                           5 => Leather,
+                           6 => Boots,
+                           7 => Axe,
+                           8 => Buckler,
+                           9 => Plate,
+                           _ => Junk,
+                       },
+                       features))
 }

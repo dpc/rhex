@@ -10,7 +10,7 @@ pub enum Type {
 }
 
 impl fmt::Display for Type {
-    fn fmt(&self, fmt : &mut fmt::Formatter) -> Result<(), fmt::Error> {
+    fn fmt(&self, fmt: &mut fmt::Formatter) -> Result<(), fmt::Error> {
 
         match *self {
             Type::Room(r) => {
@@ -29,11 +29,14 @@ impl fmt::Display for Type {
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub struct Area {
     pub center: h2d::Coordinate,
-    pub type_ : Type
+    pub type_: Type,
 }
 
 impl Area {
-    pub fn new(center : h2d::Coordinate, type_ : Type) -> Area {
-        Area { center: center, type_: type_ }
+    pub fn new(center: h2d::Coordinate, type_: Type) -> Area {
+        Area {
+            center: center,
+            type_: type_,
+        }
     }
 }
