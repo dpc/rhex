@@ -1,22 +1,32 @@
-[![Build Status](https://travis-ci.org/dpc/rhex.svg?branch=master)](https://travis-ci.org/dpc/rhex)
-
 # rhex
+
+<p align="center">
+  <a href="https://travis-ci.org/dpc/rhex">
+      <img src="https://img.shields.io/travis/dpc/rhex/master.svg?style=flat-square" alt="Build Status">
+  </a>
+  <a href="https://gitter.im/dpc/rhex">
+      <img src="https://img.shields.io/badge/GITTER-join%20chat-green.svg?style=flat-square" alt="Gitter Chat">
+  </a>
+</p>
+
 
 ## Introduction
 
-Simple roguelike prototype written in [Rust][rust-home].
+Simple ASCII terminal hexagonal map  roguelike written in Rust [Rust][rust-home].
 
 ~~You can try it out by pointing your **ssh client** to: rhex [at] rhex.dpc.pw (password is obvious).~~ (temporary unavailable) Note: **Make sure your terminal supports 256 colors and exports `TERM=xterm-256color`!**
 
-It's intendent to exercise my [Rust][rust-home] knowledge and let me play with
-certain mechanisms that I'd like to see in roguelike game:
+The core goal of the project:
 
-* hexagonal map
-* tactical positioning (strafing, face-direction)
+* ASCI/Unicode pure terminal UI first
+* hexagonal map with tactical positioning
 
-Previous iteration of this idea was/is: [Rustyhex][rustyhex] . This two project might merge into whole at some point.
+It's also intendent to exercise and practice my [Rust][rust-home] knowledge.
 
-This project is based on more general and useful: [hex2d-rs - Hexagonal grid map utillity library][hex2d-rs].
+Previous iteration of this idea was/is: [Rustyhex][rustyhex] . This two project
+might merge into whole at some point.
+
+Rhex is using [hex2d-rs - Hexagonal grid map utillity library][hex2d-rs].
 
 [rust-home]: http://rust-lang.org
 [rustyhex]: //github.com/dpc/rustyhex
@@ -28,42 +38,26 @@ This project is based on more general and useful: [hex2d-rs - Hexagonal grid map
 
 [ss]: http://i.imgur.com/gb2TZlj.png
 
-Watch rhex demo video:
+Watch *rhex* gameplay video:
 
 [![asciicast](https://asciinema.org/a/16712.png)](https://asciinema.org/a/16712)
 
-## Building
+## Running
+
+Game requires terminal with 256-color support, and basic Unicode font.
 
 	git clone https://github.com/dpc/rhex.git
 	cd rhex
-	cargo build
+	cargo run --release
 
+## Status
 
-## Status and goals
+The game is playable but not feature and gameplay wise complete.
 
-ATM. the game is just a working prototype. There's not much of gameplay yet.
-
-Some core features that it already implements: simple AI, LoS, lighting, random map generation, areas, autoexplore command.
-
-Core features that I'd like to add soon:
-
-* sound (actions make noise that propagates)
-* combat
-* working stats
-* stairs
-* items/inventory
+*rhex* is actively seeking collaborators. If you'd like to practice your Rust
+or/and find roguelikes interesting ping `@dpc` on [rhex gitter channel] and we
+can get your started.
 
 [Report problems and ideas][issues]
 
 [issues]: https://github.com/dpc/rhex/issues
-
-# How to play
-
-## Basics
-
-* Use `hjkl` or arrow keys to move.
-* Press `o` to autoexplore
-* Hold `Shift` to strafe (with Left/Right move)
-* Press `.` to wait.
-
-
