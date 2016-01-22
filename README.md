@@ -48,6 +48,8 @@ Watch *rhex* gameplay video:
 
 ## Running
 
+Nightly Rust is required. 
+
 Game requires terminal with 256 colors support, and Unicode font.
 
 	git clone https://github.com/dpc/rhex.git
