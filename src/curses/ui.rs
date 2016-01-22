@@ -7,7 +7,6 @@ use std;
 use std::{thread, cmp, fmt};
 use std::io::Write;
 use std::fmt::Write as FmtWrite;
-use core::str::StrExt;
 
 use chrono;
 use num::integer::Integer;
