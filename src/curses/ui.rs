@@ -594,15 +594,15 @@ impl Ui {
             }
             Mode::Normal => {
                 match ch {
-                    KEY_LOWH => self.queue_turn(Left),
-                    KEY_LOWL => self.queue_turn(Right),
-                    KEY_LOWK => self.queue_move(Forward),
+                    KEY_LOWH|nc::KEY_LEFT => self.queue_turn(Left),
+                    KEY_LOWL|nc::KEY_RIGHT => self.queue_turn(Right),
+                    KEY_LOWK|nc::KEY_UP => self.queue_move(Forward),
                     KEY_LOWC => self.queue_charge(),
                     KEY_LOWU => self.queue_spin(Left),
                     KEY_LOWI => self.queue_spin(Right),
                     KEY_CAPH => self.queue_move(Left),
                     KEY_CAPL => self.queue_move(Right),
-                    KEY_LOWJ => self.queue_move(Back),
+                    KEY_LOWJ|nc::KEY_DOWN => self.queue_move(Back),
                     KEY_DOT => self.queue_wait(),
                     KEY_COMMA => self.queue_pick(),
                     KEY_DESCEND => self.queue_descend(),
