@@ -9,6 +9,11 @@
   </a>
 </p>
 
+## Contributors welcome!
+
+Rhex is looking for contributors. See
+[Contributing page](https://github.com/dpc/rhex/wiki/Contributing)
+for details.
 
 ## Introduction
 
