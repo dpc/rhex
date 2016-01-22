@@ -35,9 +35,7 @@ Rhex is using [hex2d-rs - Hexagonal grid map utillity library][hex2d-rs].
 
 ## Overview
 
-![RustyHex screenshot][ss]
-
-[ss]: http://i.imgur.com/fxCTeiZ.png
+![rhex v0.0.3 screenshot](http://i.imgur.com/M9fi1ri.png)
 
 Watch *rhex* gameplay video:
 
@@ -45,7 +43,7 @@ Watch *rhex* gameplay video:
 
 ## Running
 
-Game requires terminal with 256-color support, and basic Unicode font.
+Game requires terminal with 256 colors support, and Unicode font.
 
 	git clone https://github.com/dpc/rhex.git
 	cd rhex
