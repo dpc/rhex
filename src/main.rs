@@ -1,5 +1,3 @@
-#![feature(libc)]
-#![feature(core_str_ext)]
 #![feature(hashmap_hasher)]
 #![allow(deprecated)]
 
