@@ -12,6 +12,7 @@ use self::Feature::*;
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub enum Category {
     Weapon,
+    RangedWeapon,
     Armor,
     Misc,
     Consumable,
@@ -20,6 +21,7 @@ pub enum Category {
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub enum Type {
     Knife,
+    Bow,
     Sword,
     Axe,
     HealthPotion,
@@ -37,6 +39,7 @@ impl Type {
         match *self {
             Junk => "junk",
             Knife => "knife",
+            Bow => "bow",
             Sword => "sword",
             Axe => "axe",
             HealthPotion => "health potion",
@@ -128,15 +131,21 @@ impl Item {
     pub fn category(&self) -> Category {
         match self.type_ {
             Knife | Sword | Axe => Weapon,
+            Bow => RangedWeapon,
             Leather | Plate | Helmet | Boots | Buckler | Cloak => Armor,
             HealthPotion => Consumable,
             Junk => Misc,
         }
     }
 
+    pub fn is_ranged_weapon(&self) -> bool {
+        self.category() == RangedWeapon
+    }
+
     pub fn slot(&self) -> Option<Slot> {
         match self.type_ {
             Axe | Sword | Knife => Some(Slot::RHand),
+            Bow => Some(Slot::RHand),
             Leather | Plate => Some(Slot::Body),
             Helmet => Some(Slot::Head),
             Boots => Some(Slot::Feet),
@@ -244,14 +253,15 @@ pub fn random(level: i32) -> Box<Item> {
     Box::new(Item::new(match r {
                            0 => HealthPotion,
                            1 => Knife,
-                           2 => Cloak,
-                           3 => Sword,
-                           4 => Helmet,
-                           5 => Leather,
-                           6 => Boots,
-                           7 => Axe,
-                           8 => Buckler,
-                           9 => Plate,
+                           2 => Bow,
+                           3 => Cloak,
+                           4 => Sword,
+                           5 => Helmet,
+                           6 => Leather,
+                           7 => Boots,
+                           8 => Axe,
+                           9 => Buckler,
+                           10 => Plate,
                            _ => Junk,
                        },
                        features))

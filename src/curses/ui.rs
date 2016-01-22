@@ -100,7 +100,7 @@ enum FSMode {
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
 enum TargetMode {
-    Fire,
+    Ranged,
 }
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
@@ -552,8 +552,8 @@ impl Ui {
         self.action_push(game::Action::Pick)
     }
 
-    pub fn queue_fire(&mut self, coord: Coordinate) {
-        self.action_push(game::Action::Fire(coord))
+    pub fn queue_ranged(&mut self, coord: Coordinate) {
+        self.action_push(game::Action::Ranged(coord))
     }
 
     pub fn queue_wait(&mut self) {
@@ -636,8 +636,10 @@ impl Ui {
                         self.mode_switch_to(Mode::Examine);
                     }
                     KEY_LOWF => {
-                        self.target_pos = None;
-                        self.mode_switch_to(Mode::Target(TargetMode::Fire));
+                        if self.player().can_attack_ranged() {
+                            self.target_pos = None;
+                            self.mode_switch_to(Mode::Target(TargetMode::Ranged));
+                        }
                     }
                     KEY_HELP => {
                         self.mode_switch_to(Mode::FullScreen(FSMode::Help));
@@ -731,7 +733,7 @@ impl Ui {
                         let target = self.target_pos.unwrap();
                         self.target_pos = None;
                         self.mode_switch_to(Mode::Normal);
-                        self.queue_fire(target.coord);
+                        self.queue_ranged(target.coord);
                     }
                     KEY_LOWH => {
                         self.target_pos = Some(util::circular_move(center, pos, Angle::Left));
@@ -1547,7 +1549,7 @@ impl Ui {
         nc::waddstr(window, "Inventory: I\n");
         nc::waddstr(window, "Equip: E\n");
         nc::waddstr(window, "Drop: D\n");
-        nc::waddstr(window, "Fire/Throw: f (not fully working)\n");
+        nc::waddstr(window, "Ranged/Throw: f (not fully working)\n");
         nc::waddstr(window, "Quit: q\n");
         nc::wnoutrefresh(window);
     }
@@ -1599,6 +1601,7 @@ impl Drop for Ui {
 pub fn item_to_str(t: item::Category) -> &'static str {
     match t {
         item::Category::Weapon => ")",
+        item::Category::RangedWeapon => "}",
         item::Category::Armor => "[",
         item::Category::Misc => "\"",
         item::Category::Consumable => "%",

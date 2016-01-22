@@ -237,6 +237,9 @@ impl Location {
                             actor.descend();
                         }
                     }
+                    Action::Ranged(target_coord) => {
+                        actor.try_attack_ranged(self, target_coord);
+                    },
                     _ => {}
                 }
             } else if action.could_be_attack() && old_pos.coord != new_pos.coord &&

@@ -331,7 +331,7 @@ impl Actor {
             Action::Pick |
             Action::Equip(_) |
             Action::Descend |
-            Action::Fire(_) |
+            Action::Ranged(_) |
             Action::Drop_(_) => vec![pos],
             Action::Turn(a) => vec![pos + a],
             Action::Move(a) => vec![pos + (pos.dir + a).to_coordinate()],
@@ -351,6 +351,80 @@ impl Actor {
                          _ => return vec![pos],
                      }]
             }
+        }
+    }
+
+    pub fn attack_ranged(&mut self,
+                         loc : &mut Location,
+                         target_coord : Coordinate) {
+
+        let target_id = match loc.actors_coord_to_id.get(&target_coord) {
+            None => return,
+            Some(id) => id
+        };
+
+        let mut target= match loc.actors_byid.remove(&target_id) {
+            None => return,
+            Some(target) => target,
+        };
+        let mut acc = self.stats.melee_acc;
+        let mut dmg = self.stats.melee_dmg;
+
+        let (ac, ev) = (target.stats.base.ac, target.stats.base.ev);
+
+        let from_behind = match self.pos.dir - target.pos.dir {
+            Angle::Forward | Angle::Left | Angle::Right => true,
+            _ => false,
+        };
+
+        if from_behind {
+            acc *= 2;
+            dmg *= 2;
+        }
+
+        if !self.can_attack_sp() {
+            acc /= 2;
+            dmg /= 2;
+            self.sp = 0;
+        } else {
+            self.sp -= self.melee_sp_cost();
+        }
+
+        let success = util::roll(acc, ev);
+
+        let rand_ac = cmp::max(rand::thread_rng().gen_range(0, ac + 1),
+        rand::thread_rng().gen_range(0, ac + 1));
+
+        let dmg = cmp::max(0, dmg - rand_ac);
+
+        if success {
+            target.hp -= dmg;
+            target.noise_makes(7);
+        }
+
+        target.was_attacked_by.push(AttackResult {
+            success: success,
+            dmg: dmg,
+            who: self.description(),
+            behind: from_behind,
+        });
+
+        self.did_attack.push(AttackResult {
+            success: success,
+            dmg: dmg,
+            who: target.description(),
+            behind: from_behind,
+        });
+
+        loc.actors_byid.insert(*target_id, target);
+    }
+
+    pub fn try_attack_ranged(&mut self,
+                         loc : &mut Location,
+                         target_coord : Coordinate) {
+
+        if self.can_attack_ranged() {
+            self.attack_ranged(loc, target_coord);
         }
     }
 
@@ -695,12 +769,24 @@ impl Actor {
         self.sp >= self.charge_sp_cost()
     }
 
-    pub fn can_attack(&self) -> bool {
-        self.action_cd == 0
-    }
-
     pub fn can_act(&self) -> bool {
         self.action_cd == 0 && !self.is_dead()
+    }
+
+    pub fn can_attack(&self) -> bool {
+        self.can_act()
+    }
+
+    pub fn can_attack_ranged(&self) -> bool {
+       self.can_act() && self.is_holding_ranged_weapon()
+    }
+
+    pub fn is_holding_ranged_weapon(&self) -> bool {
+        if let Some(&(_, ref box_item)) = self.items_equipped.get(&Slot::RHand) {
+            box_item.is_ranged_weapon()
+        } else {
+            false
+        }
     }
 
     pub fn moved(&mut self, loc: &Location, new_pos: Position) {
