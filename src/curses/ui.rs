@@ -145,21 +145,6 @@ pub struct Ui {
 impl Ui {
     pub fn new() -> Result<Self> {
 
-        let term_ok = env::var_os("TERM")
-                          .as_ref()
-                          .and_then(|s| s.as_os_str().to_str())
-                          .map_or(false, |s| s.ends_with("-256color"));
-
-        let term_putty = env::var_os("TERM")
-                             .as_ref()
-                             .and_then(|s| s.as_os_str().to_str())
-                             .map_or(false, |s| s.starts_with("putty"));
-
-        if !term_ok {
-            panic!("Your TERM environment variable must end with -256color, sorry, stranger from \
-                    the past. It is curable. Google it, fix it, try again.");
-        }
-
         if env::var_os("ESCDELAY").is_none() {
             env::set_var("ESCDELAY", "25");
         }
@@ -194,11 +179,7 @@ impl Ui {
             windows: Windows::after_resize(),
             mode: Mode::FullScreen(FSMode::Intro),
             target_pos: None,
-            dot: if term_putty {
-                NORMAL_DOT
-            } else {
-                UNICODE_DOT
-            },
+            dot: UNICODE_DOT,
             log: RefCell::new(VecDeque::new()),
 
             label_color: label_color,
