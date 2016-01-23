@@ -2,7 +2,7 @@ use std::collections::{HashMap, HashSet};
 use std::ops::{Add, Sub};
 use std::cmp;
 
-use hex2d::{Coordinate, Angle, Position, ToCoordinate, Direction};
+use hex2d::{Coordinate, Angle, Position, ToCoordinate, Direction, Left, Right, Forward};
 use hex2dext::algo;
 
 use game::{self, Action, tile};
@@ -324,6 +324,12 @@ impl Actor {
         self.pos.coord + self.pos.dir
     }
 
+    /// relating to "head" - The coordinate that is next to actor, relative
+    /// to head by a given angle.
+    pub fn head_rel(&self, angle : Angle) -> Coordinate {
+        self.pos.coord + (self.pos.dir + angle).to_coordinate()
+    }
+
     pub fn pos_after_action(&self, action: Action) -> Vec<Position> {
         let pos = self.pos;
         match action {
@@ -352,6 +358,10 @@ impl Actor {
                      }]
             }
         }
+    }
+
+    fn substract_melee_sp_cost(&mut self) {
+        self.sp = cmp::max(0, self.sp - self.melee_sp_cost());
     }
 
     pub fn attack_ranged(&mut self,
@@ -387,7 +397,7 @@ impl Actor {
             dmg /= 2;
             self.sp = 0;
         } else {
-            self.sp -= self.melee_sp_cost();
+            self.substract_melee_sp_cost();
         }
 
         let success = util::roll(acc, ev);
@@ -430,9 +440,6 @@ impl Actor {
 
     pub fn post_action(&mut self, action: Action) {
         match action {
-            Action::Wait => {
-                self.sp = cmp::min(self.stats.base.max_sp, self.sp + 1);
-            }
             Action::Charge => {
                 self.sp = cmp::max(0, self.sp - self.charge_sp_cost());
                 self.acted = true;
@@ -440,6 +447,20 @@ impl Actor {
             _ => {
                 self.acted = true;
             }
+        }
+    }
+
+    pub fn can_attack_at_angle(&self, angle : Angle) -> bool {
+        match angle {
+            Forward|Left|Right => true,
+            _ => false,
+        }
+    }
+
+    pub fn can_dig_at_angle(&self, angle : Angle) -> bool {
+        match angle {
+            Forward|Left|Right => true,
+            _ => false,
         }
     }
 
@@ -550,7 +571,7 @@ impl Actor {
     pub fn post_own_tick(&mut self, loc: &Location) {
         if !self.is_dead() {
             if self.sp < self.stats.base.max_sp {
-                if rand::thread_rng().gen_weighted_bool(20) {
+                if rand::thread_rng().gen_weighted_bool(10) {
                     self.sp += 1
                 }
             }
@@ -863,7 +884,8 @@ impl Actor {
                     },
                     _ => {}
                 }
-            } else if action.could_be_attack() && old_pos.coord != new_pos.coord &&
+            } else if self.could_be_attack(action) &&
+                old_pos.coord != new_pos.coord &&
                 loc.actors_coord_to_id.contains_key(&new_pos.coord) {
                     // we've tried to move into self; attack?
                     if !self.can_attack() {
@@ -900,7 +922,52 @@ impl Actor {
                         loc.actors_coord_to_id.insert(new_pos.coord, id);
                     } else {
                         // we hit the wall or something
+                        match action {
+                            Action::Move(angle) => {
+                                if self.can_dig() &&
+                                    self.can_dig_at_angle(angle) &&
+                                    loc.at(new_pos.coord).tile().can_dig_through() {
+                                    self.dig(angle, loc)
+                                }
+                            },
+                            _ => { }
+                        }
+
                     }
+        }
+    }
+
+    // Item equipped in a given slot
+    pub fn equipped_in_slot<'a>(&'a self, slot : Slot) -> Option<&'a Item> {
+        self.items_equipped.get(&slot).map(|&(_, ref item)| &**item)
+    }
+
+    pub fn can_dig(&self) -> bool {
+        self.can_attack_sp() &&
+            self.equipped_in_slot(Slot::RHand)
+            .map(|item| item.can_dig())
+            .unwrap_or(false)
+    }
+
+    pub fn dig(&mut self, angle : Angle, loc : &mut Location) {
+        assert!(self.can_dig_at_angle(angle));
+        let target_coord = self.head_rel(angle);
+        loc.at_mut(target_coord).tile().dig();
+        self.substract_melee_sp_cost();
+        self.noise_makes(9);
+    }
+
+
+    pub fn could_be_attack(&self, action : Action) -> bool {
+        match action {
+            Action::Charge => true,
+            Action::Move(angle) => {
+                match angle {
+                    Left | Right | Forward => true,
+                    _ => false,
+                }
+            }
+            _ => false,
         }
     }
 }

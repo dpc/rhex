@@ -380,4 +380,9 @@ impl<'a> AtMut<'a> {
             None
         }
     }
+
+    pub fn tile(&'a mut self) -> &'a mut tile::Tile {
+        &mut self.state.map[self.coord]
+    }
+
 }

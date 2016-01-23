@@ -4,6 +4,7 @@ pub use self::Feature::*;
 pub use super::area;
 
 use std::fmt;
+use rand::{Rng, self};
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug, Hash)]
 pub enum Type {
@@ -122,6 +123,18 @@ impl Tile {
 
         self.type_.base_ascii_expand()
     }
+
+    pub fn can_dig_through(&self) -> bool {
+        self.type_.can_dig_through()
+    }
+
+    pub fn dig(&mut self) {
+        let r = rand::thread_rng().gen_range(0, 10);
+        match self.type_ {
+            Wall => if r < 5 { self.type_ = Empty },
+            _ => {}
+        }
+    }
 }
 
 impl Type {
@@ -131,6 +144,10 @@ impl Type {
             Empty => true,
             Water => false,
         }
+    }
+
+    pub fn can_dig_through(&self) -> bool {
+        *self == Wall
     }
 
     pub fn opaqueness(&self) -> i32 {

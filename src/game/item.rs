@@ -1,5 +1,5 @@
 use super::actor::{self, Actor, Slot};
-use rand::{self, Rng, Rand};
+use rand::{self, Rng, Rand, thread_rng};
 use rand::distributions::IndependentSample;
 
 use core::cmp;
@@ -23,6 +23,7 @@ pub enum Type {
     Knife,
     Bow,
     Sword,
+    Pickaxe,
     Axe,
     HealthPotion,
     Junk,
@@ -49,6 +50,7 @@ impl Type {
             Boots => "boots",
             Buckler => "buckler",
             Cloak => "cloak",
+            Pickaxe => "pickaxe",
         }
     }
 }
@@ -130,12 +132,16 @@ impl Item {
 
     pub fn category(&self) -> Category {
         match self.type_ {
-            Knife | Sword | Axe => Weapon,
+            Knife | Sword | Axe | Pickaxe => Weapon,
             Bow => RangedWeapon,
             Leather | Plate | Helmet | Boots | Buckler | Cloak => Armor,
             HealthPotion => Consumable,
             Junk => Misc,
         }
+    }
+
+    pub fn can_dig(&self) -> bool {
+        self.type_ == Pickaxe
     }
 
     pub fn is_ranged_weapon(&self) -> bool {
@@ -145,6 +151,7 @@ impl Item {
     pub fn slot(&self) -> Option<Slot> {
         match self.type_ {
             Axe | Sword | Knife => Some(Slot::RHand),
+            Pickaxe => Some(Slot::RHand),
             Bow => Some(Slot::RHand),
             Leather | Plate => Some(Slot::Body),
             Helmet => Some(Slot::Head),
@@ -190,6 +197,10 @@ impl Item {
             Axe => {
                 s.melee_dmg += 4;
                 s.melee_str_req = 5;
+            }
+            Pickaxe => {
+                s.melee_dmg += 1;
+                s.melee_str_req = 6;
             }
             _ => {}
         }
@@ -239,7 +250,7 @@ pub fn random(level: i32) -> Box<Item> {
     let mut rng = rand::thread_rng();
     let lvrange = rand::distributions::Range::new(a, b);
     let r = lvrange.ind_sample(&mut rng) + lvrange.ind_sample(&mut rng) +
-            lvrange.ind_sample(&mut rng) + lvrange.ind_sample(&mut rng);
+            lvrange.ind_sample(&mut rng);
 
     let mut features = vec![];
     let mut chance = level;
@@ -252,16 +263,14 @@ pub fn random(level: i32) -> Box<Item> {
 
     Box::new(Item::new(match r {
                            0 => HealthPotion,
-                           1 => Knife,
+                           1 => *thread_rng().choose(&[Knife, Pickaxe]).unwrap(),
                            2 => Bow,
                            3 => Cloak,
                            4 => Sword,
                            5 => Helmet,
                            6 => Leather,
-                           7 => Boots,
-                           8 => Axe,
-                           9 => Buckler,
-                           10 => Plate,
+                           8 => *thread_rng().choose(&[Boots, Buckler]).unwrap(),
+                           10 => *thread_rng().choose(&[Plate, Axe]).unwrap(),
                            _ => Junk,
                        },
                        features))
