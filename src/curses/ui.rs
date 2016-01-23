@@ -1519,6 +1519,7 @@ impl Ui {
         nc::waddstr(window, "Strafe/attack: Shift + h/l\n");
         nc::waddstr(window, "Charge: c\n");
         nc::waddstr(window, "Wait: .\n");
+        nc::waddstr(window, "Descend: >\n");
         nc::waddstr(window, "Autoexplore: o\n");
         nc::waddstr(window, "Automove: shift + k\n");
         nc::waddstr(window, "Go to: G (only '>' follow-up implemented)\n");
