@@ -262,8 +262,8 @@ pub fn random(level: i32) -> Box<Item> {
     }
 
     Box::new(Item::new(match r {
-                           -1 => HealthPotion,
                            1 => *thread_rng().choose(&[Knife, Pickaxe]).unwrap(),
+                           2 => HealthPotion,
                            3 => *thread_rng().choose(&[Bow, Cloak]).unwrap(),
                            5 => *thread_rng().choose(&[Helmet, Sword]).unwrap(),
                            6 => Leather,

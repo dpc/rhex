@@ -257,11 +257,6 @@ impl Location {
 
         self.recalculate_light_map();
         self.recalculate_noise();
-
-        // for id in self.actors_alive_ids() {
-        // let mut actor = self.actors_byid.remove(&id).unwrap();
-        // self.actors_byid.insert(id, actor);
-        // }
     }
 
     pub fn post_turn(&mut self) {}
