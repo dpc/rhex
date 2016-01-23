@@ -1,6 +1,5 @@
 use std::collections::{HashMap, HashSet};
 use simplemap::SimpleMap;
-use fnv::FnvHasher;
 
 use hex2d::Coordinate;
 

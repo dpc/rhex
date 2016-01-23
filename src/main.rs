@@ -13,7 +13,6 @@ extern crate chrono;
 extern crate log;
 extern crate fern;
 extern crate core;
-extern crate fnv;
 
 mod ai;
 mod curses;
