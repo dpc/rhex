@@ -1,7 +1,6 @@
 use std::collections::{HashMap, HashSet};
 use std::ops::{Add, Sub};
 use std::cmp;
-use std::sync::Arc;
 
 use hex2d::{Coordinate, Angle, Position, ToCoordinate, Direction};
 use hex2dext::algo;
@@ -884,10 +883,7 @@ impl Actor {
                     break;
                 } else if loc.at(new_pos.coord).tile().feature == Some(tile::Door(false)) {
                     // walked into door: open it
-                    let mut map = loc.map.clone();
-                    let mut map = Arc::make_mut(&mut map);
-                    map[new_pos.coord].add_feature(tile::Door(true));
-                    loc.map = Arc::new(map.clone());
+                    loc.map[new_pos.coord].add_feature(tile::Door(true));
                     // Can't charge through the doors
                     break;
                 } else if old_pos.coord == new_pos.coord && old_pos.dir != new_pos.dir {

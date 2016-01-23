@@ -1,5 +1,4 @@
 use std::collections::{HashMap, HashSet};
-use std::sync::Arc;
 
 use generate;
 
@@ -20,7 +19,7 @@ pub struct Location {
     pub actors_coord_to_id: HashMap<Coordinate, u32>, // coord -> id
     pub actors_dead: HashSet<actor::Id>,
     pub actors_counter: u32,
-    pub map: Arc<Map>,
+    pub map: Map,
     pub items: Items, // items on the floor
     pub light_map: LightMap, // light intensity at a given coordinate
     pub level: i32,
@@ -49,7 +48,7 @@ impl Location {
             actors_counter: actors_counter,
             actors_dead: Default::default(),
             items: items,
-            map: Arc::new(map),
+            map: map,
             level: 0,
             light_map: LightMap::new(),
             player_id: None,
