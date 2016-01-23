@@ -2,7 +2,7 @@ use super::actor::{self, Actor, Slot};
 use rand::{self, Rng, Rand, thread_rng};
 use rand::distributions::IndependentSample;
 
-use core::cmp;
+use std::cmp;
 use std::fmt::{self, Write};
 
 use self::Category::*;

@@ -1,5 +1,3 @@
-#![allow(deprecated)]
-
 extern crate simplemap;
 extern crate ncurses;
 extern crate hex2d;
@@ -12,7 +10,6 @@ extern crate chrono;
 #[macro_use]
 extern crate log;
 extern crate fern;
-extern crate core;
 
 mod ai;
 mod curses;
