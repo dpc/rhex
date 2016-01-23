@@ -1524,8 +1524,8 @@ impl Ui {
         nc::waddstr(window, "Go to: G (only '>' follow-up implemented)\n");
         nc::waddstr(window, "Examine: x\n");
         nc::waddstr(window, "Pick item in front: ,\n");
-        nc::waddstr(window, "Inventory: I\n");
-        nc::waddstr(window, "Equip: E\n");
+        nc::waddstr(window, "Look at Inventory: I\n");
+        nc::waddstr(window, "Equip/Use: E\n");
         nc::waddstr(window, "Drop: D\n");
         nc::waddstr(window, "Ranged/Throw: f (not fully working)\n");
         nc::waddstr(window, "Quit: q\n");
