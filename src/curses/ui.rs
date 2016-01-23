@@ -1230,8 +1230,9 @@ impl Ui {
             for (ch, i) in &player.items_backpack {
                 nc::waddstr(window, &format!(" {} - {}\n", ch, i.description()));
             }
-            nc::waddstr(window, &format!("\n"));
         }
+
+        nc::waddstr(window, &format!("\n[ESC] to close...\n"));
 
         nc::wnoutrefresh(window);
     }
