@@ -2,15 +2,15 @@ use hex2d::IntegerSpacing;
 
 pub static SPACING: IntegerSpacing<i32> = IntegerSpacing::PointyTop(2, 1);
 
-pub const WALL_CH: &'static str = "#";
-pub const DOOR_OPEN_CH: &'static str = "_";
-pub const DOOR_CLOSED_CH: &'static str = "×";
-pub const STATUE_CH: &'static str = "&";
-pub const STAIRS_DOWN_CH: &'static str = ">";
-pub const WATER_CH: &'static str = "~";
-pub const NOTHING_CH: &'static str = "~";
-pub const NORMAL_DOT: &'static str = ".";
-pub const UNICODE_DOT: &'static str = "·";
+pub const WALL_CH: char = '#';
+pub const DOOR_OPEN_CH: char = '_';
+pub const DOOR_CLOSED_CH: char = '×';
+pub const STATUE_CH: char = '&';
+pub const STAIRS_DOWN_CH: char = '>';
+pub const WATER_CH: char = '~';
+pub const NOTHING_CH: char = '~';
+pub const NORMAL_DOT: char = '.';
+pub const UNICODE_DOT: char = '·';
 
 pub const KEY_ESC: i32 = 0x1b;
 pub const KEY_ENTER: i32 = '\n' as i32;
