@@ -1,15 +1,20 @@
 [package]
-
 name = "rhex"
 version = "0.0.3"
-authors = ["Dawid Ciężarkiewicz <dpc@ucore.info>"]
+authors = ["Dawid Ciężarkiewicz <dpc@dpc.pw>"]
+description = "ASCII terminal hexagonal map roguelike written in Rust"
+keywords = ["roguelike", "game", "hex", "hexagonal"]
+license = "MPL-2.0"
+documentation = "https://dpc.github.io/rhex/"
+homepage = "https://github.com/dpc/rhex"
+repository = "https://github.com/dpc/rhex"
+readme = "README.md"
 
 [profile.dev]
 opt-level = 1
 debug = true
 lto = false
 debug-assertions = true
-
 
 [dependencies]
 num = "*"
