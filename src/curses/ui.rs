@@ -118,7 +118,7 @@ pub struct Ui {
     mode: Mode,
     log: RefCell<VecDeque<LogEntry>>,
     target_pos: Option<Position>,
-    dot: &'static str,
+    dot: char,
 
     label_color: u64,
     text_color: u64,
@@ -966,16 +966,16 @@ impl Ui {
                 let occupied = cur_loc.at(c).is_occupied();
                 let (fg, bg, mut glyph) = if is_proper_coord && visible && occupied {
                     let (fg, glyph) = match cur_loc.at(c).actor_map_or(Race::Rat, |a| a.race) {
-                        Race::Human | Race::Elf | Race::Dwarf => (color::CHAR_SELF_FG, "@"),
-                        Race::Rat => (color::CHAR_ENEMY_FG, "r"),
-                        Race::Goblin => (color::CHAR_ENEMY_FG, "g"),
-                        Race::Troll => (color::CHAR_ENEMY_FG, "T"),
+                        Race::Human | Race::Elf | Race::Dwarf => (color::CHAR_SELF_FG, '@'),
+                        Race::Rat => (color::CHAR_ENEMY_FG, 'r'),
+                        Race::Goblin => (color::CHAR_ENEMY_FG, 'g'),
+                        Race::Troll => (color::CHAR_ENEMY_FG, 'T'),
                     };
                     (fg, color::CHAR_BG, glyph)
                 } else if is_proper_coord && visible &&
                                              cur_loc.at(c).item().is_some() {
                     let item = cur_loc.at(c).item().unwrap();
-                    let s = item_to_str(item.category());
+                    let s = item_to_char(item.category());
                     if player.discovered.contains(&c) {
                         bold = true;
                     }
@@ -985,7 +985,7 @@ impl Ui {
                         Some(tile::Empty) => {
                             let mut fg = color::STONE_FG;
                             let mut bg = color::EMPTY_BG;
-                            let mut glyph = " ";
+                            let mut glyph = ' ';
 
                             if is_proper_coord {
                                 match t.and_then(|t| t.feature) {
@@ -1014,7 +1014,7 @@ impl Ui {
                             (color::WALL_FG, color::WALL_BG, WALL_CH)
                         }
                         Some(tile::Water) => (color::WATER_FG, color::WATER_BG, WATER_CH),
-                        None => (color::EMPTY_FG, color::EMPTY_BG, "?"),
+                        None => (color::EMPTY_FG, color::EMPTY_BG, '?'),
                     }
                 } else {
                     (color::EMPTY_FG, color::EMPTY_BG, NOTHING_CH)
@@ -1064,7 +1064,7 @@ impl Ui {
                         }
                     } else {
                         draw = true;
-                        glyph = " ";
+                        glyph = ' ';
                         bg = color;
                     }
                 }
@@ -1076,7 +1076,7 @@ impl Ui {
 
                 if self.mode == Mode::Examine {
                     if is_proper_coord && center == c {
-                        glyph = "@";
+                        glyph = '@';
                         fg = color::CHAR_GRAY_FG;
                         draw = true;
                     } else if is_proper_coord && c == head {
@@ -1085,13 +1085,13 @@ impl Ui {
                             fg = color::TARGET_SELF_FG;
                         } else {
                             draw = true;
-                            glyph = " ";
+                            glyph = ' ';
                             bg = color::TARGET_SELF_FG;
                         }
                     }
                 } else if let Mode::Target(_) = self.mode {
                     if is_proper_coord && target_line.contains(&c) {
-                        glyph = "*";
+                        glyph = '*';
                         draw = true;
                         if c == head {
                             fg = color::TARGET_SELF_FG;
@@ -1111,7 +1111,7 @@ impl Ui {
                     }
 
                     nc::wattron(window, cpair as i32);
-                    nc::mvwaddstr(window, vy, vx, glyph);
+                    nc::mvwaddch(window, vy, vx, glyph as u64);
                     nc::wattroff(window, cpair as i32);
 
                     if bold {
@@ -1578,12 +1578,12 @@ impl Drop for Ui {
 //      . . . . .
 //       . . . .
 //        . . .
-pub fn item_to_str(t: item::Category) -> &'static str {
+pub fn item_to_char(t: item::Category) -> char {
     match t {
-        item::Category::Weapon => ")",
-        item::Category::RangedWeapon => "}",
-        item::Category::Armor => "[",
-        item::Category::Misc => "\"",
-        item::Category::Consumable => "%",
+        item::Category::Weapon => ')',
+        item::Category::RangedWeapon => '}',
+        item::Category::Armor => '[',
+        item::Category::Misc => '"',
+        item::Category::Consumable => '%',
     }
 }
