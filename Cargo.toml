@@ -17,15 +17,14 @@ lto = false
 debug-assertions = true
 
 [dependencies]
-num = "*"
-rand = "*"
-chrono = "*"
-hex2d = "*"
-hex2d-dpcext = "*"
-log = "*"
-fern = "*"
-schedule_recv = "*"
-ncurses = "*"
+num = "0.1.30"
+rand = "0.3.13"
+chrono = "0.2.17"
+hex2d = "0.1.0"
+hex2d-dpcext = "0.0.9"
+log = "0.3.5"
+fern = "0.3.5"
+schedule_recv = "0.0.1"
+ncurses = "5.80.0"
 dpc-simplemap = { git="https://github.com/dpc/simplemap-rs", branch="no_hash_state" }
-fnv = "*"
-libc = "*"
+libc = "0.2.5"
