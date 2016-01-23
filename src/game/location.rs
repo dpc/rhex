@@ -202,88 +202,8 @@ impl Location {
         }
 
         actor.pre_own_tick();
+        actor.act(self, action);
 
-        let new_pos = actor.pos_after_action(action);
-
-        for &new_pos in &new_pos {
-            let old_pos = actor.pos;
-
-            if old_pos == new_pos {
-                // no movement
-                match action {
-                    Action::Pick => {
-                        let head = actor.head();
-                        let item = self.at_mut(head).pick_item();
-
-                        match item {
-                            Some(item) => {
-                                if let Some(item) = actor.pick_item(item) {
-                                    self.at_mut(head).drop_item(item);
-                                }
-                            }
-                            None => {}
-                        }
-                    }
-                    Action::Equip(ch) => {
-                        actor.equip_switch(ch);
-                    }
-                    Action::Drop_(ch) => {
-                        if let Some(item) = actor.equip_drop(ch) {
-                            self.at_mut(actor.pos.coord).drop_item(item);
-                        }
-                    }
-                    Action::Descend => {
-                        if self.at(actor.coord()).tile().feature == Some(tile::Feature::Stairs) {
-                            actor.descend();
-                        }
-                    }
-                    Action::Ranged(target_coord) => {
-                        actor.try_attack_ranged(self, target_coord);
-                    },
-                    _ => {}
-                }
-            } else if action.could_be_attack() && old_pos.coord != new_pos.coord &&
-               self.actors_coord_to_id.contains_key(&new_pos.coord) {
-                // we've tried to move into actor; attack?
-                if !actor.can_attack() {
-                    break;
-                }
-                let dir = match action {
-                    Action::Move(dir) => old_pos.dir + dir,
-                    _ => old_pos.dir,
-                };
-
-                let target_id = self.actors_coord_to_id[&new_pos.coord];
-
-                let mut target = self.actors_byid.remove(&target_id).unwrap();
-                actor.attacks(dir, &mut target);
-                self.actors_byid.insert(target_id, target);
-                // Can't attack twice
-                break;
-            } else if self.at(new_pos.coord).tile().feature == Some(tile::Door(false)) {
-                // walked into door: open it
-                let mut map = self.map.clone();
-                let mut map = Arc::make_mut(&mut map);
-                map[new_pos.coord].add_feature(tile::Door(true));
-                self.map = Arc::new(map.clone());
-                // Can't charge through the doors
-                break;
-            } else if old_pos.coord == new_pos.coord && old_pos.dir != new_pos.dir {
-                // we've rotated
-                actor.moved(self, new_pos);
-            } else if old_pos.coord != new_pos.coord && self.at(new_pos.coord).is_passable() &&
-               !self.actors_coord_to_id.contains_key(&new_pos.coord) {
-                // we've moved
-                actor.moved(self, new_pos);
-                // we will remove the previous position on post_tick, so that
-                // for the rest of this turn this actor can be found through both new
-                // and old coor
-                debug_assert!(!self.actors_coord_to_id.contains_key(&new_pos.coord));
-                self.actors_coord_to_id.insert(new_pos.coord, id);
-            } else {
-                // we hit the wall or something
-            }
-        }
         actor.post_own_tick(self);
         self.actors_byid.insert(id, actor);
         self.actors_byid.get_mut(&id).unwrap().post_action(action);

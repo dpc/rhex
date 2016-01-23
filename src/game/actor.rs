@@ -1,11 +1,12 @@
 use std::collections::{HashMap, HashSet};
 use std::ops::{Add, Sub};
 use std::cmp;
+use std::sync::Arc;
 
 use hex2d::{Coordinate, Angle, Position, ToCoordinate, Direction};
 use hex2dext::algo;
 
-use game::{self, Action};
+use game::{self, Action, tile};
 use game::tile::Feature;
 use util;
 use super::item::Item;
@@ -821,5 +822,89 @@ impl Actor {
 
     pub fn light_emision(&self) -> u32 {
         self.stats.light_emision
+    }
+
+    pub fn act(&mut self, loc : &mut Location, action: Action) {
+        let new_pos = self.pos_after_action(action);
+
+        for &new_pos in &new_pos {
+            let old_pos = self.pos;
+
+            if old_pos == new_pos {
+                // no movement
+                match action {
+                    Action::Pick => {
+                        let head = self.head();
+                        let item = loc.at_mut(head).pick_item();
+
+                        match item {
+                            Some(item) => {
+                                if let Some(item) = self.pick_item(item) {
+                                    loc.at_mut(head).drop_item(item);
+                                }
+                            }
+                            None => {}
+                        }
+                    }
+                    Action::Equip(ch) => {
+                        self.equip_switch(ch);
+                    }
+                    Action::Drop_(ch) => {
+                        if let Some(item) = self.equip_drop(ch) {
+                            loc.at_mut(self.pos.coord).drop_item(item);
+                        }
+                    }
+                    Action::Descend => {
+                        if loc.at(self.coord()).tile().feature == Some(tile::Feature::Stairs) {
+                            self.descend();
+                        }
+                    }
+                    Action::Ranged(target_coord) => {
+                        self.try_attack_ranged(loc, target_coord);
+                    },
+                    _ => {}
+                }
+            } else if action.could_be_attack() && old_pos.coord != new_pos.coord &&
+                loc.actors_coord_to_id.contains_key(&new_pos.coord) {
+                    // we've tried to move into self; attack?
+                    if !self.can_attack() {
+                        break;
+                    }
+                    let dir = match action {
+                        Action::Move(dir) => old_pos.dir + dir,
+                        _ => old_pos.dir,
+                    };
+
+                    let target_id = loc.actors_coord_to_id[&new_pos.coord];
+
+                    let mut target = loc.actors_byid.remove(&target_id).unwrap();
+                    self.attacks(dir, &mut target);
+                    loc.actors_byid.insert(target_id, target);
+                    // Can't attack twice
+                    break;
+                } else if loc.at(new_pos.coord).tile().feature == Some(tile::Door(false)) {
+                    // walked into door: open it
+                    let mut map = loc.map.clone();
+                    let mut map = Arc::make_mut(&mut map);
+                    map[new_pos.coord].add_feature(tile::Door(true));
+                    loc.map = Arc::new(map.clone());
+                    // Can't charge through the doors
+                    break;
+                } else if old_pos.coord == new_pos.coord && old_pos.dir != new_pos.dir {
+                    // we've rotated
+                    self.moved(loc, new_pos);
+                } else if old_pos.coord != new_pos.coord && loc.at(new_pos.coord).is_passable() &&
+                    !loc.actors_coord_to_id.contains_key(&new_pos.coord) {
+                        // for the rest of this turn this self can be found through both new
+                        // and old coor
+                        debug_assert!(!loc.actors_coord_to_id.contains_key(&new_pos.coord));
+                        let id = loc.actors_coord_to_id.remove(&self.pos.coord).unwrap();
+                        // we've moved
+                        self.moved(loc, new_pos);
+                        loc.actors_coord_to_id.insert(new_pos.coord, id);
+                    } else {
+                        // we hit the wall or something
+                    }
+        }
     }
 }
