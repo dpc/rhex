@@ -246,7 +246,7 @@ impl fmt::Display for Item {
 pub fn random(level: i32) -> Box<Item> {
 
     let a = -(level / 2);
-    let b = level + 1;
+    let b = level + 2;
     let mut rng = rand::thread_rng();
     let lvrange = rand::distributions::Range::new(a, b);
     let r = lvrange.ind_sample(&mut rng) + lvrange.ind_sample(&mut rng) +
@@ -262,12 +262,10 @@ pub fn random(level: i32) -> Box<Item> {
     }
 
     Box::new(Item::new(match r {
-                           0 => HealthPotion,
+                           -1 => HealthPotion,
                            1 => *thread_rng().choose(&[Knife, Pickaxe]).unwrap(),
-                           2 => Bow,
-                           3 => Cloak,
-                           4 => Sword,
-                           5 => Helmet,
+                           3 => *thread_rng().choose(&[Bow, Cloak]).unwrap(),
+                           5 => *thread_rng().choose(&[Helmet, Sword]).unwrap(),
                            6 => Leather,
                            8 => *thread_rng().choose(&[Boots, Buckler]).unwrap(),
                            10 => *thread_rng().choose(&[Plate, Axe]).unwrap(),
