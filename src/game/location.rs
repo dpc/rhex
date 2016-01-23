@@ -1,9 +1,7 @@
 use std::collections::{HashMap, HashSet};
-use std::collections::hash_state::DefaultState;
 use std::sync::Arc;
 
 use generate;
-use fnv::FnvHasher;
 
 use hex2dext::algo;
 use simplemap::SimpleMap;
@@ -18,9 +16,9 @@ use super::Noise;
 
 #[derive(Clone, Debug)]
 pub struct Location {
-    pub actors_byid: HashMap<actor::Id, Actor, DefaultState<FnvHasher>>, // id -> State
-    pub actors_coord_to_id: HashMap<Coordinate, u32, DefaultState<FnvHasher>>, // coord -> id
-    pub actors_dead: HashSet<actor::Id, DefaultState<FnvHasher>>,
+    pub actors_byid: HashMap<actor::Id, Actor>, // id -> State
+    pub actors_coord_to_id: HashMap<Coordinate, u32>, // coord -> id
+    pub actors_dead: HashSet<actor::Id>,
     pub actors_counter: u32,
     pub map: Arc<Map>,
     pub items: Items, // items on the floor
@@ -34,8 +32,8 @@ impl Location {
 
         let (map, gen_actors, items) = generate::gen_level(level);
 
-        let mut actors: HashMap<u32, Actor, DefaultState<FnvHasher>> = Default::default();
-        let mut actors_pos: HashMap<Coordinate, u32, _> = Default::default();
+        let mut actors: HashMap<u32, Actor> = Default::default();
+        let mut actors_pos: HashMap<Coordinate, u32> = Default::default();
 
         let mut actors_counter = 0u32;
 

@@ -1,4 +1,3 @@
-#![feature(hashmap_hasher)]
 #![allow(deprecated)]
 
 extern crate simplemap;

@@ -1,5 +1,4 @@
 use std::collections::{HashMap, HashSet};
-use std::collections::hash_state::DefaultState;
 use simplemap::SimpleMap;
 use fnv::FnvHasher;
 

@@ -1,7 +1,5 @@
 use std::cell::RefCell;
 use std::collections::{VecDeque, HashMap, HashSet};
-use std::collections::hash_state::DefaultState;
-use fnv::FnvHasher;
 use std::env;
 use std;
 use std::{thread, cmp, fmt};
@@ -832,7 +830,7 @@ impl Ui {
 
         let window = self.windows.map.window;
 
-        let actors_aheads: HashMap<Coordinate, Coordinate, DefaultState<FnvHasher>> =
+        let actors_aheads: HashMap<Coordinate, Coordinate> =
             cur_loc.actors_byid
                    .iter()
                    .filter(|&(_, a)| !a.is_dead())
@@ -1466,7 +1464,7 @@ impl Ui {
             if let Some(color) = self.turn_to_color(i.turn, &self.calloc) {
                 let cpair = nc::COLOR_PAIR(color);
                 nc::wattron(window, cpair as i32);
-                nc::waddstr(window, &format!("{} ", i.text.as_str()));
+                nc::waddstr(window, &format!("{} ", i.text));
             }
             nc::waddstr(window, "\n");
         }
