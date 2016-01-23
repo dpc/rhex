@@ -21,6 +21,6 @@ log = "*"
 fern = "*"
 schedule_recv = "*"
 ncurses = "*"
-dpc-simplemap = "*"
+dpc-simplemap = { git="https://github.com/dpc/simplemap-rs", branch="no_hash_state" }
 fnv = "*"
 libc = "*"
