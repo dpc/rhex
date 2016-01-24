@@ -15,6 +15,7 @@ opt-level = 1
 debug = true
 lto = false
 debug-assertions = true
+codegen-units = 2
 
 [dependencies]
 num = "0.1.30"
