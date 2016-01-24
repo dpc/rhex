@@ -3,15 +3,15 @@ use ncurses::chtype;
 
 pub static SPACING: IntegerSpacing<i32> = IntegerSpacing::PointyTop(2, 1);
 
-pub const WALL_CH: chtype = '#' as chtype;
-pub const DOOR_OPEN_CH: chtype = '_' as chtype;
-pub const DOOR_CLOSED_CH: chtype = '×' as chtype;
-pub const STATUE_CH: chtype = '&' as chtype;
-pub const STAIRS_DOWN_CH: chtype = '>' as chtype;
-pub const WATER_CH: chtype = '~' as chtype;
-pub const NOTHING_CH: chtype = '~' as chtype;
-pub const NORMAL_DOT: chtype = '.' as chtype;
-pub const UNICODE_DOT: chtype = '\u{2219}' as chtype;
+pub const WALL_CH: char = '#';
+pub const DOOR_OPEN_CH: char = '_';
+pub const DOOR_CLOSED_CH: char = '×';
+pub const STATUE_CH: char = '&';
+pub const STAIRS_DOWN_CH: char = '>';
+pub const WATER_CH: char = '~';
+pub const NOTHING_CH: char = '~';
+pub const NORMAL_DOT: char = '.';
+pub const UNICODE_DOT: char = '\u{2022}';
 
 pub const KEY_ESC: i32 = 0x1b;
 pub const KEY_ENTER: i32 = '\n' as i32;
