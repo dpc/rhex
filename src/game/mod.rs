@@ -10,7 +10,7 @@ pub mod actor;
 pub use self::actor::Actor;
 pub mod action;
 pub use self::action::Action;
-pub mod conts;
+pub mod consts;
 pub mod item;
 pub mod engine;
 pub use self::engine::*;

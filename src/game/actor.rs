@@ -16,7 +16,7 @@ use std::iter::Iterator;
 use rand;
 use rand::Rng;
 
-use super::conts::*;
+use super::consts::*;
 use super::{Visibility, NoiseMap};
 
 use super::{Location, Noise};
