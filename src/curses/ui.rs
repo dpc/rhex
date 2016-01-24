@@ -1510,16 +1510,21 @@ impl Ui {
             _ => {}
         }
 
-        for i in self.log.borrow().iter() {
-            if nc::getcury(window) == nc::getmaxy(window) - 1 {
-                break;
+        let cury = nc::getcury(window);
+        let maxy = nc::getmaxy(window) - 1;
+        if cury < maxy {
+            let mut prevcolor = -1;
+            for i in self.log.borrow().iter().take((maxy - cury) as usize) {
+                if let Some(color) = self.turn_to_color(i.turn, &self.calloc) {
+                    if prevcolor != color {
+                        prevcolor = color;
+                        let cpair = nc::COLOR_PAIR(color);
+                        nc::wattron(window, cpair as i32);
+                    }
+                    nc::waddstr(window, &i.text);
+                }
+                nc::waddch(window, '\n' as nc::chtype);
             }
-            if let Some(color) = self.turn_to_color(i.turn, &self.calloc) {
-                let cpair = nc::COLOR_PAIR(color);
-                nc::wattron(window, cpair as i32);
-                nc::waddstr(window, &i.text);
-            }
-            nc::waddch(window, '\n' as nc::chtype);
         }
 
         nc::wnoutrefresh(window);
