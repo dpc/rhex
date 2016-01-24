@@ -77,8 +77,8 @@ impl Engine {
         self.ids_to_move = self.current_location()
                                .actors_alive_ids()
                                .iter()
+                               .filter(|&&id| id != player_id)
                                .cloned()
-                               .filter(|&id| id != player_id)
                                .collect();
     }
 

@@ -74,19 +74,15 @@ fn tile_is_deadend(map: &Map, coord: Coordinate) -> bool {
 
 impl DungeonGenerator {
     // generate_map_feature
-    // fn generate_continue_coridor(&self, map : &mut HashMap<h2d::Coordinate, Tile>,
-    fn generate_continue_coridor(&mut self, pos: h2d::Position) {
+    fn generate_continue_corridor(&mut self, pos: h2d::Position) {
 
         let npos = pos + pos.dir.to_coordinate();
 
-        match self.map.get(&npos.coord).cloned() {
-            Some(tile) => {
-                if tile.type_.is_passable() {
-                    self.endpoint_push(npos);
-                } else {
-                    self.endpoint_push(pos + Right);
-                }
-            }
+        let somepos = if let Some(tile) = self.map.get(&npos.coord) {
+            Some(if tile.type_.is_passable() { npos } else { pos + Right })
+        } else { None };
+        match somepos {
+            Some(pos) => self.endpoint_push(pos),
             None => {
                 self.map.insert(npos.coord, tile::Tile::new(tile::Empty));
                 self.endpoint_push(npos);
@@ -112,13 +108,13 @@ impl DungeonGenerator {
 
     // generate_map_feature
     fn generate_turn(&mut self, pos: h2d::Position, turn: h2d::Angle) {
-        self.generate_continue_coridor(pos + turn)
+        self.generate_continue_corridor(pos + turn)
     }
 
     // generate_map_feature
     fn generate_cross(&mut self, pos: h2d::Position, turn: h2d::Angle) {
         self.endpoint_push(pos + turn);
-        self.generate_continue_coridor(pos)
+        self.generate_continue_corridor(pos)
     }
 
     /// Generate room in front of the iterator `(pos, dir)`
@@ -279,7 +275,7 @@ impl DungeonGenerator {
                                2;
                     self.generate_room(pos, size)
                 }
-                _ => self.generate_continue_coridor(pos),
+                _ => self.generate_continue_corridor(pos),
             }
         }
 
