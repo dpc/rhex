@@ -135,13 +135,13 @@ pub struct Ui {
     mode: Mode,
     log: RefCell<VecDeque<LogEntry>>,
     target_pos: Option<Position>,
-    dot: nc::chtype,
+    dot: char,
 
-    label_color: u64,
-    text_color: u64,
-    text_gray_color: u64,
-    red_color: u64,
-    green_color: u64,
+    label_color: nc::attr_t,
+    text_color: nc::attr_t,
+    text_gray_color: nc::attr_t,
+    red_color: nc::attr_t,
+    green_color: nc::attr_t,
 
     input_mode : InputMode,
 
@@ -207,7 +207,7 @@ impl Ui {
             windows: Windows::after_resize(),
             mode: Mode::FullScreen(FSMode::Intro),
             target_pos: None,
-            dot: NORMAL_DOT,
+            dot: UNICODE_DOT,
             log: RefCell::new(VecDeque::new()),
 
             label_color: label_color,
@@ -1035,10 +1035,10 @@ impl Ui {
                 let occupied = cur_loc.at(c).is_occupied();
                 let (fg, bg, mut glyph) = if is_proper_coord && visible && occupied {
                     let (fg, glyph) = match cur_loc.at(c).actor_map_or(Race::Rat, |a| a.race) {
-                        Race::Human | Race::Elf | Race::Dwarf => (color::CHAR_SELF_FG, '@' as nc::chtype),
-                        Race::Rat => (color::CHAR_ENEMY_FG, 'r' as nc::chtype),
-                        Race::Goblin => (color::CHAR_ENEMY_FG, 'g' as nc::chtype),
-                        Race::Troll => (color::CHAR_ENEMY_FG, 'T' as nc::chtype),
+                        Race::Human | Race::Elf | Race::Dwarf => (color::CHAR_SELF_FG, '@'),
+                        Race::Rat => (color::CHAR_ENEMY_FG, 'r'),
+                        Race::Goblin => (color::CHAR_ENEMY_FG, 'g'),
+                        Race::Troll => (color::CHAR_ENEMY_FG, 'T'),
                     };
                     (fg, color::CHAR_BG, glyph)
                 } else if is_proper_coord && visible &&
@@ -1054,7 +1054,7 @@ impl Ui {
                         Some(tile::Empty) => {
                             let mut fg = color::STONE_FG;
                             let mut bg = color::EMPTY_BG;
-                            let mut glyph = ' ' as nc::chtype;
+                            let mut glyph = ' ';
 
                             if is_proper_coord {
                                 match t.and_then(|t| t.feature) {
@@ -1083,7 +1083,7 @@ impl Ui {
                             (color::WALL_FG, color::WALL_BG, WALL_CH)
                         }
                         Some(tile::Water) => (color::WATER_FG, color::WATER_BG, WATER_CH),
-                        None => (color::EMPTY_FG, color::EMPTY_BG, '?' as nc::chtype),
+                        None => (color::EMPTY_FG, color::EMPTY_BG, '?'),
                     }
                 } else {
                     (color::EMPTY_FG, color::EMPTY_BG, NOTHING_CH)
@@ -1133,7 +1133,7 @@ impl Ui {
                         }
                     } else {
                         draw = true;
-                        glyph = ' ' as nc::chtype;
+                        glyph = ' ';
                         bg = color;
                     }
                 }
@@ -1145,7 +1145,7 @@ impl Ui {
 
                 if self.mode == Mode::Examine {
                     if is_proper_coord && center == c {
-                        glyph = '@' as nc::chtype;
+                        glyph = '@';
                         fg = color::CHAR_GRAY_FG;
                         draw = true;
                     } else if is_proper_coord && c == head {
@@ -1154,13 +1154,13 @@ impl Ui {
                             fg = color::TARGET_SELF_FG;
                         } else {
                             draw = true;
-                            glyph = ' ' as nc::chtype;
+                            glyph = ' ';
                             bg = color::TARGET_SELF_FG;
                         }
                     }
                 } else if let Mode::Target(_) = self.mode {
                     if is_proper_coord && target_line.contains(&c) {
-                        glyph = '*' as nc::chtype;
+                        glyph = '*';
                         draw = true;
                         if c == head {
                             fg = color::TARGET_SELF_FG;
@@ -1173,11 +1173,16 @@ impl Ui {
 
 
                 if draw {
-                    glyph |= nc::COLOR_PAIR(calloc.get(fg, bg));
-                    if bold {
-                        glyph |= nc::A_BOLD();
+                    let cpair = nc::COLOR_PAIR(calloc.get(fg, bg));
+                    if glyph <= (127u8 as char) {
+                        let ch = (glyph as nc::chtype) | cpair;
+                        nc::mvwaddch(window, vy, vx, if bold { ch|nc::A_BOLD() } else { ch });
+                    } else {
+                        let attrflag = if bold { cpair|nc::A_BOLD() } else { cpair };
+                        nc::wattron(window, attrflag as i32);
+                        nc::mvwaddstr(window, vy, vx, &format!("{}", glyph));
+                        nc::wattroff(window, attrflag as i32);
                     }
-                    nc::mvwaddch(window, vy, vx, glyph);
                 }
 
             }
@@ -1208,20 +1213,17 @@ impl Ui {
         let cur_w = cur * width / max;
         let prev_w = prev * width / max;
 
-        nc::wattron(window, self.text_color as i32);
-        nc::waddch(window, '[' as nc::chtype);
+        nc::waddch(window, self.text_color | ('[' as nc::chtype));
         for i in 0..width {
-            let (color, s) = match (i < cur_w, i < prev_w) {
-                (true, true) => (self.text_color, '='),
-                (false, true) => (self.red_color, '-'),
-                (true, false) => (self.green_color, '+'),
-                (false, false) => (self.text_color, ' '),
+            let ch = match (i < cur_w, i < prev_w) {
+                (true, true) => self.text_color | ('=' as nc::chtype),
+                (false, true) => self.red_color | ('-' as nc::chtype),
+                (true, false) => self.green_color | ('+' as nc::chtype),
+                (false, false) => continue,
             };
-            nc::wattron(window, color as i32);
-            nc::waddch(window, s as nc::chtype);
+            nc::waddch(window, ch);
         }
-        nc::wattron(window, self.text_color as i32);
-        nc::waddch(window, ']' as nc::chtype);
+        nc::waddch(window, self.text_color | (']' as nc::chtype));
     }
 
     fn draw_turn<T>(&self, window: nc::WINDOW, label: &str, val: T)
@@ -1259,13 +1261,12 @@ impl Ui {
         }
 
         let item = if let Some(&(_, ref item)) = astate.items_equipped.get(&slot) {
-            item.description().to_string()
+            nc::waddstr(window, &format!("{:^13}", item.description()));
         } else {
-            "-".to_string()
+            nc::waddch(window, '-' as nc::chtype);
         };
 
         // let item = item.slice_chars(0, cmp::min(item.char_len(), 13));
-        nc::waddstr(window, &format!("{:^13}", item));
     }
 
     fn draw_inventory(&self) {
@@ -1641,12 +1642,12 @@ impl Drop for Ui {
 //      . . . . .
 //       . . . .
 //        . . .
-pub fn item_to_char(t: item::Category) -> nc::chtype {
-    (match t {
+pub fn item_to_char(t: item::Category) -> char {
+    match t {
         item::Category::Weapon => ')',
         item::Category::RangedWeapon => '}',
         item::Category::Armor => '[',
         item::Category::Misc => '"',
         item::Category::Consumable => '%',
-    }) as nc::chtype
+    }
 }
