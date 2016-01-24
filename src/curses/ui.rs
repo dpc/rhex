@@ -157,6 +157,7 @@ impl Ui {
         nc::raw();
         nc::timeout(0);
         nc::flushinp();
+        nc::curs_set(nc::CURSOR_VISIBILITY::CURSOR_INVISIBLE);
 
         assert!(nc::has_colors());
 
@@ -167,7 +168,7 @@ impl Ui {
         let green_color = nc::COLOR_PAIR(calloc.get(color::GREEN_FG, color::BACKGROUND_BG));
         let red_color = nc::COLOR_PAIR(calloc.get(color::RED_FG, color::BACKGROUND_BG));
 
-        let mut engine = game::Engine::new();
+        let engine = game::Engine::new();
 
         nc::doupdate();
 
@@ -260,8 +261,6 @@ impl Ui {
         let (max_x, max_y) = self.screen_size();
 
         nc::mv(max_y - 1, max_x - 1);
-        // TODO: Is this needed?
-        let _ = std::io::stdout().flush();
     }
 
     pub fn is_automoving(&self) -> bool {
@@ -1148,19 +1147,19 @@ impl Ui {
         let prev_w = prev * width / max;
 
         nc::wattron(window, self.text_color as i32);
-        nc::waddstr(window, "[");
+        nc::waddch(window, '[' as u64);
         for i in 0..width {
             let (color, s) = match (i < cur_w, i < prev_w) {
-                (true, true) => (self.text_color, "="),
-                (false, true) => (self.red_color, "-"),
-                (true, false) => (self.green_color, "+"),
-                (false, false) => (self.text_color, " "),
+                (true, true) => (self.text_color, '='),
+                (false, true) => (self.red_color, '-'),
+                (true, false) => (self.green_color, '+'),
+                (false, false) => (self.text_color, ' '),
             };
             nc::wattron(window, color as i32);
-            nc::waddstr(window, s);
+            nc::waddch(window, s as u64);
         }
         nc::wattron(window, self.text_color as i32);
-        nc::waddstr(window, "]");
+        nc::waddch(window, ']' as u64);
     }
 
     fn draw_turn<T>(&self, window: nc::WINDOW, label: &str, val: T)
@@ -1465,9 +1464,9 @@ impl Ui {
             if let Some(color) = self.turn_to_color(i.turn, &self.calloc) {
                 let cpair = nc::COLOR_PAIR(color);
                 nc::wattron(window, cpair as i32);
-                nc::waddstr(window, &format!("{} ", i.text));
+                nc::waddstr(window, &i.text);
             }
-            nc::waddstr(window, "\n");
+            nc::waddch(window, '\n' as u64);
         }
 
         nc::wnoutrefresh(window);

@@ -248,12 +248,9 @@ impl Location {
                                       .map(|(_, id)| (self.actors_byid[id].pos.coord, *id))
                                       .collect();
 
-        self.actors_coord_to_id
+        debug_assert!(self.actors_coord_to_id
             .iter()
-            .map(|(coord, ref id)| {
-                debug_assert!(self.actors_byid[*id].coord() == *coord);
-            })
-            .count();
+            .all(|(coord, ref id)| self.actors_byid[*id].coord() == *coord));
 
         self.recalculate_light_map();
         self.recalculate_noise();

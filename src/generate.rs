@@ -1,6 +1,6 @@
 
 use rand;
-use rand::Rng;
+use rand::{XorShiftRng, Rng, SeedableRng};
 use std::collections::VecDeque;
 use std::collections::HashMap;
 use simplemap::SimpleMap;
@@ -25,6 +25,7 @@ pub struct DungeonGenerator {
     endpoints: EndpointQueue,
     actors: Actors,
     items: Items,
+    rng: XorShiftRng
 }
 
 impl DungeonGenerator {
@@ -38,6 +39,7 @@ impl DungeonGenerator {
             endpoints: VecDeque::new(),
             actors: Default::default(),
             items: Default::default(),
+            rng: XorShiftRng::from_seed(rand::thread_rng().gen::<[u32; 4]>()),
         }
     }
 }
@@ -88,7 +90,7 @@ impl DungeonGenerator {
             None => {
                 self.map.insert(npos.coord, tile::Tile::new(tile::Empty));
                 self.endpoint_push(npos);
-                match rand::thread_rng().gen_range(0, 19) {
+                match self.rng.gen_range(0, 19) {
                     0 => {
                         let leftwall = pos + (pos.dir + h2d::Angle::Left).to_coordinate();
                         let rightwall = pos + (pos.dir + h2d::Angle::Right).to_coordinate();
@@ -130,7 +132,7 @@ impl DungeonGenerator {
         self.generate_room_inplace(center_pos, r);
 
         if tile_count_old == self.tile_count {
-            match rand::thread_rng().gen_range(0, 8) {
+            match self.rng.gen_range(0, 8) {
                 0 => self.endpoint_push(pos + Left),
                 1 => self.endpoint_push(pos + LeftBack),
                 2 => self.endpoint_push(pos + Right),
@@ -159,7 +161,7 @@ impl DungeonGenerator {
         let area = area::Area::new(coord, area::Type::Room(r));
 
         if Some(coord) != self.start {
-            match rand::thread_rng().gen_range(0, 6) {
+            match self.rng.gen_range(0, 6) {
                 2 => {
                     if self.stairs.is_none() {
                         self.map.insert(coord,
@@ -199,7 +201,7 @@ impl DungeonGenerator {
 
         coord.for_each_in_range(r as i32 - 1, |c| {
             if self.map.contains_key(&c) {
-                match rand::thread_rng().gen_range(0, 15) {
+                match self.rng.gen_range(0, 15) {
                     0 => {
                         self.map.get_mut(&c).unwrap().add_light((r + 4) as i32);
                     }
@@ -212,10 +214,10 @@ impl DungeonGenerator {
 
         coord.for_each_in_range(r as i32 / 2, |c| {
             if c != coord && self.map.get(&c).map(|t| t.is_passable()).unwrap_or(false) {
-                match rand::thread_rng().gen_range(0, 10) {
+                match self.rng.gen_range(0, 10) {
                     0 => {
                         let pos = Position::new(c, Direction::XY);
-                        let race = match rand::thread_rng().gen_range(0, 1 + self.level / 2) {
+                        let race = match self.rng.gen_range(0, 1 + self.level / 2) {
                             0 => Race::Rat,
                             1 => Race::Goblin,
                             _ => Race::Troll,
@@ -227,7 +229,7 @@ impl DungeonGenerator {
             }
         });
 
-        if rand::thread_rng().gen_weighted_bool(2) {
+        if self.rng.gen_weighted_bool(2) {
             self.items.insert(coord, item::random(self.level as i32));
         }
     }
@@ -240,7 +242,7 @@ impl DungeonGenerator {
     pub fn generate_map(mut self, start: h2d::Coordinate, size: u32) -> (Map, Actors, Items) {
         let start_dir = h2d::Direction::XY;
         let start_pos = Position::new(start, start_dir);
-        let first_room_r = rand::thread_rng().gen_range(0, 2) + 2;
+        let first_room_r = self.rng.gen_range(2, 4);
         self.start = Some(start);
 
         self.generate_room_inplace(start_pos, first_room_r);
@@ -261,9 +263,9 @@ impl DungeonGenerator {
                         .type_
                         .is_passable());
 
-            match rand::thread_rng().gen_range(0, 10) {
+            match self.rng.gen_range(0, 10) {
                 0 => {
-                    match rand::thread_rng().gen_range(0, 4) {
+                    match self.rng.gen_range(0, 4) {
                         0 => self.generate_turn(pos, Left),
                         1 => self.generate_turn(pos, Right),
                         2 => self.generate_cross(pos, Left),
@@ -272,8 +274,8 @@ impl DungeonGenerator {
                     }
                 }
                 1 => {
-                    let size = rand::thread_rng().gen_range(0, 3) +
-                               rand::thread_rng().gen_range(0, 2) +
+                    let size = self.rng.gen_range(0, 3) +
+                               self.rng.gen_range(0, 2) +
                                2;
                     self.generate_room(pos, size)
                 }
