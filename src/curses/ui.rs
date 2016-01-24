@@ -501,9 +501,9 @@ impl Ui {
         while !self.exit {
             let start = chrono::Local::now();
             self.run_once();
-            let end = chrono::Local::now();
-            if (end - start) < chrono::Duration::milliseconds(1) {
-                let nanosecs = (chrono::Duration::milliseconds(1) - (end - start))
+            let msdelta = chrono::Local::now() - start;
+            if msdelta < chrono::Duration::milliseconds(1) {
+                let nanosecs = (chrono::Duration::milliseconds(1) - msdelta)
                                    .num_nanoseconds()
                                    .unwrap();
                 assert!(nanosecs > 0);
@@ -1191,7 +1191,7 @@ impl Ui {
         nc::wnoutrefresh(window);
     }
 
-    fn draw_stats_bar(&self, window: nc::WINDOW, name: &str, cur: i32, prev: i32, max: i32) {
+    fn draw_stats_bar(&self, window: nc::WINDOW, y: i32, name: &str, cur: i32, prev: i32, max: i32) {
 
         let mut max_x = 0;
         let mut max_y = 0;
@@ -1206,6 +1206,7 @@ impl Ui {
         let prev = cmp::max(prev, 0) as u32;
         let max = cmp::max(max, 1) as u32;
 
+        nc::wmove(window, y, 0);
         nc::wattron(window, self.label_color as i32);
         nc::waddstr(window, &format!("{}: ", name));
 
@@ -1219,11 +1220,11 @@ impl Ui {
                 (true, true) => self.text_color | ('=' as nc::chtype),
                 (false, true) => self.red_color | ('-' as nc::chtype),
                 (true, false) => self.green_color | ('+' as nc::chtype),
-                (false, false) => continue,
+                (false, false) => break,
             };
             nc::waddch(window, ch);
         }
-        nc::waddch(window, self.text_color | (']' as nc::chtype));
+        nc::mvwaddch(window, y, max_x-1, self.text_color | (']' as nc::chtype));
     }
 
     fn draw_turn<T>(&self, window: nc::WINDOW, label: &str, val: T)
@@ -1339,25 +1340,21 @@ impl Ui {
         self.draw_val(window, "Dex", player.stats.base.dex);
 
         y += 1;
-        nc::wmove(window, y, 0);
-
-        self.draw_stats_bar(window,
+        self.draw_stats_bar(window, y,
                             "HP",
                             player.hp,
                             player.saved_hp,
                             player.stats.base.max_hp);
 
         y += 1;
-        nc::wmove(window, y, 0);
-        self.draw_stats_bar(window,
+        self.draw_stats_bar(window, y,
                             "MP",
                             player.mp,
                             player.saved_mp,
                             player.stats.base.max_mp);
 
         y += 1;
-        nc::wmove(window, y, 0);
-        self.draw_stats_bar(window,
+        self.draw_stats_bar(window, y,
                             "SP",
                             player.sp,
                             player.saved_sp,
