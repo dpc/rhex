@@ -27,14 +27,6 @@ use game::actor::{Race, Slot};
 use game::tile;
 use util;
 
-mod locale {
-    use libc::{c_int, c_char};
-    pub const LC_ALL: c_int = 6;
-    extern "C" {
-        pub fn setlocale(category: c_int, locale: *const c_char) -> *mut c_char;
-    }
-}
-
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
 enum InputMode {
     Vi,
@@ -143,7 +135,7 @@ pub struct Ui {
     mode: Mode,
     log: RefCell<VecDeque<LogEntry>>,
     target_pos: Option<Position>,
-    dot: char,
+    dot: nc::chtype,
 
     label_color: u64,
     text_color: u64,
@@ -186,9 +178,7 @@ impl Ui {
             env::set_var("ESCDELAY", "25");
         }
 
-        unsafe {
-            let _ = locale::setlocale(locale::LC_ALL, b"en_US.UTF-8\0".as_ptr() as *const i8);
-        }
+        nc::setlocale(nc::constants::LcCategory::all, "");
 
         nc::initscr();
         nc::start_color();
@@ -217,7 +207,7 @@ impl Ui {
             windows: Windows::after_resize(),
             mode: Mode::FullScreen(FSMode::Intro),
             target_pos: None,
-            dot: UNICODE_DOT,
+            dot: NORMAL_DOT,
             log: RefCell::new(VecDeque::new()),
 
             label_color: label_color,
@@ -699,7 +689,7 @@ impl Ui {
                         self.target_pos = None;
                         self.mode_switch_to(mode);
                     }
-                    AutoMove(automove_type) => self.automoving = Some(AutoMoveType::Explore),
+                    AutoMove(automove_type) => self.automoving = Some(automove_type),
                 }
             },
             Mode::Inventory(InvMode::Equip) => {
@@ -830,11 +820,11 @@ impl Ui {
             return;
         }
 
-        let discoviered_areas = player.discovered_areas
+        let discovered_areas = player.discovered_areas
                                       .iter()
                                       .filter_map(|coord| cur_loc.at(*coord).tile().area);
 
-        if let Some(s) = self.format_areas(discoviered_areas.map(|area| area.type_)) {
+        if let Some(s) = self.format_areas(discovered_areas.map(|area| area.type_)) {
             self.log(&s);
         }
 
@@ -1039,18 +1029,16 @@ impl Ui {
 
                 let mut draw = knows;
 
-                if visible {
-                    debug_assert!(knows || player.is_dead());
-                }
+                debug_assert!(!visible || knows || player.is_dead());
 
                 let mut bold = false;
                 let occupied = cur_loc.at(c).is_occupied();
                 let (fg, bg, mut glyph) = if is_proper_coord && visible && occupied {
                     let (fg, glyph) = match cur_loc.at(c).actor_map_or(Race::Rat, |a| a.race) {
-                        Race::Human | Race::Elf | Race::Dwarf => (color::CHAR_SELF_FG, '@'),
-                        Race::Rat => (color::CHAR_ENEMY_FG, 'r'),
-                        Race::Goblin => (color::CHAR_ENEMY_FG, 'g'),
-                        Race::Troll => (color::CHAR_ENEMY_FG, 'T'),
+                        Race::Human | Race::Elf | Race::Dwarf => (color::CHAR_SELF_FG, '@' as nc::chtype),
+                        Race::Rat => (color::CHAR_ENEMY_FG, 'r' as nc::chtype),
+                        Race::Goblin => (color::CHAR_ENEMY_FG, 'g' as nc::chtype),
+                        Race::Troll => (color::CHAR_ENEMY_FG, 'T' as nc::chtype),
                     };
                     (fg, color::CHAR_BG, glyph)
                 } else if is_proper_coord && visible &&
@@ -1066,7 +1054,7 @@ impl Ui {
                         Some(tile::Empty) => {
                             let mut fg = color::STONE_FG;
                             let mut bg = color::EMPTY_BG;
-                            let mut glyph = ' ';
+                            let mut glyph = ' ' as nc::chtype;
 
                             if is_proper_coord {
                                 match t.and_then(|t| t.feature) {
@@ -1095,7 +1083,7 @@ impl Ui {
                             (color::WALL_FG, color::WALL_BG, WALL_CH)
                         }
                         Some(tile::Water) => (color::WATER_FG, color::WATER_BG, WATER_CH),
-                        None => (color::EMPTY_FG, color::EMPTY_BG, '?'),
+                        None => (color::EMPTY_FG, color::EMPTY_BG, '?' as nc::chtype),
                     }
                 } else {
                     (color::EMPTY_FG, color::EMPTY_BG, NOTHING_CH)
@@ -1145,7 +1133,7 @@ impl Ui {
                         }
                     } else {
                         draw = true;
-                        glyph = ' ';
+                        glyph = ' ' as nc::chtype;
                         bg = color;
                     }
                 }
@@ -1157,7 +1145,7 @@ impl Ui {
 
                 if self.mode == Mode::Examine {
                     if is_proper_coord && center == c {
-                        glyph = '@';
+                        glyph = '@' as nc::chtype;
                         fg = color::CHAR_GRAY_FG;
                         draw = true;
                     } else if is_proper_coord && c == head {
@@ -1166,13 +1154,13 @@ impl Ui {
                             fg = color::TARGET_SELF_FG;
                         } else {
                             draw = true;
-                            glyph = ' ';
+                            glyph = ' ' as nc::chtype;
                             bg = color::TARGET_SELF_FG;
                         }
                     }
                 } else if let Mode::Target(_) = self.mode {
                     if is_proper_coord && target_line.contains(&c) {
-                        glyph = '*';
+                        glyph = '*' as nc::chtype;
                         draw = true;
                         if c == head {
                             fg = color::TARGET_SELF_FG;
@@ -1185,19 +1173,11 @@ impl Ui {
 
 
                 if draw {
-                    let cpair = nc::COLOR_PAIR(calloc.get(fg, bg));
-
+                    glyph |= nc::COLOR_PAIR(calloc.get(fg, bg));
                     if bold {
-                        nc::wattron(window, nc::A_BOLD() as i32);
+                        glyph |= nc::A_BOLD();
                     }
-
-                    nc::wattron(window, cpair as i32);
-                    nc::mvwaddch(window, vy, vx, glyph as u64);
-                    nc::wattroff(window, cpair as i32);
-
-                    if bold {
-                        nc::wattroff(window, nc::A_BOLD() as i32);
-                    }
+                    nc::mvwaddch(window, vy, vx, glyph);
                 }
 
             }
@@ -1229,7 +1209,7 @@ impl Ui {
         let prev_w = prev * width / max;
 
         nc::wattron(window, self.text_color as i32);
-        nc::waddch(window, '[' as u64);
+        nc::waddch(window, '[' as nc::chtype);
         for i in 0..width {
             let (color, s) = match (i < cur_w, i < prev_w) {
                 (true, true) => (self.text_color, '='),
@@ -1238,10 +1218,10 @@ impl Ui {
                 (false, false) => (self.text_color, ' '),
             };
             nc::wattron(window, color as i32);
-            nc::waddch(window, s as u64);
+            nc::waddch(window, s as nc::chtype);
         }
         nc::wattron(window, self.text_color as i32);
-        nc::waddch(window, ']' as u64);
+        nc::waddch(window, ']' as nc::chtype);
     }
 
     fn draw_turn<T>(&self, window: nc::WINDOW, label: &str, val: T)
@@ -1548,7 +1528,7 @@ impl Ui {
                 nc::wattron(window, cpair as i32);
                 nc::waddstr(window, &i.text);
             }
-            nc::waddch(window, '\n' as u64);
+            nc::waddch(window, '\n' as nc::chtype);
         }
 
         nc::wnoutrefresh(window);
@@ -1661,12 +1641,12 @@ impl Drop for Ui {
 //      . . . . .
 //       . . . .
 //        . . .
-pub fn item_to_char(t: item::Category) -> char {
-    match t {
+pub fn item_to_char(t: item::Category) -> nc::chtype {
+    (match t {
         item::Category::Weapon => ')',
         item::Category::RangedWeapon => '}',
         item::Category::Armor => '[',
         item::Category::Misc => '"',
         item::Category::Consumable => '%',
-    }
+    }) as nc::chtype
 }
