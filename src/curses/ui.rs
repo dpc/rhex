@@ -1566,8 +1566,6 @@ impl Ui {
 
 impl Drop for Ui {
     fn drop(&mut self) {
-        nc::clear();
-        nc::refresh();
         nc::endwin();
     }
 }
