@@ -2,7 +2,6 @@ extern crate simplemap;
 extern crate ncurses;
 extern crate hex2d;
 extern crate hex2d_dpcext as hex2dext;
-extern crate libc;
 extern crate rand;
 extern crate num;
 extern crate schedule_recv;

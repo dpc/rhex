@@ -27,4 +27,3 @@ fern = "0.3.5"
 schedule_recv = "0.0.1"
 ncurses = "5.80.0"
 dpc-simplemap = { git="https://github.com/dpc/simplemap-rs", branch="no_hash_state" }
-libc = "0.2.5"
