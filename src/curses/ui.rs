@@ -9,6 +9,8 @@ use std::fmt::Write as FmtWrite;
 use chrono;
 use num::integer::Integer;
 
+use game::Action::*;
+
 use ncurses as nc;
 use hex2d::{Position, Coordinate, Angle, Left, Right, Forward, Back, ToCoordinate};
 
@@ -33,6 +35,29 @@ mod locale {
     }
 }
 
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
+enum InputMode {
+    Vi,
+    Normal,
+}
+
+impl InputMode {
+    fn toggle(&mut self) {
+        *self = match *self {
+            InputMode::Vi => InputMode::Normal,
+            InputMode::Normal => InputMode::Vi,
+        }
+    }
+}
+
+impl fmt::Display for InputMode {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match *self {
+            InputMode::Vi => write!(f, "Vi"),
+            InputMode::Normal => write!(f, "Normal")
+        }
+    }
+}
 
 pub struct Window {
     pub window: nc::WINDOW,
@@ -126,6 +151,8 @@ pub struct Ui {
     red_color: u64,
     green_color: u64,
 
+    input_mode : InputMode,
+
     engine: game::Engine,
     exit: bool,
     needs_redraw: bool,
@@ -138,6 +165,19 @@ pub struct Ui {
     game_action_queue: VecDeque<game::Action>,
 }
 
+use self::Action::*;
+
+enum Action {
+    Game(game::Action),
+    ModeSwitch(Mode),
+    AutoMove(AutoMoveType),
+}
+
+use self::GlobalAction::*;
+
+enum GlobalAction {
+    ToggleInputMode,
+}
 
 impl Ui {
     pub fn new() -> Result<Self> {
@@ -185,6 +225,8 @@ impl Ui {
             text_gray_color: text_gray_color,
             red_color: red_color,
             green_color: green_color,
+
+            input_mode : InputMode::Vi,
 
             exit: false,
             needs_redraw: true,
@@ -541,6 +583,10 @@ impl Ui {
         self.action_push(game::Action::Descend)
     }
 
+    pub fn queue_action(&mut self, action : game::Action) {
+        self.action_push(action)
+    }
+
     pub fn queue_equip(&mut self, ch: char) {
         self.action_push(game::Action::Equip(ch))
     }
@@ -549,23 +595,75 @@ impl Ui {
         self.action_push(game::Action::Drop_(ch))
     }
 
-    pub fn input_handle_key(&mut self, ch: i32) {
+    pub fn in_vi_input_mode(&self) -> bool {
+        self.input_mode == InputMode::Vi
+    }
+
+    pub fn key_to_action_normal(&self, key : i32) -> Option<Action> {
+        let action = match (key, self.in_vi_input_mode()) {
+            (KEY_LOWH, true) |
+            (KEY_LOWQ, false) |
+            (nc::KEY_LEFT, _) => Game(Turn(Left)),
+            (KEY_LOWL, true) |
+            (KEY_LOWE, false) |
+            (nc::KEY_RIGHT, _) => Game(Turn(Right)),
+            (KEY_LOWK, true) |
+            (KEY_LOWW, false) |
+            (nc::KEY_UP, _) => Game(Move(Forward)),
+            (KEY_LOWC, true) => Game(Charge),
+            (KEY_LOWU, true) => Game(Spin(Left)),
+            (KEY_LOWI, true) => Game(Spin(Right)),
+            (KEY_CAPH, true) |
+            (KEY_LOWA, false) => Game(Move(Left)),
+            (KEY_CAPL, true) |
+            (KEY_LOWD, false) => Game(Move(Right)),
+            (KEY_LOWJ, true) |
+            (KEY_LOWS, false) |
+            (nc::KEY_DOWN, _) => Game(Move(Back)),
+            (KEY_DOT, _) => Game(Wait),
+            (KEY_COMMA, _) => Game(Pick),
+            (KEY_DESCEND, _) => Game(Descend),
+            (KEY_LOWO, _) => AutoMove(AutoMoveType::Explore),
+            (KEY_CAPK, true) => AutoMove(AutoMoveType::Walk),
+            (KEY_LOWQ, true) |
+            (KEY_ESC, _) => ModeSwitch(Mode::FullScreen(FSMode::Quit)),
+            (KEY_CAPI, _) => ModeSwitch(Mode::Inventory(InvMode::View)),
+            (KEY_CAPE, _) => ModeSwitch(Mode::Inventory(InvMode::Equip)),
+            (KEY_CAPD, _) => ModeSwitch(Mode::Inventory(InvMode::Drop_)),
+            (KEY_LOWX, _) => ModeSwitch(Mode::Examine),
+            (KEY_LOWF, _) => ModeSwitch(Mode::Target(TargetMode::Ranged)),
+            (KEY_HELP, _) => ModeSwitch(Mode::FullScreen(FSMode::Help)),
+            (KEY_GOTO, _) => ModeSwitch(Mode::GoTo),
+            _ => { return None}
+        };
+        Some(action)
+    }
+
+    pub fn key_to_action_global(&self, key : i32) -> Option<GlobalAction> {
+        let action = match key {
+            nc::KEY_F2 => ToggleInputMode,
+            _ => return None,
+        };
+
+        Some(action)
+    }
+    pub fn input_handle_key_mode_specific(&mut self, key : i32) {
         match self.mode {
             Mode::FullScreen(fs_mode) => {
                 match fs_mode {
                     FSMode::Quit => {
-                        match ch {
+                        match key {
                             KEY_LOWY | KEY_CAPY => self.exit = true,
                             _ => self.mode_switch_to(Mode::Normal),
                         }
                     }
                     FSMode::Intro => {
-                        match ch {
+                        match key {
                             _ => self.mode_switch_to(Mode::FullScreen(FSMode::PickRace)),
                         }
                     }
                     FSMode::PickRace => {
-                        match ch {
+                        match key {
                             KEY_LOWA => {
                                 self.initial_spawn(Race::Human);
                                 self.mode_switch_to(Mode::Normal);
@@ -582,94 +680,70 @@ impl Ui {
                         }
                     }
                     _ => {
-                        match ch {
+                        match key {
                             _ => self.mode_switch_to(Mode::Normal),
                         }
                     }
                 }
             }
-            Mode::Normal => {
-                match ch {
-                    KEY_LOWH|nc::KEY_LEFT => self.queue_turn(Left),
-                    KEY_LOWL|nc::KEY_RIGHT => self.queue_turn(Right),
-                    KEY_LOWK|nc::KEY_UP => self.queue_move(Forward),
-                    KEY_LOWC => self.queue_charge(),
-                    KEY_LOWU => self.queue_spin(Left),
-                    KEY_LOWI => self.queue_spin(Right),
-                    KEY_CAPH => self.queue_move(Left),
-                    KEY_CAPL => self.queue_move(Right),
-                    KEY_LOWJ|nc::KEY_DOWN => self.queue_move(Back),
-                    KEY_DOT => self.queue_wait(),
-                    KEY_COMMA => self.queue_pick(),
-                    KEY_DESCEND => self.queue_descend(),
-                    KEY_LOWO => self.automoving = Some(AutoMoveType::Explore),
-                    KEY_CAPK => self.automoving = Some(AutoMoveType::Walk),
-                    KEY_LOWQ => self.mode_switch_to(Mode::FullScreen(FSMode::Quit)),
-                    KEY_CAPI => self.mode_switch_to(Mode::Inventory(InvMode::View)),
-                    KEY_CAPE => self.mode_switch_to(Mode::Inventory(InvMode::Equip)),
-                    KEY_CAPD => self.mode_switch_to(Mode::Inventory(InvMode::Drop_)),
-                    KEY_LOWX => {
-                        self.target_pos = None;
-                        self.mode_switch_to(Mode::Examine);
-                    }
-                    KEY_LOWF => {
+            Mode::Normal => if let Some(action) = self.key_to_action_normal(key) {
+                match action {
+                    Game(action) => self.queue_action(action),
+                    ModeSwitch(mode @ Mode::Target(TargetMode::Ranged)) => {
                         if self.player().can_attack_ranged() {
                             self.target_pos = None;
-                            self.mode_switch_to(Mode::Target(TargetMode::Ranged));
+                            self.mode_switch_to(mode);
                         }
+                    },
+                    ModeSwitch(mode) => {
+                        self.target_pos = None;
+                        self.mode_switch_to(mode);
                     }
-                    KEY_HELP => {
-                        self.mode_switch_to(Mode::FullScreen(FSMode::Help));
-                    }
-                    KEY_GOTO => self.mode_switch_to(Mode::GoTo),
-                    _ => {}
+                    AutoMove(automove_type) => self.automoving = Some(AutoMoveType::Explore),
                 }
-            }
+            },
             Mode::Inventory(InvMode::Equip) => {
-                match ch {
-                    ch => {
-                        match ch as u8 as char {
-                            'a'...'z' | 'A'...'Z' => {
-                                if self.player().item_letter_taken(ch as u8 as char) {
-                                    self.queue_equip(ch as u8 as char)
-                                }
+                let ch = key as u8 as char;
+                match key {
+                    KEY_ESC => self.mode_switch_to(Mode::Normal),
+                    _ => match ch {
+                        'a'...'z' | 'A'...'Z' => {
+                            if self.player().item_letter_taken(ch) {
+                                self.queue_equip(ch)
                             }
-                            '\x1b' => self.mode_switch_to(Mode::Normal),
-                            _ => {}
                         }
+                        _ => {}
                     }
                 }
             }
             Mode::Inventory(InvMode::View) => {
-                match ch {
-                    ch => {
-                        match ch as u8 as char {
-                            'a'...'z' | 'A'...'Z' => {}
-                            '\x1b' => self.mode_switch_to(Mode::Normal),
-                            _ => {}
-                        }
+                let ch = key as u8 as char;
+                match key {
+                    KEY_ESC => self.mode_switch_to(Mode::Normal),
+                    _ => match ch {
+                        'a'...'z' | 'A'...'Z' => {}
+                        _ => {}
                     }
                 }
             }
             Mode::Inventory(InvMode::Drop_) => {
-                match ch {
-                    ch => {
-                        match ch as u8 as char {
-                            'a'...'z' | 'A'...'Z' => {
-                                if self.player().item_letter_taken(ch as u8 as char) {
-                                    self.queue_drop(ch as u8 as char)
-                                }
+                let ch = key as u8 as char;
+                match key {
+                    KEY_ESC => self.mode_switch_to(Mode::Normal),
+                    _ => match ch {
+                        'a'...'z' | 'A'...'Z' => {
+                            if self.player().item_letter_taken(ch as u8 as char) {
+                                self.queue_drop(ch as u8 as char)
                             }
-                            '\x1b' => self.mode_switch_to(Mode::Normal),
-                            _ => {}
                         }
+                        _ => {}
                     }
                 }
             }
             Mode::Examine => {
                 let pos = self.target_pos.unwrap_or(self.player().pos);
 
-                match ch {
+                match key {
                     KEY_ESC | KEY_LOWX | KEY_LOWQ => {
                         self.target_pos = None;
                         self.mode = Mode::Normal;
@@ -701,7 +775,7 @@ impl Ui {
                 let center = self.player().pos;
                 let pos = self.target_pos.unwrap_or(center);
 
-                match ch {
+                match key {
                     KEY_ESC | KEY_LOWX | KEY_LOWQ => {
                         self.target_pos = None;
                         self.mode_switch_to(Mode::Normal);
@@ -729,12 +803,20 @@ impl Ui {
                 self.redraw();
             }
             Mode::GoTo => {
-                match ch {
+                match key {
                     KEY_DESCEND => self.automoving = Some(AutoMoveType::GoTo(GoToType::Stairs)),
                     _ => {}
                 }
                 self.mode_switch_to(Mode::Normal);
             }
+        }
+    }
+    pub fn input_handle_key(&mut self, key : i32) {
+        if let Some(global_action) = self.key_to_action_global(key) {
+            self.input_mode.toggle();
+            self.redraw();
+        } else {
+            self.input_handle_key_mode_specific(key)
         }
     }
 
@@ -1514,9 +1596,13 @@ impl Ui {
         nc::wmove(window, 0, 0);
 
         nc::waddstr(window, "This game is still incomplete. Sorry for that.\n\n");
-        nc::waddstr(window, "= (more or less) Implemented actions = \n\n");
-        nc::waddstr(window, "Move/attack: hjklui\n");
-        nc::waddstr(window, "Strafe/attack: Shift + h/l\n");
+        nc::waddstr(window, &format!("Current input mode: {} (F2 to change)\n\n", self.input_mode));
+        if self.in_vi_input_mode() {
+            nc::waddstr(window, "Move/attack: hjklui\n");
+            nc::waddstr(window, "Strafe/attack: Shift + h/l\n");
+        } else {
+            nc::waddstr(window, "Move/attack: awsdqe\n");
+        }
         nc::waddstr(window, "Charge: c\n");
         nc::waddstr(window, "Wait: .\n");
         nc::waddstr(window, "Descend: >\n");
@@ -1529,7 +1615,7 @@ impl Ui {
         nc::waddstr(window, "Equip/Use: E\n");
         nc::waddstr(window, "Drop: D\n");
         nc::waddstr(window, "Ranged/Throw: f (not fully working)\n");
-        nc::waddstr(window, "Quit: q\n");
+        nc::waddstr(window, "Quit: ESC/q\n");
         nc::wnoutrefresh(window);
     }
 
