@@ -592,10 +592,10 @@ impl Ui {
     pub fn key_to_action_normal(&self, key : i32) -> Option<Action> {
         let action = match (key, self.in_vi_input_mode()) {
             (KEY_LOWH, true) |
-            (KEY_LOWQ, false) |
+            (KEY_LOWA, false) |
             (nc::KEY_LEFT, _) => Game(Turn(Left)),
             (KEY_LOWL, true) |
-            (KEY_LOWE, false) |
+            (KEY_LOWD, false) |
             (nc::KEY_RIGHT, _) => Game(Turn(Right)),
             (KEY_LOWK, true) |
             (KEY_LOWW, false) |
@@ -604,9 +604,9 @@ impl Ui {
             (KEY_LOWU, true) => Game(Spin(Left)),
             (KEY_LOWI, true) => Game(Spin(Right)),
             (KEY_CAPH, true) |
-            (KEY_LOWA, false) => Game(Move(Left)),
+            (KEY_LOWQ, false) => Game(Move(Left)),
             (KEY_CAPL, true) |
-            (KEY_LOWD, false) => Game(Move(Right)),
+            (KEY_LOWE, false) => Game(Move(Right)),
             (KEY_LOWJ, true) |
             (KEY_LOWS, false) |
             (nc::KEY_DOWN, _) => Game(Move(Back)),
