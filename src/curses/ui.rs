@@ -76,9 +76,7 @@ struct Windows {
 
 impl Windows {
     fn after_resize() -> Self {
-        let mut max_x = 0;
-        let mut max_y = 0;
-        nc::getmaxyx(nc::stdscr, &mut max_y, &mut max_x);
+        let (max_y, max_x) = Ui::screen_size();
 
         let mid_x = max_x - 30;
         let mid_y = 12;
@@ -241,12 +239,16 @@ impl Ui {
         self.spawned = true;
     }
 
-    pub fn screen_size(&self) -> (i32, i32) {
+    pub fn screen_size() -> (i32, i32) {
+        Ui::window_size(nc::stdscr)
+    }
+
+    pub fn window_size(window: nc::WINDOW) -> (i32, i32) {
         let mut max_x = 0;
         let mut max_y = 0;
-        nc::getmaxyx(nc::stdscr, &mut max_y, &mut max_x);
+        nc::getmaxyx(window, &mut max_y, &mut max_x);
 
-        (max_y, max_y)
+        (max_y, max_x)
     }
 
     pub fn resize(&mut self) {
@@ -290,7 +292,7 @@ impl Ui {
             }
         }
 
-        let (max_x, max_y) = self.screen_size();
+        let (max_y, max_x) = Ui::screen_size();
 
         nc::mv(max_y - 1, max_x - 1);
     }
@@ -910,9 +912,7 @@ impl Ui {
         let player_ahead = player.pos.coord + player.pos.dir;
 
         // Get the screen bounds.
-        let mut max_x = 0;
-        let mut max_y = 0;
-        nc::getmaxyx(window, &mut max_y, &mut max_x);
+        let (max_y, max_x) = Ui::window_size(window);
 
         let mid_x = max_x / 2;
         let mid_y = max_y / 2;
@@ -1193,9 +1193,7 @@ impl Ui {
 
     fn draw_stats_bar(&self, window: nc::WINDOW, y: i32, name: &str, cur: i32, prev: i32, max: i32) {
 
-        let mut max_x = 0;
-        let mut max_y = 0;
-        nc::getmaxyx(window, &mut max_y, &mut max_x);
+        let (max_y, max_x) = Ui::window_size(window);
 
         if max_x < 6 || max_y < 1 {
             // Don't draw anything on too small window
@@ -1206,9 +1204,8 @@ impl Ui {
         let prev = cmp::max(prev, 0) as u32;
         let max = cmp::max(max, 1) as u32;
 
-        nc::wmove(window, y, 0);
         nc::wattron(window, self.label_color as i32);
-        nc::waddstr(window, &format!("{}: ", name));
+        nc::mvwaddstr(window, y, 0, &format!("{}: ", name));
 
         let width = max_x as u32 - 4 - name.chars().count() as u32;
         let cur_w = cur * width / max;
@@ -1230,18 +1227,16 @@ impl Ui {
     fn draw_turn<T>(&self, window: nc::WINDOW, label: &str, val: T)
         where T: Integer + fmt::Display
     {
-        nc::wattron(window, self.label_color as i32);
-        nc::waddstr(window, &format!("{}: ", label));
+        self.draw_label(window, label);
 
         nc::wattron(window, self.text_color as i32);
-        nc::waddstr(window, &format!("{:<8}", val));
+        nc::waddstr(window, &format!(" {:<8}", val));
     }
 
     fn draw_val<T>(&self, window: nc::WINDOW, label: &str, val: T)
         where T: Integer + fmt::Display
     {
-        nc::wattron(window, self.label_color as i32);
-        nc::waddstr(window, &format!("{}:", label));
+        self.draw_label(window, label);
 
         nc::wattron(window, self.text_color as i32);
         nc::waddstr(window, &format!("{:>2} ", val));
@@ -1315,9 +1310,7 @@ impl Ui {
         nc::werase(window);
         nc::wmove(window, 0, 0);
 
-        let mut max_x = 0;
-        let mut max_y = 0;
-        nc::getmaxyx(window, &mut max_y, &mut max_x);
+        let (max_y, max_x) = Ui::window_size(window);
 
         let mut y = 0;
         nc::wmove(window, y, 0);
@@ -1602,9 +1595,7 @@ impl Ui {
         let mut calloc = self.calloc.borrow_mut();
         let cpair = nc::COLOR_PAIR(calloc.get(color::VISIBLE_FG, color::BACKGROUND_BG));
 
-        let mut max_x = 0;
-        let mut max_y = 0;
-        nc::getmaxyx(nc::stdscr, &mut max_y, &mut max_x);
+        let (max_y, max_x) = Ui::screen_size();
         let text = "Quit. Are you sure?";
 
         nc::wbkgd(window, ' ' as nc::chtype | cpair as nc::chtype);
