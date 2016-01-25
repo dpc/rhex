@@ -145,15 +145,19 @@ impl Location {
             // TODO: Find an alternative place
             unimplemented!();
         }
-        self.pre_any_tick();
         let id = self.actors_counter;
         self.actors_counter += 1;
 
         debug_assert!(!self.actors_coord_to_id.contains_key(&astate.pos.coord));
         self.actors_coord_to_id.insert(astate.pos.coord, id);
-        astate.pre_own_tick();
+        astate.pre_spawn(self);
+        self.actors_byid.insert(id, astate);
+        self.recalculate_light_map();
+        self.recalculate_noise();
+
+        self.pre_any_tick();
+        let mut astate = self.actors_byid.remove(&id).unwrap();
         astate.post_spawn(self);
-        astate.post_own_tick(self);
         self.actors_byid.insert(id, astate);
         self.post_any_tick();
 
