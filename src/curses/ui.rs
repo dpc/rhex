@@ -1151,7 +1151,7 @@ impl Ui {
                 if let Some(t) = t {
                     if visible && t.light > 0 {
                         if !occupied {
-                            fg = color::LIGHTSOURCE;
+                            fg = color::LIGHTSOURCE.to_u8();
                             bold = true;
                         }
                     }
@@ -1159,7 +1159,7 @@ impl Ui {
 
                 if is_proper_coord && visible &&
                    cur_loc.at(c).actor_map_or(0, |a| a.light_emision()) > 0u32 {
-                    bg = color::LIGHTSOURCE;
+                    bg = color::LIGHTSOURCE.to_u8();
                 }
 
                 if is_proper_coord && actors_aheads.contains_key(&c) &&
@@ -1185,7 +1185,7 @@ impl Ui {
                 }
 
                 if is_proper_coord && c != center && !visible && player.hears(c) {
-                    bg = color::NOISE_BG;
+                    bg = color::NOISE_BG.to_u8();
                     draw = true;
                 }
 
@@ -1197,7 +1197,7 @@ impl Ui {
                     {
                         let cur_pos = enemies_prev_pos[&c];
                         let r = 5 - self.anim_frame_count;
-                        fg = color::rgb_to_u8(r as u8, 0, 0);
+                        fg = color::RGB::new(r as u8, 0, 0).to_u8();
                         match cur_pos.direction_to_cw(c) {
                             Some(Direction::XY) | Some(Direction::YX) =>  glyph = '-',
                             Some(Direction::ZY) | Some(Direction::YZ) =>  glyph = '\\',
@@ -1214,7 +1214,7 @@ impl Ui {
                     {
                         let cur_pos = enemies_prev_head[&c];
                         let r = 5 - self.anim_frame_count;
-                        fg = color::rgb_to_u8(r as u8, 0, 0);
+                        fg = color::RGB::new(r as u8, 0, 0).to_u8();
                         glyph = self.dot;
                     }
 
@@ -1704,6 +1704,7 @@ impl Drop for Ui {
         nc::endwin();
     }
 }
+
 
 //        . . .
 //       . . . .

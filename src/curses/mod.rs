@@ -1,5 +1,6 @@
 use game;
 
+/// Working with 256 color palette
 mod color;
 
 mod consts;
