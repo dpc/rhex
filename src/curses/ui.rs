@@ -434,6 +434,8 @@ impl Ui {
         if actor_id == player_id {
             if self.is_automoving() {
                 self.next_turn_ts = chrono::Local::now() + Duration::milliseconds(50);
+            } else if self.player().is_dead() {
+                self.next_turn_ts = chrono::Local::now() + Duration::milliseconds(50);
             }
         };
     }
@@ -455,7 +457,7 @@ impl Ui {
         self.next_anim_frame_ts <= chrono::Local::now()
     }
 
-    pub fn run_once(&mut self) {
+    pub fn run_engine_turn(&mut self) {
         if self.spawned && self.is_next_turn_time() {
             let player_id = self.current_location().player_id();
             let mut player_acted = false;
@@ -511,16 +513,22 @@ impl Ui {
                 self.redraw();
             }
         }
-        self.input_handle();
-        {
-            if self.is_next_anim_frame_time() && self.anim_frame_count < 20 {
-                self.redraw_now();
-                self.anim_frame_count += 1;
-                self.next_anim_frame_ts = chrono::Local::now() + Duration::milliseconds(100);
-            } else if self.game_action_queue.is_empty() {
-                thread::sleep(std::time::Duration::new(0, 10_000_000));
-            }
+    }
+
+    pub fn maybe_redraw_now(&mut self) {
+        if self.is_next_anim_frame_time() && self.anim_frame_count < 20 {
+            self.redraw_now();
+            self.anim_frame_count += 1;
+            self.next_anim_frame_ts = chrono::Local::now() + Duration::milliseconds(100);
+        } else if self.game_action_queue.is_empty() {
+            thread::sleep(std::time::Duration::new(0, 10_000_000));
         }
+    }
+
+    pub fn run_once(&mut self) {
+        self.run_engine_turn();
+        self.input_handle();
+        self.maybe_redraw_now();
     }
 
     pub fn run(&mut self) {
@@ -1134,7 +1142,6 @@ impl Ui {
                     (color::EMPTY_FG, color::EMPTY_BG, NOTHING_CH)
                 };
 
-                
 
                 let (mut fg, mut bg) = if !visible || light == 0 {
                     if visible {
