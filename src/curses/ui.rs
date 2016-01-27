@@ -6,13 +6,13 @@ use std::{thread, cmp, fmt};
 use std::io::Write;
 use std::fmt::Write as FmtWrite;
 
-use chrono;
+use chrono::{self, Duration};
 use num::integer::Integer;
 
 use game::Action::*;
 
 use ncurses as nc;
-use hex2d::{Position, Coordinate, Angle, Left, Right, Forward, Back, ToCoordinate};
+use hex2d::{Position, Coordinate, Angle, Left, Right, Forward, Back, ToCoordinate, Direction};
 
 use hex2dext::algo::bfs;
 
@@ -145,13 +145,17 @@ pub struct Ui {
 
     engine: game::Engine,
     exit: bool,
-    needs_redraw: bool,
     spawned: bool,
 
     automoving: Option<AutoMoveType>,
     automoving_stopped_turn: u64,
 
-    after_action_delay: u32,
+    anim_frame_count: u32,
+    action_ui_duration_ms: i64,
+    next_turn_ts:  chrono::datetime::DateTime<chrono::offset::local::Local>,
+    next_anim_frame_ts:  chrono::datetime::DateTime<chrono::offset::local::Local>,
+    next_redraw: chrono::datetime::DateTime<chrono::offset::local::Local>,
+
     game_action_queue: VecDeque<game::Action>,
 }
 
@@ -217,15 +221,18 @@ impl Ui {
             input_mode : InputMode::Vi,
 
             exit: false,
-            needs_redraw: true,
             spawned: false,
 
             engine: engine,
             automoving: None,
             automoving_stopped_turn: 0,
 
-            after_action_delay: 0,
+            action_ui_duration_ms: 0,
+            next_redraw: chrono::Local::now(),
 
+            anim_frame_count: 0,
+            next_turn_ts: chrono::Local::now(),
+            next_anim_frame_ts: chrono::Local::now(),
             game_action_queue: VecDeque::new(),
         };
         ui.display_intro();
@@ -236,7 +243,9 @@ impl Ui {
         self.engine.initial_spawn(race);
         let player_id = self.engine.current_location().player_id();
         self.engine_change(player_id);
+        self.update_changes();
         self.spawned = true;
+        self.next_turn_ts = chrono::Local::now()
     }
 
     pub fn screen_size() -> (i32, i32) {
@@ -258,7 +267,8 @@ impl Ui {
 
     /// Mark the screen for redraw
     pub fn redraw(&mut self) {
-        self.needs_redraw = true;
+        self.anim_frame_count = 0;
+        self.next_anim_frame_ts = chrono::Local::now();
     }
 
     pub fn redraw_now(&mut self) {
@@ -413,45 +423,46 @@ impl Ui {
     }
 
     fn engine_change(&mut self, actor_id: actor::Id) {
-        self.update();
-
         if self.automoving.is_some() {
             if self.automoving_stopped_turn != self.engine.turn() && self.should_stop_automoving() {
                 self.automoving_stop();
             }
         }
 
-        self.after_action_delay += {
-            let cur_loc = self.current_location();
-            let player_id = cur_loc.player_id();
+        let player_id = self.current_location().player_id();
 
-            if actor_id == player_id {
-                if self.is_automoving() {
-                    20
-                } else {
-                    0
-                }
-            } else {
-                0
+        if actor_id == player_id {
+            if self.is_automoving() {
+                self.next_turn_ts = chrono::Local::now() + Duration::milliseconds(50);
             }
         };
-
-        self.redraw();
     }
 
     pub fn player(&self) -> &Actor {
         let player_id = self.engine.current_location().player_id();
         &self.engine.current_location().actors_byid[&player_id]
     }
+
     pub fn current_location(&self) -> &Location {
         self.engine.current_location()
     }
 
+    pub fn is_next_turn_time(&self) -> bool {
+        self.next_turn_ts <= chrono::Local::now()
+    }
+
+    pub fn is_next_anim_frame_time(&self) -> bool {
+        self.next_anim_frame_ts <= chrono::Local::now()
+    }
+
     pub fn run_once(&mut self) {
-        if self.after_action_delay > 0 {
-            self.after_action_delay -= 1;
-        } else if self.spawned {
+        if self.spawned && self.is_next_turn_time() {
             let player_id = self.current_location().player_id();
+            let mut player_acted = false;
+
+            if self.engine.is_turn_done() {
+                self.engine.start_turn()
+            }
 
             if self.engine.needs_player_input() {
                 if let Some(movetype) = self.automoving {
@@ -464,11 +475,11 @@ impl Ui {
                                 _ => {}
                             }
                             self.automoving_stop();
-                            self.redraw();
                         }
                         AutoMoveAction::Action(action) => {
                             self.engine.player_act(action);
                             self.engine_change(player_id);
+                            player_acted = true;
                         }
                         AutoMoveAction::Finish => {
                             match movetype {
@@ -478,23 +489,36 @@ impl Ui {
                                 _ => {}
                             }
                             self.automoving_stop();
-                            self.redraw();
                         }
                     }
                 } else if let Some(action) = self.game_action_queue.pop_front() {
                     self.engine.player_act(action);
                     self.engine_change(player_id);
+                    player_acted = true;
                 }
             } else {
-                let actor_id = self.engine.one_actor_tick();
-                self.engine_change(actor_id);
+                self.engine.player_skip_act();
+                self.engine_change(player_id);
+                player_acted = true;
+            }
+
+            if player_acted {
+                while !self.engine.is_turn_done() {
+                    let actor_id = self.engine.one_actor_tick();
+                    self.engine_change(actor_id);
+                }
+                self.update_changes();
+                self.redraw();
             }
         }
+        self.input_handle();
         {
-            self.input_handle();
-            if self.needs_redraw {
-                self.needs_redraw = false;
+            if self.is_next_anim_frame_time() && self.anim_frame_count < 20 {
                 self.redraw_now();
+                self.anim_frame_count += 1;
+                self.next_anim_frame_ts = chrono::Local::now() + Duration::milliseconds(100);
+            } else if self.game_action_queue.is_empty() {
+                thread::sleep(std::time::Duration::new(0, 10_000_000));
             }
         }
     }
@@ -503,14 +527,6 @@ impl Ui {
         while !self.exit {
             let start = chrono::Local::now();
             self.run_once();
-            let msdelta = chrono::Local::now() - start;
-            if msdelta < chrono::Duration::milliseconds(1) {
-                let nanosecs = (chrono::Duration::milliseconds(1) - msdelta)
-                                   .num_nanoseconds()
-                                   .unwrap();
-                assert!(nanosecs > 0);
-                thread::sleep(std::time::Duration::new(0, nanosecs as u32));
-            }
         }
     }
 
@@ -738,30 +754,35 @@ impl Ui {
                 match key {
                     KEY_ESC | KEY_LOWX | KEY_LOWQ => {
                         self.target_pos = None;
-                        self.mode = Mode::Normal;
+                        self.mode_switch_to(Mode::Normal);
                     }
                     KEY_LOWH => {
                         self.target_pos = Some(pos + Angle::Left);
+                        self.redraw();
                     }
                     KEY_LOWL => {
                         self.target_pos = Some(pos + Angle::Right);
+                        self.redraw();
                     }
                     KEY_LOWJ => {
                         self.target_pos = Some(pos + (pos.dir + Angle::Back).to_coordinate());
+                        self.redraw();
                     }
                     KEY_LOWK => {
                         self.target_pos = Some(pos + pos.dir.to_coordinate());
+                        self.redraw();
                     }
                     KEY_CAPK => {
                         self.target_pos = Some(pos + pos.dir.to_coordinate().scale(5));
+                        self.redraw();
                     }
                     KEY_CAPJ => {
                         self.target_pos = Some(pos +
                                                (pos.dir + Angle::Back).to_coordinate().scale(5));
+                        self.redraw();
                     }
                     _ => {}
                 }
-                self.redraw();
             }
             Mode::Target(_) => {
                 let center = self.player().pos;
@@ -780,19 +801,22 @@ impl Ui {
                     }
                     KEY_LOWH => {
                         self.target_pos = Some(util::circular_move(center, pos, Angle::Left));
+                        self.redraw();
                     }
                     KEY_LOWL => {
                         self.target_pos = Some(util::circular_move(center, pos, Angle::Right));
+                        self.redraw();
                     }
                     KEY_LOWJ => {
                         self.target_pos = Some(util::circular_move(center, pos, Angle::Back));
+                        self.redraw();
                     }
                     KEY_LOWK => {
                         self.target_pos = Some(util::circular_move(center, pos, Angle::Forward));
+                        self.redraw();
                     }
                     _ => {}
                 }
-                self.redraw();
             }
             Mode::GoTo => {
                 match key {
@@ -812,8 +836,8 @@ impl Ui {
         }
     }
 
-    // TODO: break into smaller stuff?
-    fn update(&mut self) {
+    // Notice changed between start turn and it's end
+    fn update_changes(&mut self) {
 
         let cur_loc = self.current_location();
         let player = self.player();
@@ -909,6 +933,27 @@ impl Ui {
                    .filter(|&(_, a)| !a.is_dead())
                    .map(|(_, a)| (a.head(), a.pos.coord))
                    .collect();
+
+        let enemies_prev_pos: HashMap<Coordinate, Coordinate> =
+            cur_loc.actors_byid
+                   .iter()
+                   .filter(|&(_, a)| !a.is_dead())
+                   .filter(|&(_, a)| !a.is_player())
+                   .map(|(id, a)| (a.pre_pos.unwrap_or(a.pos).coord, a.pos.coord))
+                   .filter(|&(pre_pos, pos)| pre_pos != pos)
+                   .collect();
+
+        let enemies_prev_head: HashMap<Coordinate, Coordinate> =
+            cur_loc.actors_byid
+                   .iter()
+                   .filter(|&(_, a)| !a.is_dead())
+                   .filter(|&(_, a)| !a.is_player())
+                   .filter(|&(_, a)| a.pre_pos.unwrap_or(a.pos).coord == a.pos.coord)
+                   .map(|(id, a)| (a.pre_head.unwrap_or(a.head()), a.head()))
+                   .filter(|&(pre, now)| pre != now)
+                   .collect();
+
+
         let player_ahead = player.pos.coord + player.pos.dir;
 
         // Get the screen bounds.
@@ -1042,7 +1087,7 @@ impl Ui {
                     };
                     (fg, color::CHAR_BG, glyph)
                 } else if is_proper_coord && visible &&
-                                             cur_loc.at(c).item().is_some() {
+                    cur_loc.at(c).item().is_some() {
                     let item = cur_loc.at(c).item().unwrap();
                     let s = item_to_char(item.category());
                     if player.discovered.contains(&c) {
@@ -1089,6 +1134,7 @@ impl Ui {
                     (color::EMPTY_FG, color::EMPTY_BG, NOTHING_CH)
                 };
 
+                
 
                 let (mut fg, mut bg) = if !visible || light == 0 {
                     if visible {
@@ -1142,6 +1188,35 @@ impl Ui {
                     bg = color::NOISE_BG;
                     draw = true;
                 }
+
+                // changed position animation
+                if self.mode == Mode::Normal &&
+                    is_proper_coord && visible &&
+                    enemies_prev_pos.contains_key(&c) &&
+                    self.anim_frame_count < 6
+                    {
+                        let cur_pos = enemies_prev_pos[&c];
+                        let r = 5 - self.anim_frame_count;
+                        fg = color::rgb_to_u8(r as u8, 0, 0);
+                        match cur_pos.direction_to_cw(c) {
+                            Some(Direction::XY) | Some(Direction::YX) =>  glyph = '-',
+                            Some(Direction::ZY) | Some(Direction::YZ) =>  glyph = '\\',
+                            Some(Direction::ZX) | Some(Direction::XZ) =>  glyph = '/',
+                            None => {},
+                        }
+                    }
+
+                // changed direction animation
+                if self.mode == Mode::Normal &&
+                    is_proper_coord && visible &&
+                    enemies_prev_head.contains_key(&c) &&
+                    self.anim_frame_count < 6
+                    {
+                        let cur_pos = enemies_prev_head[&c];
+                        let r = 5 - self.anim_frame_count;
+                        fg = color::rgb_to_u8(r as u8, 0, 0);
+                        glyph = self.dot;
+                    }
 
                 if self.mode == Mode::Examine {
                     if is_proper_coord && center == c {

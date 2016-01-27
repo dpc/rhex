@@ -46,6 +46,13 @@ pub const LOG_3_FG: u8 = GRAY[17];
 pub const LOG_4_FG: u8 = GRAY[13];
 pub const LOG_5_FG: u8 = GRAY[9];
 
+pub fn rgb_to_u8(r : u8, g : u8, b: u8) -> u8 {
+    assert!(r < 6);
+    assert!(g < 6);
+    assert!(b < 6);
+    16 + r * 36 + g + 6 + b
+}
+
 pub struct Allocator {
     map: HashMap<(u8, u8), i16>,
     cur: i16,

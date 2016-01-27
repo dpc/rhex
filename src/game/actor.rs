@@ -218,6 +218,7 @@ pub struct Actor {
 
     pub player: bool,
     pub pre_pos: Option<Position>,
+    pub pre_head: Option<Coordinate>,
     pub pos: Position,
     pub acted: bool,
     descended: bool,
@@ -270,6 +271,7 @@ impl Actor {
             player: false,
             pos: pos,
             pre_pos: None,
+            pre_head: None,
             base_stats: stats, // base stats
             mod_stats: Default::default(), // from items etc.
             stats: Default::default(), // effective stats
@@ -494,7 +496,6 @@ impl Actor {
 
         self.temporary_los = Default::default();
         self.add_current_los_to_temporary_los(loc);
-
         let visible = self.los_to_visible(loc, &self.temporary_los);
 
         for &i in total_visible.iter().chain(visible.iter()) {
@@ -543,8 +544,11 @@ impl Actor {
         self.heard.insert(coord, type_);
     }
 
-    pub fn pre_any_tick(&mut self) {
+    pub fn pre_any_tick(&mut self) { }
+
+    pub fn pre_own_tick(&mut self) {
         self.pre_pos = Some(self.pos);
+        self.pre_head = Some(self.head());
         self.did_attack = Vec::new();
         self.was_attacked_by = Vec::new();
         self.temporary_los = Default::default();
@@ -557,9 +561,7 @@ impl Actor {
 
         self.acted = false;
         self.descended = false;
-    }
 
-    pub fn pre_own_tick(&mut self) {
         if self.action_cd > 0 {
             self.action_cd -= 1;
         }
@@ -582,7 +584,7 @@ impl Actor {
                 }
             }
 
-            if self.pre_pos != Some(self.pos) {
+            if self.pre_pos != Some(self.pos){
                 self.postprocess_visibile(loc);
             }
         }
@@ -592,12 +594,17 @@ impl Actor {
         self.recalculate_stats();
     }
 
-    pub fn post_spawn(&mut self, loc: &Location) {
-        // TODO: save & restore, using global location uuids ?
+    pub fn pre_spawn(&mut self, loc: &Location) {
         self.known = Default::default();
         self.known_areas = Default::default();
+        self.recalculate_stats();
         let pos = self.pos;
-        self.moved(loc, pos)
+        self.moved(loc, pos);
+    }
+
+    pub fn post_spawn(&mut self, loc: &Location) {
+        self.recalculate_stats();
+        self.postprocess_visibile(loc);
     }
 
     pub fn pick_item(&mut self, item: Box<Item>) -> Option<Box<Item>> {
@@ -664,6 +671,7 @@ impl Actor {
         }
     }
 
+    // TODO: change to be `add_current_los_to(..., Visibility)`
     fn add_current_los_to_temporary_los(&mut self, loc: &Location) {
         let pos = self.pos;
         let vision = self.stats.base.vision;
@@ -814,6 +822,10 @@ impl Actor {
         self.pos = new_pos;
         self.add_current_los_to_temporary_los(loc);
         self.noise_makes(2);
+    }
+
+    pub fn changed_position(&self) -> bool {
+        Some(self.pos) != self.pre_pos
     }
 
     pub fn is_player(&self) -> bool {

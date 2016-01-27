@@ -3,12 +3,21 @@ use super::actor::{self, Actor};
 use util;
 use ai::{self, Ai};
 
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
+enum State {
+    PlayerMove,
+    AiMove,
+    TurnDone,
+}
+
+
 pub struct Engine {
     turn: u64,
     location_cur: usize,
     locations: Vec<Location>,
 
     ids_to_move: Vec<actor::Id>,
+    state : State,
 }
 
 impl Engine {
@@ -19,6 +28,7 @@ impl Engine {
             locations: vec![location],
             ids_to_move: vec![],
             turn: 0,
+            state: State::TurnDone,
         }
     }
 
@@ -44,7 +54,7 @@ impl Engine {
     }
 
     pub fn needs_player_input(&self) -> bool {
-        self.ids_to_move.is_empty() && !self.player().is_dead()
+        self.state == State::PlayerMove && self.player().can_act() && !self.player().is_dead()
     }
 
     pub fn player(&self) -> &Actor {
@@ -59,20 +69,17 @@ impl Engine {
             self.locations.push(Location::new(self.location_cur as u32));
             player.pos = util::random_pos(0, 0);
             let _player = self.current_location_mut().spawn_player(player);
-        }
-
-        if self.ids_to_move.is_empty() {
             self.end_turn();
-            let player_id = self.current_location().player_id();
-            let player = &self.current_location().actors_byid[&player_id].clone();
-            if !player.can_act() {
-                self.current_location_mut().skip_act(player_id);
-                self.reload_actors_ids_to_move();
+        } else {
+            self.state = State::AiMove;
+
+            if self.ids_to_move.is_empty() {
+                self.end_turn();
             }
         }
     }
 
-    pub fn reload_actors_ids_to_move(&mut self) {
+    fn reload_actors_ids_to_move(&mut self) {
         let player_id = self.current_location().player_id();
         self.ids_to_move = self.current_location()
                                .actors_alive_ids()
@@ -84,19 +91,30 @@ impl Engine {
 
     // player first move
     pub fn player_act(&mut self, action: Action) {
+        assert!(self.state == State::PlayerMove);
         assert!(self.needs_player_input());
 
         let player_id = self.current_location().player_id();
 
         self.current_location_mut().act(player_id, action);
+        self.state == State::AiMove;
 
-        self.reload_actors_ids_to_move();
+        self.checks_after_act(player_id);
+    }
+
+    pub fn player_skip_act(&mut self) {
+        assert!(self.state == State::PlayerMove);
+        assert!(!self.needs_player_input());
+        let player_id = self.current_location().player_id();
+        self.current_location_mut().skip_act(player_id);
+        self.state == State::AiMove;
 
         self.checks_after_act(player_id);
     }
 
     // then everybody else one by one
     pub fn one_actor_tick(&mut self) -> actor::Id {
+        assert!(self.state == State::AiMove);
         assert!(!self.needs_player_input());
 
         let actor_id = self.ids_to_move.pop().unwrap();
@@ -118,8 +136,20 @@ impl Engine {
         actor_id
     }
 
-    pub fn end_turn(&mut self) {
-        self.turn += 1;
-        self.current_location_mut().post_turn()
+    fn end_turn(&mut self) {
+        self.current_location_mut().post_turn();
+        self.state = State::TurnDone;
     }
+
+    pub fn is_turn_done(&self) -> bool {
+        self.state == State::TurnDone
+    }
+
+    pub fn start_turn(&mut self) {
+        assert!(self.state == State::TurnDone);
+        self.turn += 1;
+        self.reload_actors_ids_to_move();
+        self.state = State::PlayerMove;
+    }
+
 }
