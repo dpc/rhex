@@ -17,9 +17,10 @@ use hex2d::{Position, Coordinate, Angle, Left, Right, Forward, Back, ToCoordinat
 use hex2dext::algo::bfs;
 
 use super::consts::*;
-use super::color;
+use super::{color, Window};
 use super::{LogEntry, AutoMoveType, AutoMoveAction, LogEvent, Event, GoToType};
 use super::Result;
+use super::map::MapRenderer;
 
 use game::{actor, Location, Actor, item, area};
 use game;
@@ -48,22 +49,6 @@ impl fmt::Display for InputMode {
             InputMode::Vi => write!(f, "Vi"),
             InputMode::Normal => write!(f, "Normal")
         }
-    }
-}
-
-pub struct Window {
-    pub window: nc::WINDOW,
-}
-
-impl Window {
-    pub fn new(w: i32, h: i32, x: i32, y: i32) -> Window {
-        Window { window: nc::subwin(nc::stdscr, h, w, y, x) }
-    }
-}
-
-impl Drop for Window {
-    fn drop(&mut self) {
-        nc::delwin(self.window);
     }
 }
 
@@ -116,7 +101,7 @@ enum TargetMode {
 }
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
-enum Mode {
+pub enum Mode {
     Normal,
     Examine,
     GoTo,
@@ -157,6 +142,8 @@ pub struct Ui {
     next_redraw: chrono::datetime::DateTime<chrono::offset::local::Local>,
 
     game_action_queue: VecDeque<game::Action>,
+
+    map_renderer: MapRenderer,
 }
 
 use self::Action::*;
@@ -234,8 +221,10 @@ impl Ui {
             next_turn_ts: chrono::Local::now(),
             next_anim_frame_ts: chrono::Local::now(),
             game_action_queue: VecDeque::new(),
+            map_renderer: MapRenderer::new(UNICODE_DOT),
         };
         ui.display_intro();
+        ui.resize();
         Ok(ui)
     }
 
@@ -262,6 +251,9 @@ impl Ui {
 
     pub fn resize(&mut self) {
         self.windows = Windows::after_resize();
+        let window = self.windows.map.window;
+        let (y, x) = Ui::window_size(window);
+        self.map_renderer.resize(x as usize, y as usize);
         self.redraw();
     }
 
@@ -927,350 +919,21 @@ impl Ui {
         self.mode = Mode::FullScreen(FSMode::Intro);
     }
 
-    fn draw_map(&self) {
-        let player = self.player();
-        let cur_loc = self.current_location();
+    fn draw_map(&mut self) {
+        let Ui {
+            ref mut map_renderer,
+            ref engine,
+            mode,
+            target_pos,
+            ref windows,
+            ref calloc,
+            anim_frame_count,
+            ..
+        } = *self;
 
-        let mut calloc = self.calloc.borrow_mut();
-
-        let window = self.windows.map.window;
-
-        let actors_aheads: HashMap<Coordinate, Coordinate> =
-            cur_loc.actors_byid
-                   .iter()
-                   .filter(|&(_, a)| !a.is_dead())
-                   .map(|(_, a)| (a.head(), a.pos.coord))
-                   .collect();
-
-        let enemies_prev_pos: HashMap<Coordinate, Coordinate> =
-            cur_loc.actors_byid
-                   .iter()
-                   .filter(|&(_, a)| !a.is_dead())
-                   .filter(|&(_, a)| !a.is_player())
-                   .map(|(id, a)| (a.pre_pos.unwrap_or(a.pos).coord, a.pos.coord))
-                   .filter(|&(pre_pos, pos)| pre_pos != pos)
-                   .collect();
-
-        let enemies_prev_head: HashMap<Coordinate, Coordinate> =
-            cur_loc.actors_byid
-                   .iter()
-                   .filter(|&(_, a)| !a.is_dead())
-                   .filter(|&(_, a)| !a.is_player())
-                   .filter(|&(_, a)| a.pre_pos.unwrap_or(a.pos).coord == a.pos.coord)
-                   .map(|(id, a)| (a.pre_head.unwrap_or(a.head()), a.head()))
-                   .filter(|&(pre, now)| pre != now)
-                   .collect();
-
-
-        let player_ahead = player.pos.coord + player.pos.dir;
-
-        // Get the screen bounds.
-        let (max_y, max_x) = Ui::window_size(window);
-
-        let mid_x = max_x / 2;
-        let mid_y = max_y / 2;
-
-        let cpair = nc::COLOR_PAIR(calloc.get(color::VISIBLE_FG, color::MAP_BACKGROUND_BG));
-        nc::wbkgd(window, ' ' as nc::chtype | cpair as nc::chtype);
-        nc::werase(window);
-
-        let (center, head) = match self.mode {
-            Mode::Examine => {
-                match self.target_pos {
-                    None => (player.pos.coord, player.pos.coord + player.pos.dir),
-                    Some(pos) => (pos.coord, pos.coord + pos.dir),
-                }
-            }
-            Mode::Target(_) => {
-                match self.target_pos {
-                    None => (player.pos.coord, player.pos.coord + player.pos.dir),
-                    Some(pos) => (player.pos.coord, pos.coord),
-                }
-            }
-            _ => (player.pos.coord, player.pos.coord + player.pos.dir),
-        };
-
-        let mut target_line = HashSet::new();
-        if let Mode::Target(_) = self.mode {
-            center.for_each_in_line_to(head, |c| {
-                target_line.insert(c);
-            });
-        }
-
-        let (vpx, vpy) = center.to_pixel_integer(SPACING);
-
-        for vy in 0..max_y {
-            for vx in 0..max_x {
-                let (rvx, rvy) = (vx - mid_x, vy - mid_y);
-
-                let (cvx, cvy) = (rvx + vpx, rvy + vpy);
-
-                let (c, off) = Coordinate::from_pixel_integer(SPACING, (cvx, cvy));
-
-                let is_proper_coord = off == (0, 0);
-
-                let (visible, _in_los, knows, tt, t, light) = if is_proper_coord {
-
-                    let t = cur_loc.map[c].clone();
-                    let tt = t.type_;
-
-                    let visible = player.sees(c) || player.is_dead();
-                    let light = if visible {
-                        cur_loc.at(c).light_as_seen_by(player)
-                    } else {
-                        0
-                    };
-
-                    (visible,
-                     player.in_los(c) || player.is_dead(),
-                     player.knows(c),
-                     Some(tt),
-                     Some(t),
-                     light)
-                } else {
-                    // Paint a glue characters between two real characters
-                    let c1 = c;
-                    let (c2, _) = Coordinate::from_pixel_integer(SPACING, (cvx + 1, cvy));
-
-                    let low_opaq1 = player.sees(c1) && cur_loc.at(c1).tile().opaqueness() <= 1;
-                    let low_opaq2 = player.sees(c2) && cur_loc.at(c2).tile().opaqueness() <= 1;
-
-                    let knows = (player.knows(c1) && player.knows(c2)) ||
-                                (player.knows(c1) && low_opaq1) ||
-                                (player.knows(c2) && low_opaq2);
-
-                    let (e1, e2) = (cur_loc.at(c1).tile().ascii_expand(),
-                                    cur_loc.at(c2).tile().ascii_expand());
-
-                    let c = Some(if e1 > e2 {
-                        c1
-                    } else {
-                        c2
-                    });
-
-                    let tt = c.map_or(None, |c| Some(cur_loc.at(c).tile().type_));
-
-                    let visible = player.is_dead() || (player.sees(c1) && player.sees(c2)) ||
-                                  (player.sees(c1) && low_opaq1) ||
-                                  (player.sees(c2) && low_opaq2);
-
-                    let in_los = player.is_dead() || (player.in_los(c1) && player.in_los(c2)) ||
-                                 (player.in_los(c1) && low_opaq1) ||
-                                 (player.in_los(c2) && low_opaq2);
-
-                    let light = if visible {
-                        let (light1, light2) = (cur_loc.at(c1).light_as_seen_by(player),
-                                                cur_loc.at(c2).light_as_seen_by(player));
-
-
-                        if player.is_dead() {
-                            (light1 + light2) / 2
-                        } else {
-                            match (player.sees(c1), player.sees(c2)) {
-                                (true, true) => (light1 + light2) / 2,
-                                (true, false) => light1,
-                                (false, true) => light2,
-                                (false, false) => 0,
-                            }
-                        }
-                    } else {
-                        0
-                    };
-
-                    (visible, in_los, knows, tt, None, light)
-                };
-
-                let mut draw = knows;
-
-                debug_assert!(!visible || knows || player.is_dead());
-
-                let mut bold = false;
-                let occupied = cur_loc.at(c).is_occupied();
-                let (fg, bg, mut glyph) = if is_proper_coord && visible && occupied {
-                    let (fg, glyph) = match cur_loc.at(c).actor_map_or(Race::Rat, |a| a.race) {
-                        Race::Human | Race::Elf | Race::Dwarf => (color::CHAR_SELF_FG, '@'),
-                        Race::Rat => (color::CHAR_ENEMY_FG, 'r'),
-                        Race::Goblin => (color::CHAR_ENEMY_FG, 'g'),
-                        Race::Troll => (color::CHAR_ENEMY_FG, 'T'),
-                    };
-                    (fg, color::CHAR_BG, glyph)
-                } else if is_proper_coord && visible &&
-                    cur_loc.at(c).item().is_some() {
-                    let item = cur_loc.at(c).item().unwrap();
-                    let s = item_to_char(item.category());
-                    if player.discovered.contains(&c) {
-                        bold = true;
-                    }
-                    (color::WALL_FG, color::EMPTY_BG, s)
-                } else if knows {
-                    match tt {
-                        Some(tile::Empty) => {
-                            let mut fg = color::STONE_FG;
-                            let mut bg = color::EMPTY_BG;
-                            let mut glyph = ' ';
-
-                            if is_proper_coord {
-                                match t.and_then(|t| t.feature) {
-                                    None => {
-                                        glyph = self.dot;
-                                        fg = color::EMPTY_FG;
-                                        bg = color::EMPTY_BG;
-                                    }
-                                    Some(tile::Door(open)) => {
-                                        if open {
-                                            glyph = DOOR_OPEN_CH;
-                                        } else {
-                                            glyph = DOOR_CLOSED_CH;
-                                            bg = color::WALL_BG;
-                                        }
-                                    }
-                                    Some(tile::Statue) => glyph = STATUE_CH,
-                                    Some(tile::Stairs) => glyph = STAIRS_DOWN_CH,
-                                }
-                            }
-
-                            (fg, bg, glyph)
-                        }
-                        Some(tile::Wall) => {
-                            bold = true;
-                            (color::WALL_FG, color::WALL_BG, WALL_CH)
-                        }
-                        Some(tile::Water) => (color::WATER_FG, color::WATER_BG, WATER_CH),
-                        None => (color::EMPTY_FG, color::EMPTY_BG, '?'),
-                    }
-                } else {
-                    (color::EMPTY_FG, color::EMPTY_BG, NOTHING_CH)
-                };
-
-
-                let (mut fg, mut bg) = if !visible || light == 0 {
-                    if visible {
-                        (fg[2], bg[2])
-                    } else {
-                        (fg[3], bg[3])
-                    }
-                } else if light < 3 {
-                    (fg[1], bg[1])
-                } else {
-                    (fg[0], bg[0])
-                };
-
-                if let Some(t) = t {
-                    if visible && t.light > 0 {
-                        if !occupied {
-                            fg = color::LIGHTSOURCE.to_u8();
-                            bold = true;
-                        }
-                    }
-                }
-
-                if is_proper_coord && visible &&
-                   cur_loc.at(c).actor_map_or(0, |a| a.light_emision()) > 0u32 {
-                    bg = color::LIGHTSOURCE.to_u8();
-                }
-
-                if is_proper_coord && actors_aheads.contains_key(&c) &&
-                   player.sees(*actors_aheads.get(&c).unwrap()) {
-                    bold = true;
-                    let color = if c == player_ahead {
-                        color::TARGET_SELF_FG
-                    } else {
-                        color::TARGET_ENEMY_FG
-                    };
-
-                    if player.knows(c) {
-                        if occupied {
-                            bg = color;
-                        } else {
-                            fg = color;
-                        }
-                    } else {
-                        draw = true;
-                        glyph = ' ';
-                        bg = color;
-                    }
-                }
-
-                if is_proper_coord && c != center && !visible && player.hears(c) {
-                    bg = color::NOISE_BG.to_u8();
-                    draw = true;
-                }
-
-                // changed position animation
-                if self.mode == Mode::Normal &&
-                    is_proper_coord && visible &&
-                    enemies_prev_pos.contains_key(&c) &&
-                    self.anim_frame_count < 6
-                    {
-                        let cur_pos = enemies_prev_pos[&c];
-                        let r = 5 - self.anim_frame_count;
-                        fg = color::RGB::new(r as u8, 0, 0).to_u8();
-                        match cur_pos.direction_to_cw(c) {
-                            Some(Direction::XY) | Some(Direction::YX) =>  glyph = '-',
-                            Some(Direction::ZY) | Some(Direction::YZ) =>  glyph = '\\',
-                            Some(Direction::ZX) | Some(Direction::XZ) =>  glyph = '/',
-                            None => {},
-                        }
-                    }
-
-                // changed direction animation
-                if self.mode == Mode::Normal &&
-                    is_proper_coord && visible &&
-                    enemies_prev_head.contains_key(&c) &&
-                    self.anim_frame_count < 6
-                    {
-                        let cur_pos = enemies_prev_head[&c];
-                        let r = 5 - self.anim_frame_count;
-                        fg = color::RGB::new(r as u8, 0, 0).to_u8();
-                        glyph = self.dot;
-                    }
-
-                if self.mode == Mode::Examine {
-                    if is_proper_coord && center == c {
-                        glyph = '@';
-                        fg = color::CHAR_GRAY_FG;
-                        draw = true;
-                    } else if is_proper_coord && c == head {
-                        bold = true;
-                        if player.knows(c) {
-                            fg = color::TARGET_SELF_FG;
-                        } else {
-                            draw = true;
-                            glyph = ' ';
-                            bg = color::TARGET_SELF_FG;
-                        }
-                    }
-                } else if let Mode::Target(_) = self.mode {
-                    if is_proper_coord && target_line.contains(&c) {
-                        glyph = '*';
-                        draw = true;
-                        if c == head {
-                            fg = color::TARGET_SELF_FG;
-                        }
-                        if !cur_loc.at(c).tile().is_passable() {
-                            bg = color::BLOCKED_BG;
-                        }
-                    }
-                }
-
-
-                if draw {
-                    let cpair = nc::COLOR_PAIR(calloc.get(fg, bg));
-                    if glyph <= (127u8 as char) {
-                        let ch = (glyph as nc::chtype) | cpair;
-                        nc::mvwaddch(window, vy, vx, if bold { ch|nc::A_BOLD() } else { ch });
-                    } else {
-                        let attrflag = if bold { cpair|nc::A_BOLD() } else { cpair };
-                        nc::wattron(window, attrflag as i32);
-                        nc::mvwaddstr(window, vy, vx, &format!("{}", glyph));
-                        nc::wattroff(window, attrflag as i32);
-                    }
-                }
-
-            }
-        }
-
-        nc::wnoutrefresh(window);
+        map_renderer.update(engine.current_location(), mode, target_pos, anim_frame_count);
+        map_renderer.draw_into(windows.map.window, &mut*calloc.borrow_mut());
+        nc::wnoutrefresh(windows.map.window);
     }
 
     fn draw_stats_bar(&self, window: nc::WINDOW, y: i32, name: &str, cur: i32, prev: i32, max: i32) {
@@ -1713,11 +1376,6 @@ impl Drop for Ui {
 }
 
 
-//        . . .
-//       . . . .
-//      . . . . .
-//       . . . .
-//        . . .
 pub fn item_to_char(t: item::Category) -> char {
     match t {
         item::Category::Weapon => ')',
