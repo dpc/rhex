@@ -681,12 +681,11 @@ pub fn color_by_visibility(color : [u8; 4], visible: bool, light : u32) -> Color
     Color::from(fg)
 }
 
-// TODO: actor to palete, not race
+// TODO: actor to palete, not race, and use is_player()
 pub fn race_to_palete(race : Race) -> [u8; 4] {
-    if race == Race::Human {
-        color::CHAR_SELF_FG
-    } else {
-        color::CHAR_ENEMY_FG
+    match race {
+        Race::Human | Race::Elf | Race::Dwarf => color::CHAR_SELF_FG,
+        _ => color::CHAR_ENEMY_FG,
     }
 }
 
