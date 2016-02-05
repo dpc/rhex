@@ -31,10 +31,8 @@ impl Color {
 
     pub fn mix(&self, color : Color, s : u8) -> Color {
         assert!(s < 6);
-        debug!("{:?} {:?} {}", self, color, s);
         let s_rgb = self.to_rgb();
         let c_rgb = color.to_rgb();
-        debug!("{:?} {:?} {}", c_rgb, s_rgb, s);
         RGB::new(
             (s_rgb.0 * (5 - s) + c_rgb.0 * s) / 5,
             (s_rgb.1 * (5 - s) + c_rgb.1 * s) / 5,

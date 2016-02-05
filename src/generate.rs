@@ -299,5 +299,5 @@ impl DungeonGenerator {
 }
 
 pub fn gen_level(level: u32) -> (Map, Actors, Items) {
-    DungeonGenerator::new(level).generate_map(Coordinate::new(0, 0), 400 + level * 100)
+    DungeonGenerator::new(level).generate_map(Coordinate::new(0, 0), 100 + level * 100)
 }
