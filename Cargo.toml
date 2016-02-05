@@ -29,6 +29,7 @@ hex2d-dpcext = "0.0.9"
 log = "0.3.5"
 fern = "0.3.5"
 schedule_recv = "0.0.1"
-ncurses = "5.80.0"
+#ncurses = "5.80.0"
+ncurses = { git="https://github.com/dpc/ncurses-rs" }
 dpc-simplemap = { git="https://github.com/dpc/simplemap-rs", branch="no_hash_state" }
 clippy = {version = "*", optional = true}

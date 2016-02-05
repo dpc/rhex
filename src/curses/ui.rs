@@ -950,7 +950,7 @@ impl Ui {
         let prev = cmp::max(prev, 0) as u32;
         let max = cmp::max(max, 1) as u32;
 
-        nc::wattron(window, self.label_color as i32);
+        nc::wattron(window, self.label_color);
         nc::mvwaddstr(window, y, 0, &format!("{}: ", name));
 
         let width = max_x as u32 - 4 - name.chars().count() as u32;
@@ -975,7 +975,7 @@ impl Ui {
     {
         self.draw_label(window, label);
 
-        nc::wattron(window, self.text_color as i32);
+        nc::wattron(window, self.text_color);
         nc::waddstr(window, &format!(" {:<8}", val));
     }
 
@@ -984,12 +984,12 @@ impl Ui {
     {
         self.draw_label(window, label);
 
-        nc::wattron(window, self.text_color as i32);
+        nc::wattron(window, self.text_color);
         nc::waddstr(window, &format!("{:>2} ", val));
     }
 
     fn draw_label(&self, window: nc::WINDOW, label: &str) {
-        nc::wattron(window, self.label_color as i32);
+        nc::wattron(window, self.label_color);
         nc::waddstr(window, &format!("{}:", label));
     }
 
@@ -997,9 +997,9 @@ impl Ui {
         self.draw_label(window, label);
 
         if slot == Slot::RHand && !astate.can_attack() {
-            nc::wattron(window, self.text_gray_color as i32);
+            nc::wattron(window, self.text_gray_color);
         } else {
-            nc::wattron(window, self.text_color as i32);
+            nc::wattron(window, self.text_color);
         }
 
         let item = if let Some(&(_, ref item)) = astate.items_equipped.get(&slot) {
@@ -1130,7 +1130,7 @@ impl Ui {
         let head = pos.coord + pos.dir;
         let descr = self.tile_description(head, player, cur_loc);
         self.draw_label(window, "In front");
-        nc::wattron(window, self.text_color as i32);
+        nc::wattron(window, self.text_color);
         nc::waddstr(window, &format!(" {}", descr));
 
         y += 1;
@@ -1265,7 +1265,7 @@ impl Ui {
                     if prevcolor != color {
                         prevcolor = color;
                         let cpair = nc::COLOR_PAIR(color);
-                        nc::wattron(window, cpair as i32);
+                        nc::wattron(window, cpair);
                     }
                     nc::waddstr(window, &i.text);
                 }
