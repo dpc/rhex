@@ -205,7 +205,7 @@ impl Ui {
             red_color: red_color,
             green_color: green_color,
 
-            input_mode : InputMode::Vi,
+            input_mode : InputMode::Normal,
 
             exit: false,
             spawned: false,
