@@ -618,7 +618,7 @@ impl Ui {
             (KEY_LOWK, true) |
             (KEY_LOWW, false) |
             (nc::KEY_UP, _) => Game(Move(Forward)),
-            (KEY_LOWC, true) => Game(Charge),
+            (KEY_LOWC, _) => Game(Charge),
             (KEY_LOWU, true) => Game(Spin(Left)),
             (KEY_LOWI, true) => Game(Spin(Right)),
             (KEY_CAPH, true) |
@@ -633,6 +633,7 @@ impl Ui {
             (KEY_DESCEND, _) => Game(Descend),
             (KEY_LOWO, _) => AutoMove(AutoMoveType::Explore),
             (KEY_CAPK, true) => AutoMove(AutoMoveType::Walk),
+            (KEY_CAPW, false) => AutoMove(AutoMoveType::Walk),
             (KEY_LOWQ, true) |
             (KEY_ESC, _) => ModeSwitch(Mode::FullScreen(FSMode::Quit)),
             (KEY_CAPI, _) => ModeSwitch(Mode::Inventory(InvMode::View)),
@@ -1284,9 +1285,15 @@ impl Ui {
         nc::wmove(window, 0, 0);
 
         nc::waddstr(window,
-                    "A long time ago in a dungeon deep, deep underground...\n\n");
+                    "This game is in very early development. We are looking for feedback and contributors!\n\n");
         nc::waddstr(window,
-                    &format!("You can press {} in the game for help.\n\n",
+                    "See help: https://github.com/dpc/rhex/wiki/Help-How-to-Play\n");
+        nc::waddstr(window,
+                    "Join chat: https://gitter.im/dpc/rhex\n");
+        nc::waddstr(window,
+                    "Project page: https://github.com/dpc/rhex\n\n");
+        nc::waddstr(window,
+                    &format!("You can press {} in the game for offline help.\n\n",
                              KEY_HELP as u8 as char));
         nc::waddstr(window, "Press anything to start.");
         nc::wnoutrefresh(window);
@@ -1316,19 +1323,19 @@ impl Ui {
         nc::werase(window);
         nc::wmove(window, 0, 0);
 
-        nc::waddstr(window, "This game is still incomplete. Sorry for that.\n\n");
         nc::waddstr(window, &format!("Current input mode: {} (F2 to change)\n\n", self.input_mode));
         if self.in_vi_input_mode() {
             nc::waddstr(window, "Move/attack: hjklui\n");
             nc::waddstr(window, "Strafe/attack: Shift + h/l\n");
+            nc::waddstr(window, "Automove: shift + k\n");
         } else {
             nc::waddstr(window, "Move/attack: awsdqe\n");
+            nc::waddstr(window, "Automove: shift + w\n");
         }
         nc::waddstr(window, "Charge: c\n");
         nc::waddstr(window, "Wait: .\n");
         nc::waddstr(window, "Descend: >\n");
         nc::waddstr(window, "Autoexplore: o\n");
-        nc::waddstr(window, "Automove: shift + k\n");
         nc::waddstr(window, "Go to: G (only '>' follow-up implemented)\n");
         nc::waddstr(window, "Examine: x\n");
         nc::waddstr(window, "Pick item in front: ,\n");

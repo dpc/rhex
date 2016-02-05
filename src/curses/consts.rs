@@ -40,6 +40,7 @@ pub const KEY_CAPE: i32 = 'E' as i32;
 pub const KEY_CAPD: i32 = 'D' as i32;
 pub const KEY_CAPI: i32 = 'I' as i32;
 pub const KEY_CAPK: i32 = 'K' as i32;
+pub const KEY_CAPW: i32 = 'W' as i32;
 pub const KEY_CAPJ: i32 = 'J' as i32;
 pub const KEY_DOT: i32 = '.' as i32;
 pub const KEY_COMMA: i32 = ',' as i32;
