@@ -11,7 +11,8 @@ impl Color {
     /// Round to nearest RGB
     pub fn to_rgb(&self) -> RGB {
         match self.0 {
-            0...15 => unimplemented!(),
+            7 => Color(255).to_rgb(),
+            15 => RGB(5, 5, 5),
             16...231 => {
                 let c = self.0 - 16;
                 let b = c % 6;
@@ -21,11 +22,24 @@ impl Color {
                 RGB::new(r, g, b)
             },
             232...255 => {
-                let c = self.0 - 1 / 3;
+                let c = (self.0 - 232) / 4;
                 RGB::new(c, c, c)
             }
-            _ => panic!(),
+            _ => panic!("Unimplemented color {}", self.0),
         }
+    }
+
+    pub fn mix(&self, color : Color, s : u8) -> Color {
+        assert!(s < 6);
+        debug!("{:?} {:?} {}", self, color, s);
+        let s_rgb = self.to_rgb();
+        let c_rgb = color.to_rgb();
+        debug!("{:?} {:?} {}", c_rgb, s_rgb, s);
+        RGB::new(
+            (s_rgb.0 * (5 - s) + c_rgb.0 * s) / 5,
+            (s_rgb.1 * (5 - s) + c_rgb.1 * s) / 5,
+            (s_rgb.2 * (5 - s) + c_rgb.2 * s) / 5,
+            ).into()
     }
 }
 
@@ -118,6 +132,10 @@ pub const LOG_2_FG: RGB = RGB_GRAY[4];
 pub const LOG_3_FG: RGB = RGB_GRAY[3];
 pub const LOG_4_FG: RGB = RGB_GRAY[2];
 pub const LOG_5_FG: RGB = RGB_GRAY[1];
+
+pub const SELF_HEAD_ACTOR_BG : RGB = RGB(0, 0, 5);
+pub const ENEMY_HEAD_ACTOR_BG : RGB = RGB(5, 0, 0);
+pub const ACTOR_HEAD_ACTOR_FG : RGB = RGB(5, 5, 5);
 
 pub struct Allocator {
     map: HashMap<(Color, Color), i16>,

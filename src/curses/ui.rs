@@ -508,7 +508,7 @@ impl Ui {
     }
 
     pub fn maybe_redraw_now(&mut self) {
-        if self.is_next_anim_frame_time() && self.anim_frame_count < 20 {
+        if self.is_next_anim_frame_time() {
             self.redraw_now();
             self.anim_frame_count += 1;
             self.next_anim_frame_ts = chrono::Local::now() + Duration::milliseconds(100);
@@ -1376,12 +1376,3 @@ impl Drop for Ui {
 }
 
 
-pub fn item_to_char(t: item::Category) -> char {
-    match t {
-        item::Category::Weapon => ')',
-        item::Category::RangedWeapon => '}',
-        item::Category::Armor => '[',
-        item::Category::Misc => '"',
-        item::Category::Consumable => '%',
-    }
-}

@@ -523,7 +523,11 @@ impl Actor {
     // Could this actor have seen action/movement
     // of another actor (given by id)
     pub fn could_have_seen(&self, actor: &Actor) -> bool {
-        self.sees(actor.pos.coord) || self.sees(actor.pre_pos.unwrap().coord)
+        self.sees(actor.pos.coord) || self.sees(actor.prev_pos().coord)
+    }
+
+    pub fn prev_pos(&self) -> Position {
+        self.pre_pos.unwrap_or(self.pos)
     }
 
     // Save some stats for a reference

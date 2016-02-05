@@ -6,30 +6,50 @@ use super::color::{self, Color};
 use super::consts::*;
 
 use game::{Location, tile, item};
-use game::actor::Race;
-use hex2d::{Coordinate, Direction, Position};
+use game::actor::{self, Race};
+use hex2d::{Coordinate, Direction, Position, ToCoordinate};
 
+use rand::{thread_rng, Rng};
 use ncurses as nc;
 
-#[derive(Copy, Clone, Eq, PartialEq, Debug, Default)]
-struct Character {
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
+struct DisplayCharacter {
     glyph : char,
     bg : Color,
     fg : Color,
     bold : bool,
 }
 
+impl Default for DisplayCharacter {
+    fn default() -> Self {
+        DisplayCharacter {
+            glyph : ' ',
+            fg : color::MAP_BACKGROUND_BG.into(),
+            bg : color::MAP_BACKGROUND_BG.into(),
+            bold : false,
+        }
+    }
+}
+
+#[derive(Copy, Clone, Eq, PartialEq, Debug, Default)]
+struct ExtendedCharacter {
+    base : DisplayCharacter,
+    known: bool,
+    visible : bool,
+    light : u32,
+}
 
 #[derive(Clone)]
-struct CharArray {
-    array : Vec<Option<Character>>, // 2d array
+struct Array2d<T> {
+    array : Vec<T>, // 2d array
     width : usize,
     height : usize,
 }
 
-impl CharArray {
+impl<T> Array2d<T>
+where T : Clone+Default {
     pub fn new(width : usize, height : usize) -> Self {
-        CharArray {
+        Array2d {
             array : vec![Default::default(); width * height],
             width: width,
             height: height,
@@ -43,13 +63,23 @@ impl CharArray {
     }
 
     pub fn resize(&mut self, width : usize, height : usize) {
-        *self = CharArray::new(width, height);
+        *self = Array2d::new(width, height);
+    }
+
+    pub fn at(&self, vx : usize, vy: usize) -> &T{
+            &self.array[vy * self.width + vx]
+    }
+
+    pub fn at_mut(&mut self, vx: usize, vy: usize) -> &mut T {
+            &mut self.array[vy * self.width + vx]
     }
 }
 
 pub struct MapRenderer {
-    base : CharArray,
-    anim : CharArray,
+    base : Array2d<ExtendedCharacter>,
+    items : Array2d<Option<DisplayCharacter>>,
+    actors : Array2d<Option<DisplayCharacter>>,
+    effects : Array2d<Vec<DisplayCharacter>>,
 
     mode : Mode,
     coord_center : Coordinate,
@@ -63,11 +93,13 @@ pub struct MapRenderer {
     anim_frame_count: u32,
 }
 
-impl MapRenderer{
+impl MapRenderer {
     pub fn new(dot : char) -> Self {
         MapRenderer {
-            base : CharArray::new(0, 0),
-            anim : CharArray::new(0, 0),
+            base : Array2d::new(0, 0),
+            items: Array2d::new(0, 0),
+            actors: Array2d::new(0, 0),
+            effects: Array2d::new(0, 0),
             mode : Mode::Normal,
             coord_center: Coordinate::new(0, 0),
             coord_head: Coordinate::new(0, 0),
@@ -83,11 +115,13 @@ impl MapRenderer{
 
     pub fn resize(&mut self, width : usize, height : usize) {
         self.base.resize(width, height);
-        self.anim.resize(width, height);
+        self.items.resize(width, height);
+        self.actors.resize(width, height);
+        self.effects.resize(width, height);
     }
 
-    pub fn update(&mut self, cur_loc: &Location, mode : Mode, target_pos : Option<Position>, anim_frame_count : u32) {
-        self.base.reset();
+    pub fn update(&mut self, cur_loc: &Location, mode : Mode,
+                  target_pos : Option<Position>, anim_frame_count : u32) {
         let player = cur_loc.player();
 
         self.mode = mode;
@@ -112,45 +146,54 @@ impl MapRenderer{
         self.coord_center = center;
         self.coord_head = head;
 
-        self.actors_aheads =
-            cur_loc.actors_byid
-            .iter()
-            .filter(|&(_, a)| !a.is_dead())
-            .map(|(_, a)| (a.head(), a.pos.coord))
-            .collect();
+        if anim_frame_count == 0 {
+            self.base.reset();
+            self.items.reset();
+            self.actors.reset();
+            self.update_turn_changed(cur_loc);
+            self.for_each_glyph(cur_loc, Self::draw_map_base_glyph);
+            self.for_each_glyph(cur_loc, Self::draw_items);
+            self.draw_actors(cur_loc);
+        }
 
-        self.enemies_prev_pos =
-            cur_loc.actors_byid
-            .iter()
-            .filter(|&(_, a)| !a.is_dead())
-            .filter(|&(_, a)| !a.is_player())
-            .map(|(id, a)| (a.pre_pos.unwrap_or(a.pos).coord, a.pos.coord))
-            .filter(|&(pre_pos, pos)| pre_pos != pos)
-            .collect();
-
-        self.enemies_prev_head =
-            cur_loc.actors_byid
-            .iter()
-            .filter(|&(_, a)| !a.is_dead())
-            .filter(|&(_, a)| !a.is_player())
-            .filter(|&(_, a)| a.pre_pos.unwrap_or(a.pos).coord == a.pos.coord)
-            .map(|(id, a)| (a.pre_head.unwrap_or(a.head()), a.head()))
-            .filter(|&(pre, now)| pre != now)
-            .collect();
-
-        self.for_each_glyph(cur_loc, Self::draw_map_glyph);
+        self.effects.reset();
+        self.draw_effects(cur_loc);
     }
 
-    fn draw_map_glyph(&mut self, cur_loc : &Location, vx : usize, vy : usize, c : Coordinate, is_proper_coord: bool) {
+
+    pub fn update_turn_changed(&mut self, cur_loc: &Location) {
+        self.actors_aheads =
+                cur_loc.actors_byid
+                .iter()
+                .filter(|&(_, a)| !a.is_dead())
+                .map(|(_, a)| (a.head(), a.pos.coord))
+                .collect();
+
+            self.enemies_prev_pos =
+                cur_loc.actors_byid
+                .iter()
+                .filter(|&(_, a)| !a.is_dead())
+                .filter(|&(_, a)| !a.is_player())
+                .map(|(id, a)| (a.pre_pos.unwrap_or(a.pos).coord, a.pos.coord))
+                .filter(|&(pre_pos, pos)| pre_pos != pos)
+                .collect();
+
+            self.enemies_prev_head =
+                cur_loc.actors_byid
+                .iter()
+                .filter(|&(_, a)| !a.is_dead())
+                .filter(|&(_, a)| !a.is_player())
+                .filter(|&(_, a)| a.pre_pos.unwrap_or(a.pos).coord == a.pos.coord)
+                .map(|(id, a)| (a.pre_head.unwrap_or(a.head()), a.head()))
+                .filter(|&(pre, now)| pre != now)
+                .collect();
+    }
+
+    fn draw_map_base_glyph(&mut self, cur_loc : &Location,
+                           vx : usize, vy : usize,
+                           c : Coordinate, is_proper_coord: bool) {
         let player = cur_loc.player();
         let player_ahead = player.pos.coord + player.pos.dir;
-
-        let mut target_line = HashSet::new();
-        if let Mode::Target(_) = self.mode {
-            self.coord_center.for_each_in_line_to(self.coord_head, |c| {
-                target_line.insert(c);
-            });
-        }
 
         let (visible, _in_los, knows, tt, t, light) = if is_proper_coord {
 
@@ -175,8 +218,8 @@ impl MapRenderer{
             let c1 = c;
             let c2 = c + Direction::XY;
 
-            let low_opaq1 = player.sees(c1) && cur_loc.at(c1).tile().opaqueness() <= 1;
-            let low_opaq2 = player.sees(c2) && cur_loc.at(c2).tile().opaqueness() <= 1;
+            let low_opaq1 = cur_loc.at(c1).tile().opaqueness() <= 1;
+            let low_opaq2 = cur_loc.at(c2).tile().opaqueness() <= 1;
 
             let knows = (player.knows(c1) && player.knows(c2)) ||
                 (player.knows(c1) && low_opaq1) ||
@@ -223,187 +266,306 @@ impl MapRenderer{
             (visible, in_los, knows, tt, None, light)
         };
 
-        let mut draw = knows;
-
         debug_assert!(!visible || knows || player.is_dead());
+
+        if !knows {
+            return;
+        }
 
         let mut bold = false;
         let occupied = cur_loc.at(c).is_occupied();
-        let (fg, bg, mut glyph) = if is_proper_coord && visible && occupied {
-            let (fg, glyph) = match cur_loc.at(c).actor_map_or(Race::Rat, |a| a.race) {
-                Race::Human | Race::Elf | Race::Dwarf => (color::CHAR_SELF_FG, '@'),
-                Race::Rat => (color::CHAR_ENEMY_FG, 'r'),
-                Race::Goblin => (color::CHAR_ENEMY_FG, 'g'),
-                Race::Troll => (color::CHAR_ENEMY_FG, 'T'),
-            };
-            (fg, color::CHAR_BG, glyph)
-        } else if is_proper_coord && visible &&
-            cur_loc.at(c).item().is_some() {
-                let item = cur_loc.at(c).item().unwrap();
-                let s = item_to_char(item.category());
-                if player.discovered.contains(&c) {
-                    bold = true;
-                }
-                (color::WALL_FG, color::EMPTY_BG, s)
-            } else if knows {
-                match tt {
-                    Some(tile::Empty) => {
-                        let mut fg = color::STONE_FG;
-                        let mut bg = color::EMPTY_BG;
-                        let mut glyph = ' ';
+        let (fg, bg, mut glyph) = match tt {
+            Some(tile::Empty) => {
+                let mut fg = color::STONE_FG;
+                let mut bg = color::EMPTY_BG;
+                let mut glyph = ' ';
 
-                        if is_proper_coord {
-                            match t.and_then(|t| t.feature) {
-                                None => {
-                                    glyph = self.dot;
-                                    fg = color::EMPTY_FG;
-                                    bg = color::EMPTY_BG;
-                                }
-                                Some(tile::Door(open)) => {
-                                    if open {
-                                        glyph = DOOR_OPEN_CH;
-                                    } else {
-                                        glyph = DOOR_CLOSED_CH;
-                                        bg = color::WALL_BG;
-                                    }
-                                }
-                                Some(tile::Statue) => glyph = STATUE_CH,
-                                Some(tile::Stairs) => glyph = STAIRS_DOWN_CH,
+                if is_proper_coord {
+                    match t.and_then(|t| t.feature) {
+                        None => {
+                            glyph = self.dot;
+                            fg = color::EMPTY_FG;
+                            bg = color::EMPTY_BG;
+                        }
+                        Some(tile::Door(open)) => {
+                            if open {
+                                glyph = DOOR_OPEN_CH;
+                            } else {
+                                glyph = DOOR_CLOSED_CH;
+                                bg = color::WALL_BG;
                             }
                         }
-
-                        (fg, bg, glyph)
+                        Some(tile::Statue) => glyph = STATUE_CH,
+                        Some(tile::Stairs) => glyph = STAIRS_DOWN_CH,
                     }
-                    Some(tile::Wall) => {
-                        bold = true;
-                        (color::WALL_FG, color::WALL_BG, WALL_CH)
-                    }
-                    Some(tile::Water) => (color::WATER_FG, color::WATER_BG, WATER_CH),
-                    None => (color::EMPTY_FG, color::EMPTY_BG, '?'),
                 }
-            } else {
-                (color::EMPTY_FG, color::EMPTY_BG, NOTHING_CH)
-            };
 
-
-        let (mut fg, mut bg) = if !visible || light == 0 {
-            if visible {
-                (fg[2], bg[2])
-            } else {
-                (fg[3], bg[3])
+                (fg, bg, glyph)
             }
-        } else if light < 3 {
-            (fg[1], bg[1])
-        } else {
-            (fg[0], bg[0])
+            Some(tile::Wall) => {
+                bold = true;
+                (color::WALL_FG, color::WALL_BG, WALL_CH)
+            }
+            Some(tile::Water) => (color::WATER_FG, color::WATER_BG, WATER_CH),
+            None => (color::EMPTY_FG, color::EMPTY_BG, '?'),
         };
 
-        if let Some(t) = t {
-            if visible && t.light > 0 {
-                if !occupied {
-                    fg = color::LIGHTSOURCE.to_u8();
-                    bold = true;
-                }
-            }
-        }
 
-        if is_proper_coord && visible &&
-            cur_loc.at(c).actor_map_or(0, |a| a.light_emision()) > 0u32 {
-                bg = color::LIGHTSOURCE.to_u8();
-            }
+        let fg = color_by_visibility(fg, visible, light);
+        let bg = color_by_visibility(bg, visible, light);
 
-        if is_proper_coord && self.actors_aheads.contains_key(&c) &&
-            player.sees(*self.actors_aheads.get(&c).unwrap()) {
-                bold = true;
-                let color = if c == player_ahead {
-                    color::TARGET_SELF_FG
-                } else {
-                    color::TARGET_ENEMY_FG
-                };
-
-                if player.knows(c) {
-                    if occupied {
-                        bg = color;
-                    } else {
-                        fg = color;
-                    }
-                } else {
-                    draw = true;
-                    glyph = ' ';
-                    bg = color;
-                }
-            }
-
-        if is_proper_coord && c != self.coord_center && !visible && player.hears(c) {
-            bg = color::NOISE_BG.to_u8();
-            draw = true;
-        }
-
-        // changed position animation
-        if self.mode == Mode::Normal &&
-            is_proper_coord && visible &&
-                self.enemies_prev_pos.contains_key(&c) &&
-                self.anim_frame_count < 6
-                {
-                    let cur_pos = self.enemies_prev_pos[&c];
-                    let r = 5 - self.anim_frame_count;
-                    fg = color::RGB::new(r as u8, 0, 0).to_u8();
-                    match cur_pos.direction_to_cw(c) {
-                        Some(Direction::XY) | Some(Direction::YX) => glyph = '-',
-                        Some(Direction::ZY) | Some(Direction::YZ) => glyph = '\\',
-                        Some(Direction::ZX) | Some(Direction::XZ) => glyph = '/',
-                        None => {},
-                    }
-                }
-
-        // changed direction animation
-        if self.mode == Mode::Normal &&
-            is_proper_coord && visible &&
-                self.enemies_prev_head.contains_key(&c) &&
-                self.anim_frame_count < 6
-                {
-                    let cur_pos = self.enemies_prev_head[&c];
-                    let r = 5 - self.anim_frame_count;
-                    fg = color::RGB::new(r as u8, 0, 0).to_u8();
-                    glyph = self.dot;
-                }
-
-        if self.mode == Mode::Examine {
-            if is_proper_coord && self.coord_center == c {
-                glyph = '@';
-                fg = color::CHAR_GRAY_FG;
-                draw = true;
-            } else if is_proper_coord && c == self.coord_head {
-                bold = true;
-                if player.knows(c) {
-                    fg = color::TARGET_SELF_FG;
-                } else {
-                    draw = true;
-                    glyph = ' ';
-                    bg = color::TARGET_SELF_FG;
-                }
-            }
-        } else if let Mode::Target(_) = self.mode {
-            if is_proper_coord && target_line.contains(&c) {
-                glyph = '*';
-                draw = true;
-                if c == self.coord_head {
-                    fg = color::TARGET_SELF_FG;
-                }
-                if !cur_loc.at(c).tile().is_passable() {
-                    bg = color::BLOCKED_BG;
-                }
-            }
-        }
-
-
-        if draw {
-            self.base.array[vy * self.base.width + vx] = Some(Character {
+        *self.base.at_mut(vx, vy) = ExtendedCharacter {
+            base : DisplayCharacter {
                 glyph: glyph,
                 fg: Color::from(fg),
                 bg: Color::from(bg),
                 bold: bold,
-            })
+            },
+            light: light,
+            visible: visible,
+            known: knows,
+        }
+    }
+
+    fn draw_items(&mut self, cur_loc : &Location,
+                 vx : usize, vy : usize,
+                 c : Coordinate, is_proper_coord: bool) {
+
+        if !is_proper_coord {
+            return;
+        }
+
+        let player = cur_loc.player();
+        let player_ahead = player.pos.coord + player.pos.dir;
+
+        let base = &self.base.at(vx, vy);
+
+        if !base.known || !base.visible {
+            return;
+        }
+
+        if cur_loc.at(c).item().is_some() {
+            let item = cur_loc.at(c).item().unwrap();
+
+            let color = color::WALL_FG;
+            let fg = color_by_visibility(color, base.visible, base.light);
+
+            *self.items.at_mut(vx, vy) = Some(DisplayCharacter {
+                fg: fg,
+                bg: base.base.bg,
+                bold: player.discovered.contains(&c),
+                glyph: item_to_char(item.category())
+            });
+        }
+    }
+
+    fn draw_actors(&mut self, cur_loc : &Location) {
+        let mut actors : Vec<(actor::Id, Position)> =
+                cur_loc.actors_byid
+                .iter()
+                .filter(|&(id, a)| !a.is_dead())
+                .map(|(id, a)| (*id, a.pos))
+                .collect();
+
+        let player = cur_loc.player();
+
+        thread_rng().shuffle(&mut actors);
+
+        for &(id, pos) in actors.iter() {
+            let actor = &cur_loc.actors_byid[&id];
+            let race = actor.race;
+
+            let actor_coord = actor.pos.coord;
+            let actor_head = actor.pos.coord + actor.pos.dir.to_coordinate();
+
+            if player.sees(actor_coord) {
+                if let Some((vx, vy)) = self.coord_to_glyph_xy(actor_coord) {
+                    let base = self.base.at(vx, vy);
+                    debug_assert!(base.known);
+                    let fg_palete = race_to_palete(race);
+                    let mut fg = color_by_visibility(fg_palete, base.visible, base.light);
+
+                    let mut bg = base.base.bg;
+                    if self.actors_aheads.contains_key(&actor_coord) &&
+                     player.sees(self.actors_aheads[&actor_coord]) {
+                         bg = Color::from(if actor_coord == player.head() {
+                                 color::SELF_HEAD_ACTOR_BG
+                             } else {
+                                 color::ENEMY_HEAD_ACTOR_BG
+                             });
+                        fg = Color::from(color::ACTOR_HEAD_ACTOR_FG);
+                    }
+                    *self.actors.at_mut(vx, vy) = Some(DisplayCharacter {
+                        fg: Color::from(fg),
+                        bg: bg,
+                        bold: base.base.bold,
+                        glyph: race_to_char(race),
+                    });
+                }
+
+                if let Some((vx, vy)) = self.coord_to_glyph_xy(actor_head) {
+                    let base = self.base.at(vx, vy);
+                    let items = self.items.at(vx, vy);
+                    let mut actors = self.actors.at_mut(vx, vy);
+                    if base.known {
+                        let palete = race_to_palete(race);
+                        let color = palete[0];
+
+                        if !cur_loc.at(actor_head).is_occupied() {
+                            *actors = Some(DisplayCharacter {
+                                fg: Color::from(color),
+                                bg: base.base.bg,
+                                bold: true,
+                                glyph: items.unwrap_or(base.base).glyph,
+                            });
+                        }
+                    } else {
+                        let palete = race_to_palete(race);
+                        let bg = palete[0];
+                        *actors = Some(DisplayCharacter {
+                            fg: base.base.fg,
+                            bg: Color::from(bg),
+                            bold: true,
+                            glyph: ' ',
+                        });
+                    }
+                }
+            }
+        }
+    }
+
+    fn draw_effects_normal(&mut self, cur_loc : &Location) {
+         let mut actors : Vec<(actor::Id, Position)> =
+                cur_loc.actors_byid
+                .iter()
+                .filter(|&(id, a)| !a.is_dead())
+                .map(|(id, a)| (*id, a.pos))
+                .collect();
+
+        let player = cur_loc.player();
+
+        thread_rng().shuffle(&mut actors);
+
+
+        for &(id, pos) in actors.iter() {
+            let actor = &cur_loc.actors_byid[&id];
+            let race = actor.race;
+
+            let actor_coord = actor.pos.coord;
+            let actor_head = actor.pos.coord + actor.pos.dir.to_coordinate();
+
+            let cur_pos = actor.pos;
+            let prev_pos = actor.prev_pos();
+
+            if !player.could_have_seen(actor) {
+                continue;
+            }
+
+            let prev_and_cur = if  prev_pos.coord != cur_pos.coord {
+                Some((prev_pos.coord, cur_pos.coord))
+            } else if prev_pos.dir != cur_pos.dir {
+                Some((prev_pos.coord + prev_pos.dir.to_coordinate(),
+                    cur_pos.coord + cur_pos.dir.to_coordinate()))
+            } else {
+                None
+            };
+
+            if let Some((prev_coord, cur_coord)) = prev_and_cur {
+                if let Some((tail_vx, tail_vy)) = self.coord_to_glyph_xy(prev_coord) {
+                    let base = self.base.at(tail_vx, tail_vy);
+                    let items = self.items.at(tail_vx, tail_vy);
+                    if self.anim_frame_count < 6 {
+                        let fg : Color = if actor.is_player() {
+                            color::RGB::new(0, 0, 5)
+                        } else {
+                            color::RGB::new(5, 0, 0)
+                        }.into();
+
+                        // TODO: use effective fg, not base one
+                        let fg : Color = fg.mix(base.base.bg, self.anim_frame_count as u8);
+
+                        let glyph = match cur_coord.direction_to_cw(prev_coord) {
+                            Some(Direction::XY) | Some(Direction::YX) => '-',
+                            Some(Direction::ZY) | Some(Direction::YZ) => '\\',
+                            Some(Direction::ZX) | Some(Direction::XZ) => '/',
+                            None => panic!(),
+                        };
+                        self.effects.at_mut(tail_vx, tail_vy).push(
+                            DisplayCharacter {
+                                fg: Color::from(fg),
+                                bg: base.base.bg,
+                                bold: false,
+                                glyph: glyph,
+                            });
+                    }
+                }
+            }
+        }
+    }
+
+    fn draw_effects_examine(&mut self, cur_loc : &Location) {
+        let coord_center = self.coord_center;
+        let coord_head = self.coord_head;
+        if let Some((vx, vy)) = self.coord_to_glyph_xy(coord_center) {
+            let base = self.base.at(vx, vy);
+            self.effects.at_mut(vx, vy).push(
+                DisplayCharacter {
+                    fg: Color::from(color::CHAR_GRAY_FG),
+                    bg: base.base.bg,
+                    bold: false,
+                    glyph: '@',
+                });
+        }
+
+        if let Some((vx, vy)) = self.coord_to_glyph_xy(coord_head) {
+            let base = self.base.at(vx, vy);
+            self.effects.at_mut(vx, vy).push(
+                DisplayCharacter {
+                    fg: Color::from(color::CHAR_GRAY_FG),
+                    bg: base.base.bg,
+                    bold: true,
+                    glyph: self.dot,
+                });
+        }
+    }
+
+    fn draw_effects_target(&mut self, cur_loc : &Location) {
+
+        let mut target_line = Vec::new();
+        self.coord_center.for_each_in_line_to(self.coord_head, |c| {
+            target_line.push(c);
+        });
+
+        for &c in &target_line {
+            if let Some((vx, vy)) = self.coord_to_glyph_xy(c) {
+                let base = self.base.at(vx, vy);
+
+                self.effects.at_mut(vx, vy).push(
+                    if cur_loc.at(c).tile().is_passable() && base.known {
+                        DisplayCharacter {
+                            fg: color_by_visibility(color::CHAR_SELF_FG.into(), base.visible, base.light),
+                            bg: base.base.bg,
+                            bold: base.base.bold,
+                            glyph: '*',
+                        }
+                    } else {
+                        DisplayCharacter {
+                            fg: base.base.fg,
+                            bg: color::BLOCKED_BG.into(),
+                            bold: true,
+                            glyph: base.base.glyph,
+                        }
+                    });
+            }
+        }
+    }
+
+    fn draw_effects(&mut self, cur_loc : &Location) {
+        match self.mode {
+            Mode::Normal|Mode::GoTo => self.draw_effects_normal(cur_loc),
+            Mode::Examine => self.draw_effects_examine(cur_loc),
+            Mode::Target(_) => self.draw_effects_target(cur_loc),
+            _ => panic!("wrong mode"),
         }
     }
 
@@ -415,50 +577,73 @@ impl MapRenderer{
         let (max_x, max_y) = (self.base.width, self.base.height);
         for vx in 0..max_x {
             for vy in 0..max_y {
-                match self.base.array[vy * max_x as usize + vx] {
-                    Some(ch) => {
-                        let cpair = nc::COLOR_PAIR(calloc.get(ch.fg, ch.bg));
-                        if ch.glyph <= (127u8 as char) {
-                            let c = (ch.glyph as nc::chtype) | cpair;
-                            nc::mvwaddch(window, vy as i32, vx as i32, if ch.bold { c|nc::A_BOLD() } else { c });
-                        } else {
-                            let attrflag = if ch.bold { cpair|nc::A_BOLD() } else { cpair };
-                            nc::wattron(window, attrflag as i32);
-                            nc::mvwaddstr(window, vy as i32, vx as i32, &format!("{}", ch.glyph));
-                            nc::wattroff(window, attrflag as i32);
-                        }
-
-                    }
-                    None => { }
+                let ch = if let Some(ch) = thread_rng().choose(self.effects.at(vx, vy)) {
+                    ch
+                } else if let &Some(ref ch) = self.actors.at(vx, vy) {
+                    ch
+                } else if let &Some(ref ch) = self.items.at(vx, vy) {
+                    ch
+                } else {
+                    &self.base.at(vx, vy).base
+                };
+                let cpair = nc::COLOR_PAIR(calloc.get(ch.fg, ch.bg));
+                if ch.glyph <= (127u8 as char) {
+                    let c = (ch.glyph as nc::chtype) | cpair;
+                    nc::mvwaddch(window, vy as i32, vx as i32, if ch.bold { c|nc::A_BOLD() } else { c });
+                } else {
+                    let attrflag = if ch.bold { cpair|nc::A_BOLD() } else { cpair };
+                    nc::wattron(window, attrflag as i32);
+                    nc::mvwaddstr(window, vy as i32, vx as i32, &format!("{}", ch.glyph));
+                    nc::wattroff(window, attrflag as i32);
                 }
             }
         }
     }
 
 
+    fn coord_to_glyph_xy(&mut self, coord : Coordinate) -> Option<(usize, usize)> {
+        let (center_vx, center_vy) = self.coord_center.to_pixel_integer(SPACING);
+        let (coord_vx, coord_vy) = coord.to_pixel_integer(SPACING);
+
+        let (rel_vx, rel_vy) = (coord_vx - center_vx, coord_vy - center_vy);
+        let (max_x, max_y) = (self.base.width as isize, self.base.height as isize);
+
+        let mid_x = max_x as isize / 2;
+        let mid_y = max_y as isize / 2;
+
+        let vx = rel_vx as isize + mid_x;
+        let vy = rel_vy as isize + mid_y;
+
+        if vx >= 0 && vx < max_x &&
+            vy >= 0 && vy < max_y {
+                Some((vx as usize, vy as usize))
+            } else {
+                None
+            }
+    }
+
     fn for_each_glyph<F>(&mut self, cur_loc: &Location, f : F)
-    where F : Fn(&mut MapRenderer, &Location, usize, usize, Coordinate, bool) {
-        let (vpx, vpy) = self.coord_center.to_pixel_integer(SPACING);
-        let (max_x, max_y) = (self.base.width, self.base.height);
+        where F : Fn(&mut MapRenderer, &Location, usize, usize, Coordinate, bool) {
+            let (vpx, vpy) = self.coord_center.to_pixel_integer(SPACING);
+            let (max_x, max_y) = (self.base.width as i32, self.base.height as i32);
 
-        let mid_x = max_x / 2;
-        let mid_y = max_y / 2;
+            let mid_x = max_x / 2;
+            let mid_y = max_y / 2;
 
+            for vx in 0i32..max_x {
+                for vy in 0i32..max_y {
+                    let (rvx, rvy) = (vx - mid_x, vy - mid_y);
 
-        for vx in 0..max_x {
-            for vy in 0..max_y {
-                let (rvx, rvy) = (vx - mid_x, vy - mid_y);
+                    let (cvx, cvy) = (rvx + vpx, rvy + vpy);
 
-                let (cvx, cvy) = (rvx + vpx as usize, rvy + vpy as usize);
+                    let (c, off) = Coordinate::from_pixel_integer(SPACING, (cvx as i32, cvy as i32));
 
-                let (c, off) = Coordinate::from_pixel_integer(SPACING, (cvx as i32, cvy as i32));
+                    let is_proper_coord = off == (0, 0);
 
-                let is_proper_coord = off == (0, 0);
-
-                f(self, cur_loc, vx, vy, c, is_proper_coord)
+                    f(self, cur_loc, vx as usize, vy as usize, c, is_proper_coord)
+                }
             }
         }
-    }
 }
 
 pub fn item_to_char(t: item::Category) -> char {
@@ -469,4 +654,44 @@ pub fn item_to_char(t: item::Category) -> char {
         item::Category::Misc => '"',
         item::Category::Consumable => '%',
     }
+}
+
+pub fn race_to_char(race: Race) -> char {
+    match race {
+        Race::Human | Race::Elf | Race::Dwarf => '@',
+        Race::Rat =>  'r',
+        Race::Goblin => 'g',
+        Race::Troll => 'T',
+    }
+}
+
+pub fn color_by_visibility(color : [u8; 4], visible: bool, light : u32) -> Color {
+    let fg = if !visible || light == 0 {
+        if visible {
+            color[2]
+        } else {
+            color[3]
+        }
+    } else if light < 3 {
+        color[1]
+    } else {
+        color[0]
+    };
+
+    Color::from(fg)
+}
+
+// TODO: actor to palete, not race
+pub fn race_to_palete(race : Race) -> [u8; 4] {
+    if race == Race::Human {
+        color::CHAR_SELF_FG
+    } else {
+        color::CHAR_ENEMY_FG
+    }
+}
+
+
+// TODO: actor to palete, not race
+pub fn race_to_reversed_palete(race : Race) -> [u8; 4] {
+    color::WALL_FG
 }
