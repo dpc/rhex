@@ -43,7 +43,7 @@ impl Race {
             Race::Goblin => "goblin",
             Race::Troll => "troll",
         }
-        .to_string()
+        .to_owned()
     }
 }
 
@@ -466,10 +466,6 @@ impl Actor {
         }
     }
 
-    pub fn acted_last_tick(&self) -> bool {
-        self.acted
-    }
-
     fn los_to_visible(&self, loc: &game::Location, los: &Visibility) -> Visibility {
         let mut visible: Visibility = Default::default();
 
@@ -505,7 +501,7 @@ impl Actor {
             }
         }
 
-        for &coord in self.discovered.iter() {
+        for &coord in &self.discovered {
             if let Some(area) = loc.at(coord).tile().area {
                 let area_center = area.center;
 
@@ -576,16 +572,14 @@ impl Actor {
 
     pub fn post_own_tick(&mut self, loc: &Location) {
         if !self.is_dead() {
-            if self.sp < self.stats.base.max_sp {
-                if rand::thread_rng().gen_weighted_bool(10) {
+            if self.sp < self.stats.base.max_sp &&
+                rand::thread_rng().gen_weighted_bool(10) {
                     self.sp += 1
                 }
-            }
 
-            if self.hp < self.stats.base.max_hp {
-                if rand::thread_rng().gen_range(0, 50) < self.stats.base.regeneration {
+            if self.hp < self.stats.base.max_hp &&
+                rand::thread_rng().gen_range(0, 50) < self.stats.base.regeneration {
                     self.hp += 1
-                }
             }
 
             if self.pre_pos != Some(self.pos){
@@ -828,10 +822,6 @@ impl Actor {
         self.noise_makes(2);
     }
 
-    pub fn changed_position(&self) -> bool {
-        Some(self.pos) != self.pre_pos
-    }
-
     pub fn is_player(&self) -> bool {
         self.player
     }
@@ -873,13 +863,10 @@ impl Actor {
                         let head = self.head();
                         let item = loc.at_mut(head).pick_item();
 
-                        match item {
-                            Some(item) => {
-                                if let Some(item) = self.pick_item(item) {
-                                    loc.at_mut(head).drop_item(item);
-                                }
+                        if let Some(item) = item {
+                            if let Some(item) = self.pick_item(item) {
+                                loc.at_mut(head).drop_item(item);
                             }
-                            None => {}
                         }
                     }
                     Action::Equip(ch) => {
@@ -938,15 +925,12 @@ impl Actor {
                         loc.actors_coord_to_id.insert(new_pos.coord, id);
                     } else {
                         // we hit the wall or something
-                        match action {
-                            Action::Move(angle) => {
-                                if self.can_dig() &&
-                                    self.can_dig_at_angle(angle) &&
+                        if let Action::Move(angle) = action {
+                            if self.can_dig() &&
+                                self.can_dig_at_angle(angle) &&
                                     loc.at(new_pos.coord).tile().can_dig_through() {
-                                    self.dig(angle, loc)
-                                }
-                            },
-                            _ => { }
+                                        self.dig(angle, loc)
+                                    }
                         }
 
                     }
@@ -954,15 +938,14 @@ impl Actor {
     }
 
     // Item equipped in a given slot
-    pub fn equipped_in_slot<'a>(&'a self, slot : Slot) -> Option<&'a Item> {
+    pub fn equipped_in_slot(&self, slot : Slot) -> Option<&Item> {
         self.items_equipped.get(&slot).map(|&(_, ref item)| &**item)
     }
 
     pub fn can_dig(&self) -> bool {
         self.can_attack_sp() &&
             self.equipped_in_slot(Slot::RHand)
-            .map(|item| item.can_dig())
-            .unwrap_or(false)
+            .map_or(false, |item| item.can_dig())
     }
 
     pub fn dig(&mut self, angle : Angle, loc : &mut Location) {

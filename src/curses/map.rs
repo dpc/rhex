@@ -1,5 +1,4 @@
-use std::default;
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap};
 
 use super::ui::Mode;
 use super::color::{self, Color};
@@ -57,7 +56,7 @@ where T : Clone+Default {
     }
 
     pub fn reset(&mut self) {
-        for mut ch in self.array.iter_mut() {
+        for mut ch in &mut self.array {
             *ch = Default::default();
         }
     }
@@ -174,7 +173,7 @@ impl MapRenderer {
                 .iter()
                 .filter(|&(_, a)| !a.is_dead())
                 .filter(|&(_, a)| !a.is_player())
-                .map(|(id, a)| (a.pre_pos.unwrap_or(a.pos).coord, a.pos.coord))
+                .map(|(_, a)| (a.pre_pos.unwrap_or(a.pos).coord, a.pos.coord))
                 .filter(|&(pre_pos, pos)| pre_pos != pos)
                 .collect();
 
@@ -184,7 +183,7 @@ impl MapRenderer {
                 .filter(|&(_, a)| !a.is_dead())
                 .filter(|&(_, a)| !a.is_player())
                 .filter(|&(_, a)| a.pre_pos.unwrap_or(a.pos).coord == a.pos.coord)
-                .map(|(id, a)| (a.pre_head.unwrap_or(a.head()), a.head()))
+                .map(|(_, a)| (a.pre_head.unwrap_or(a.head()), a.head()))
                 .filter(|&(pre, now)| pre != now)
                 .collect();
     }
@@ -193,7 +192,6 @@ impl MapRenderer {
                            vx : usize, vy : usize,
                            c : Coordinate, is_proper_coord: bool) {
         let player = cur_loc.player();
-        let player_ahead = player.pos.coord + player.pos.dir;
 
         let (visible, _in_los, knows, tt, t, light) = if is_proper_coord {
 
@@ -248,7 +246,6 @@ impl MapRenderer {
                 let (light1, light2) = (cur_loc.at(c1).light_as_seen_by(player),
                 cur_loc.at(c2).light_as_seen_by(player));
 
-
                 if player.is_dead() {
                     (light1 + light2) / 2
                 } else {
@@ -273,8 +270,7 @@ impl MapRenderer {
         }
 
         let mut bold = false;
-        let occupied = cur_loc.at(c).is_occupied();
-        let (fg, bg, mut glyph) = match tt {
+        let (fg, bg, glyph) = match tt {
             Some(tile::Empty) => {
                 let mut fg = color::STONE_FG;
                 let mut bg = color::EMPTY_BG;
@@ -297,6 +293,15 @@ impl MapRenderer {
                         }
                         Some(tile::Statue) => glyph = STATUE_CH,
                         Some(tile::Stairs) => glyph = STAIRS_DOWN_CH,
+                    }
+
+                    if visible && cur_loc.at(c).tile().light > 0 {
+                        fg = [
+                            color::LIGHTSOURCE[0].to_u8(),
+                            color::LIGHTSOURCE[1].to_u8(),
+                            color::LIGHTSOURCE[2].to_u8(),
+                            color::LIGHTSOURCE[3].to_u8(),
+                        ]
                     }
                 }
 
@@ -336,7 +341,6 @@ impl MapRenderer {
         }
 
         let player = cur_loc.player();
-        let player_ahead = player.pos.coord + player.pos.dir;
 
         let base = &self.base.at(vx, vy);
 
@@ -363,7 +367,7 @@ impl MapRenderer {
         let mut actors : Vec<(actor::Id, Position)> =
                 cur_loc.actors_byid
                 .iter()
-                .filter(|&(id, a)| !a.is_dead())
+                .filter(|&(_, a)| !a.is_dead())
                 .map(|(id, a)| (*id, a.pos))
                 .collect();
 
@@ -371,7 +375,7 @@ impl MapRenderer {
 
         thread_rng().shuffle(&mut actors);
 
-        for &(id, pos) in actors.iter() {
+        for &(id, _) in &actors {
             let actor = &cur_loc.actors_byid[&id];
             let race = actor.race;
 
@@ -385,7 +389,7 @@ impl MapRenderer {
                     let fg_palete = race_to_palete(race);
                     let mut fg = color_by_visibility(fg_palete, base.visible, base.light);
 
-                    let mut bg = base.base.bg;
+                    let mut bg = color_by_visibility(color::CHAR_BG, base.visible, base.light);
                     if self.actors_aheads.contains_key(&actor_coord) &&
                      player.sees(self.actors_aheads[&actor_coord]) {
                          bg = Color::from(if actor_coord == player.head() {
@@ -438,7 +442,7 @@ impl MapRenderer {
          let mut actors : Vec<(actor::Id, Position)> =
                 cur_loc.actors_byid
                 .iter()
-                .filter(|&(id, a)| !a.is_dead())
+                .filter(|&(_, a)| !a.is_dead())
                 .map(|(id, a)| (*id, a.pos))
                 .collect();
 
@@ -447,12 +451,8 @@ impl MapRenderer {
         thread_rng().shuffle(&mut actors);
 
 
-        for &(id, pos) in actors.iter() {
+        for &(id, _) in &actors {
             let actor = &cur_loc.actors_byid[&id];
-            let race = actor.race;
-
-            let actor_coord = actor.pos.coord;
-            let actor_head = actor.pos.coord + actor.pos.dir.to_coordinate();
 
             let cur_pos = actor.pos;
             let prev_pos = actor.prev_pos();
@@ -473,7 +473,6 @@ impl MapRenderer {
             if let Some((prev_coord, cur_coord)) = prev_and_cur {
                 if let Some((tail_vx, tail_vy)) = self.coord_to_glyph_xy(prev_coord) {
                     let base = self.base.at(tail_vx, tail_vy);
-                    let items = self.items.at(tail_vx, tail_vy);
                     if self.anim_frame_count < 6 {
                         let fg : Color = if actor.is_player() {
                             color::RGB::new(0, 0, 5)
@@ -503,7 +502,7 @@ impl MapRenderer {
         }
     }
 
-    fn draw_effects_examine(&mut self, cur_loc : &Location) {
+    fn draw_effects_examine(&mut self, _cur_loc : &Location) {
         let coord_center = self.coord_center;
         let coord_head = self.coord_head;
         if let Some((vx, vy)) = self.coord_to_glyph_xy(coord_center) {
@@ -579,9 +578,9 @@ impl MapRenderer {
             for vy in 0..max_y {
                 let ch = if let Some(ch) = thread_rng().choose(self.effects.at(vx, vy)) {
                     ch
-                } else if let &Some(ref ch) = self.actors.at(vx, vy) {
+                } else if let Some(ref ch) = *self.actors.at(vx, vy) {
                     ch
-                } else if let &Some(ref ch) = self.items.at(vx, vy) {
+                } else if let Some(ref ch) = *self.items.at(vx, vy) {
                     ch
                 } else {
                     &self.base.at(vx, vy).base
@@ -687,10 +686,4 @@ pub fn race_to_palete(race : Race) -> [u8; 4] {
         Race::Human | Race::Elf | Race::Dwarf => color::CHAR_SELF_FG,
         _ => color::CHAR_ENEMY_FG,
     }
-}
-
-
-// TODO: actor to palete, not race
-pub fn race_to_reversed_palete(race : Race) -> [u8; 4] {
-    color::WALL_FG
 }

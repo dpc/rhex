@@ -42,7 +42,7 @@ impl Location {
             actors_counter += 1;
         }
 
-        let loc = Location {
+        Location {
             actors_byid: actors,
             actors_coord_to_id: actors_pos,
             actors_counter: actors_counter,
@@ -52,9 +52,7 @@ impl Location {
             level: 0,
             light_map: LightMap::new(),
             player_id: None,
-        };
-
-        loc
+        }
     }
 
     pub fn player_id(&self) -> actor::Id {
@@ -230,12 +228,12 @@ impl Location {
             if self.actors_byid[id].is_dead() && !self.actors_dead.contains(&id) {
                 let mut a = self.actors_byid.remove(&id).unwrap();
 
-                for (_, item) in a.items_backpack.iter() {
+                for (_, item) in &a.items_backpack {
                     self.at_mut(a.pos.coord).drop_item(item.clone());
                 }
                 a.items_backpack.clear();
 
-                for (_, &(_, ref item)) in a.items_equipped.iter() {
+                for (_, &(_, ref item)) in &a.items_equipped {
                     self.at_mut(a.pos.coord).drop_item(item.clone());
                 }
                 a.items_equipped.clear();

@@ -65,11 +65,7 @@ fn tile_is_deadend(map: &Map, coord: Coordinate) -> bool {
         }
     }
 
-    if changes < 4 {
-        true
-    } else {
-        false
-    }
+    changes < 4
 }
 
 impl DungeonGenerator {
@@ -91,12 +87,8 @@ impl DungeonGenerator {
                         let leftwall = pos + (pos.dir + h2d::Angle::Left).to_coordinate();
                         let rightwall = pos + (pos.dir + h2d::Angle::Right).to_coordinate();
 
-                        if !self.map.contains_key(&leftwall.coord) {
-                            self.map.insert(leftwall.coord, tile::Tile::new(tile::Wall));
-                        }
-                        if !self.map.contains_key(&rightwall.coord) {
-                            self.map.insert(rightwall.coord, tile::Tile::new(tile::Wall));
-                        }
+                        self.map.entry(leftwall.coord).or_insert(tile::Tile::new(tile::Wall));
+                        self.map.entry(rightwall.coord).or_insert(tile::Tile::new(tile::Wall));
                     }
                     _ => {}
                 }
@@ -189,9 +181,9 @@ impl DungeonGenerator {
         // TODO: Guarantee that the room is not completely closed
         coord.for_each_in_ring(r as i32, h2d::Spin::CW(h2d::Direction::XY), |c| {
             if !self.map.contains_key(&c) {
+                self.tile_count += 1;
                 self.map.insert(c,
                                 *tile::Tile::new(tile::Empty).add_feature(tile::Door(false)));
-                self.tile_count += 1;
             }
         });
 
@@ -209,7 +201,7 @@ impl DungeonGenerator {
 
 
         coord.for_each_in_range(r as i32 / 2, |c| {
-            if c != coord && self.map.get(&c).map(|t| t.is_passable()).unwrap_or(false) {
+            if c != coord && self.map.get(&c).map_or(false, |t| t.is_passable()) {
                 match self.rng.gen_range(0, 10) {
                     0 => {
                         let pos = Position::new(c, Direction::XY);
@@ -281,20 +273,19 @@ impl DungeonGenerator {
 
         let mut map = SimpleMap::new();
 
-        for (&coord, tile) in self.map.iter() {
+        for (&coord, tile) in &self.map {
             map[coord] = tile.clone()
         }
 
         // eliminate dead ends
-        for (&coord, tile) in self.map.iter() {
-            if tile.feature == Some(tile::Door(false)) {
-                if tile_is_deadend(&map, coord) {
+        for (&coord, tile) in &self.map {
+            if tile.feature == Some(tile::Door(false)) &&
+                tile_is_deadend(&map, coord) {
                     map[coord] = tile::Tile::new(tile::Wall);
                 }
-            }
         }
 
-        return (map, self.actors, self.items);
+        (map, self.actors, self.items)
     }
 }
 

@@ -1,5 +1,4 @@
 use hex2d::IntegerSpacing;
-use ncurses::chtype;
 
 pub static SPACING: IntegerSpacing<i32> = IntegerSpacing::PointyTop(2, 1);
 
@@ -9,8 +8,6 @@ pub const DOOR_CLOSED_CH: char = '×';
 pub const STATUE_CH: char = '&';
 pub const STAIRS_DOWN_CH: char = '>';
 pub const WATER_CH: char = '~';
-pub const NOTHING_CH: char = '~';
-pub const NORMAL_DOT: char = '.';
 pub const UNICODE_DOT: char = '\u{2022}';
 
 pub const KEY_ESC: i32 = 0x1b;

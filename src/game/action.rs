@@ -1,4 +1,4 @@
-use hex2d::{Angle, Coordinate, Left, Right, Forward};
+use hex2d::{Angle, Coordinate};
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub enum Action {

@@ -1,5 +1,5 @@
 use std::cell::RefCell;
-use std::collections::{VecDeque, HashMap, HashSet};
+use std::collections::{VecDeque};
 use std::env;
 use std;
 use std::{thread, cmp, fmt};
@@ -12,7 +12,7 @@ use num::integer::Integer;
 use game::Action::*;
 
 use ncurses as nc;
-use hex2d::{Position, Coordinate, Angle, Left, Right, Forward, Back, ToCoordinate, Direction};
+use hex2d::{Position, Coordinate, Angle, Left, Right, Forward, Back, ToCoordinate};
 
 use hex2dext::algo::bfs;
 
@@ -22,7 +22,7 @@ use super::{LogEntry, AutoMoveType, AutoMoveAction, LogEvent, Event, GoToType};
 use super::Result;
 use super::map::MapRenderer;
 
-use game::{actor, Location, Actor, item, area};
+use game::{actor, Location, Actor, area};
 use game;
 use game::actor::{Race, Slot};
 use game::tile;
@@ -81,14 +81,14 @@ impl Windows {
 }
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
-enum InvMode {
+pub enum InvMode {
     View,
     Equip,
     Drop_,
 }
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
-enum FSMode {
+pub enum FSMode {
     Help,
     Intro,
     PickRace,
@@ -96,7 +96,7 @@ enum FSMode {
 }
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
-enum TargetMode {
+pub enum TargetMode {
     Ranged,
 }
 
@@ -118,7 +118,6 @@ pub struct Ui {
     mode: Mode,
     log: RefCell<VecDeque<LogEntry>>,
     target_pos: Option<Position>,
-    dot: char,
 
     label_color: nc::attr_t,
     text_color: nc::attr_t,
@@ -136,10 +135,8 @@ pub struct Ui {
     automoving_stopped_turn: u64,
 
     anim_frame_count: u32,
-    action_ui_duration_ms: i64,
     next_turn_ts:  chrono::datetime::DateTime<chrono::offset::local::Local>,
     next_anim_frame_ts:  chrono::datetime::DateTime<chrono::offset::local::Local>,
-    next_redraw: chrono::datetime::DateTime<chrono::offset::local::Local>,
 
     game_action_queue: VecDeque<game::Action>,
 
@@ -196,7 +193,6 @@ impl Ui {
             windows: Windows::after_resize(),
             mode: Mode::FullScreen(FSMode::Intro),
             target_pos: None,
-            dot: UNICODE_DOT,
             log: RefCell::new(VecDeque::new()),
 
             label_color: label_color,
@@ -213,9 +209,6 @@ impl Ui {
             engine: engine,
             automoving: None,
             automoving_stopped_turn: 0,
-
-            action_ui_duration_ms: 0,
-            next_redraw: chrono::Local::now(),
 
             anim_frame_count: 0,
             next_turn_ts: chrono::Local::now(),
@@ -337,7 +330,7 @@ impl Ui {
         }
     }
 
-    pub fn goto_action(&self, gototype: GoToType) -> AutoMoveAction {
+    fn goto_action(&self, _gototype: GoToType) -> AutoMoveAction {
         let player = self.player();
         let cur_loc = self.current_location();
 
@@ -415,11 +408,10 @@ impl Ui {
     }
 
     fn engine_change(&mut self, actor_id: actor::Id) {
-        if self.automoving.is_some() {
-            if self.automoving_stopped_turn != self.engine.turn() && self.should_stop_automoving() {
+        if self.automoving.is_some() &&
+            self.automoving_stopped_turn != self.engine.turn() && self.should_stop_automoving() {
                 self.automoving_stop();
             }
-        }
 
         let player_id = self.current_location().player_id();
 
@@ -429,7 +421,7 @@ impl Ui {
             } else if self.player().is_dead() {
                 self.next_turn_ts = chrono::Local::now() + Duration::milliseconds(50);
             }
-        };
+        }
     }
 
     pub fn player(&self) -> &Actor {
@@ -476,11 +468,8 @@ impl Ui {
                             player_acted = true;
                         }
                         AutoMoveAction::Finish => {
-                            match movetype {
-                                AutoMoveType::Explore => {
-                                    self.event(Event::Log(LogEvent::AutoExploreDone));
-                                }
-                                _ => {}
+                            if let AutoMoveType::Explore = movetype {
+                                self.event(Event::Log(LogEvent::AutoExploreDone));
                             }
                             self.automoving_stop();
                         }
@@ -525,7 +514,6 @@ impl Ui {
 
     pub fn run(&mut self) {
         while !self.exit {
-            let start = chrono::Local::now();
             self.run_once();
         }
     }
@@ -559,36 +547,8 @@ impl Ui {
         self.redraw();
     }
 
-    pub fn queue_turn(&mut self, angle: Angle) {
-        self.action_push(game::Action::Turn(angle))
-    }
-
-    pub fn queue_spin(&mut self, angle: Angle) {
-        self.action_push(game::Action::Spin(angle))
-    }
-
-    pub fn queue_move(&mut self, angle: Angle) {
-        self.action_push(game::Action::Move(angle))
-    }
-
-    pub fn queue_charge(&mut self) {
-        self.action_push(game::Action::Charge)
-    }
-
-    pub fn queue_pick(&mut self) {
-        self.action_push(game::Action::Pick)
-    }
-
     pub fn queue_ranged(&mut self, coord: Coordinate) {
         self.action_push(game::Action::Ranged(coord))
-    }
-
-    pub fn queue_wait(&mut self) {
-        self.action_push(game::Action::Wait)
-    }
-
-    pub fn queue_descend(&mut self) {
-        self.action_push(game::Action::Descend)
     }
 
     pub fn queue_action(&mut self, action : game::Action) {
@@ -607,7 +567,7 @@ impl Ui {
         self.input_mode == InputMode::Vi
     }
 
-    pub fn key_to_action_normal(&self, key : i32) -> Option<Action> {
+    fn key_to_action_normal(&self, key : i32) -> Option<Action> {
         let action = match (key, self.in_vi_input_mode()) {
             (KEY_LOWH, true) |
             (KEY_LOWA, false) |
@@ -648,7 +608,7 @@ impl Ui {
         Some(action)
     }
 
-    pub fn key_to_action_global(&self, key : i32) -> Option<GlobalAction> {
+    fn key_to_action_global(&self, key : i32) -> Option<GlobalAction> {
         let action = match key {
             nc::KEY_F2 => ToggleInputMode,
             _ => return None,
@@ -656,6 +616,7 @@ impl Ui {
 
         Some(action)
     }
+
     pub fn input_handle_key_mode_specific(&mut self, key : i32) {
         match self.mode {
             Mode::FullScreen(fs_mode) => {
@@ -820,16 +781,16 @@ impl Ui {
                 }
             }
             Mode::GoTo => {
-                match key {
-                    KEY_DESCEND => self.automoving = Some(AutoMoveType::GoTo(GoToType::Stairs)),
-                    _ => {}
+                if let KEY_DESCEND = key {
+                    self.automoving = Some(AutoMoveType::GoTo(GoToType::Stairs))
                 }
                 self.mode_switch_to(Mode::Normal);
             }
         }
     }
+
     pub fn input_handle_key(&mut self, key : i32) {
-        if let Some(global_action) = self.key_to_action_global(key) {
+        if let Some(_) = self.key_to_action_global(key) {
             self.input_mode.toggle();
             self.redraw();
         } else {
@@ -859,7 +820,7 @@ impl Ui {
                                 .iter()
                                 .filter(|&coord| cur_loc.at(*coord).item_map_or(false, |_| true)) {
             let item_descr = cur_loc.at(*item_coord)
-                                    .item_map_or("".to_string(), |i| i.description().to_string());
+                                    .item_map_or("".to_owned(), |i| i.description());
             self.log(&format!("You've found {}.", item_descr));
         }
 
@@ -911,7 +872,7 @@ impl Ui {
     pub fn log(&self, s: &str) {
         let turn = self.engine.turn();
         self.log.borrow_mut().push_front(LogEntry {
-            text: s.to_string(),
+            text: s.to_owned(),
             turn: turn,
         });
     }
@@ -1002,13 +963,11 @@ impl Ui {
             nc::wattron(window, self.text_color);
         }
 
-        let item = if let Some(&(_, ref item)) = astate.items_equipped.get(&slot) {
+        if let Some(&(_, ref item)) = astate.items_equipped.get(&slot) {
             nc::waddstr(window, &format!("{:^13}", item.description()));
         } else {
             nc::waddch(window, '-' as nc::chtype);
-        };
-
-        // let item = item.slice_chars(0, cmp::min(item.char_len(), 13));
+        }
     }
 
     fn draw_inventory(&self) {
@@ -1055,8 +1014,6 @@ impl Ui {
 
         nc::werase(window);
         nc::wmove(window, 0, 0);
-
-        let (max_y, max_x) = Ui::window_size(window);
 
         let mut y = 0;
         nc::wmove(window, y, 0);
@@ -1192,13 +1149,13 @@ impl Ui {
                         gstate: &game::Location)
                         -> String {
         if !astate.knows(coord) {
-            return "Unknown".to_string();
+            return "Unknown".to_owned();
         }
 
         let tile_type = gstate.at(coord).tile().type_;
         let tile = gstate.at(coord).tile();
-        let feature_descr = tile.feature.map(|f| f.description().to_string());
-        let item_descr = gstate.at(coord).item_map_or(None, |i| Some(i.description().to_string()));
+        let feature_descr = tile.feature.map(|f| f.description().to_owned());
+        let item_descr = gstate.at(coord).item_map_or(None, |i| Some(i.description().to_owned()));
 
         let actor_descr = if astate.sees(coord) || astate.is_dead() {
             gstate.at(coord).actor_map_or(None, |a| {
@@ -1211,7 +1168,7 @@ impl Ui {
                          Race::Elf => "Elf",
                          Race::Dwarf => "Dwarf",
                      }
-                     .to_string())
+                     .to_owned())
             })
         } else {
             None
@@ -1221,15 +1178,15 @@ impl Ui {
 
             (_, _, Some(a_descr), _) => a_descr,
             (_, _, _, Some(i_descr)) => i_descr,
-            (_, Some(f_descr), _, _) => f_descr.to_string(),
-            (tile::Wall, _, _, _) => "a wall".to_string(),
+            (_, Some(f_descr), _, _) => f_descr.to_owned(),
+            (tile::Wall, _, _, _) => "a wall".to_owned(),
             (tile::Empty, _, _, _) => {
                 match tile.area.and_then(|a| Some(a.type_)) {
-                    Some(area::Room(_)) => "room".to_string(),
-                    None => "nothing".to_string(),
+                    Some(area::Room(_)) => "room".to_owned(),
+                    None => "nothing".to_owned(),
                 }
             }
-            _ => tile.type_.description().to_string(),
+            _ => tile.type_.description().to_owned(),
         }
     }
 
