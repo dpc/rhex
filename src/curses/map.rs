@@ -1,8 +1,10 @@
 use std::collections::{HashMap};
+use std::cell::RefCell;
 
 use super::ui::Mode;
 use super::color::{self, Color};
 use super::consts::*;
+use super::Window;
 
 use game::{Location, tile, item};
 use game::actor::{self, Race};
@@ -568,10 +570,8 @@ impl MapRenderer {
         }
     }
 
-    pub fn draw_into(&self, window : nc::WINDOW, calloc : &mut color::Allocator) {
-        let cpair = nc::COLOR_PAIR(calloc.get(color::VISIBLE_FG, color::MAP_BACKGROUND_BG));
-        nc::wbkgd(window, ' ' as nc::chtype | cpair as nc::chtype);
-        nc::werase(window);
+    pub fn draw_into(&self, window : &Window, calloc : &RefCell<color::Allocator>) {
+        window.clear(calloc);
 
         let (max_x, max_y) = (self.base.width, self.base.height);
         for vx in 0..max_x {
@@ -585,18 +585,19 @@ impl MapRenderer {
                 } else {
                     &self.base.at(vx, vy).base
                 };
-                let cpair = nc::COLOR_PAIR(calloc.get(ch.fg, ch.bg));
+                let cpair = nc::COLOR_PAIR(calloc.borrow_mut().get(ch.fg, ch.bg));
                 if ch.glyph <= (127u8 as char) {
                     let c = (ch.glyph as nc::chtype) | cpair;
-                    nc::mvwaddch(window, vy as i32, vx as i32, if ch.bold { c|nc::A_BOLD() } else { c });
+                    nc::mvwaddch(window.window, vy as i32, vx as i32, if ch.bold { c|nc::A_BOLD() } else { c });
                 } else {
                     let attrflag = if ch.bold { cpair|nc::A_BOLD() } else { cpair };
-                    nc::wattron(window, attrflag);
-                    nc::mvwaddstr(window, vy as i32, vx as i32, &format!("{}", ch.glyph));
-                    nc::wattroff(window, attrflag);
+                    nc::wattron(window.window, attrflag);
+                    nc::mvwaddstr(window.window, vy as i32, vx as i32, &format!("{}", ch.glyph));
+                    nc::wattroff(window.window, attrflag);
                 }
             }
         }
+        nc::wrefresh(window.window);
     }
 
 

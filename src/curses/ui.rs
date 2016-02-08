@@ -78,6 +78,7 @@ impl Windows {
             full: fs_window,
         }
     }
+
 }
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
@@ -186,6 +187,9 @@ impl Ui {
 
         let engine = game::Engine::new();
 
+
+        let cpair = nc::COLOR_PAIR(calloc.get(color::VISIBLE_FG, color::BACKGROUND_BG));
+        nc::bkgd(cpair);
         nc::doupdate();
 
         let mut ui = Ui {
@@ -290,6 +294,7 @@ impl Ui {
         let (max_y, max_x) = Ui::screen_size();
 
         nc::mv(max_y - 1, max_x - 1);
+        nc::doupdate();
     }
 
     pub fn is_automoving(&self) -> bool {
@@ -894,7 +899,7 @@ impl Ui {
         } = *self;
 
         map_renderer.update(engine.current_location(), mode, target_pos, anim_frame_count);
-        map_renderer.draw_into(windows.map.window, &mut*calloc.borrow_mut());
+        map_renderer.draw_into(&windows.map, &calloc);
         nc::wnoutrefresh(windows.map.window);
     }
 
@@ -971,14 +976,13 @@ impl Ui {
     }
 
     fn draw_inventory(&self) {
+        self.windows.map.clear(&self.calloc);
         let window = self.windows.map.window;
         let player = self.player();
 
-        let cpair = self.text_color;
-        nc::wbkgd(window, ' ' as nc::chtype | cpair as nc::chtype);
-
-        nc::werase(window);
         nc::wmove(window, 0, 0);
+
+        nc::wattron(window, self.text_color);
         if !player.items_equipped.is_empty() {
             nc::waddstr(window, &format!("Equipped: \n"));
             for (slot, &(ref ch, ref i)) in &player.items_equipped {
@@ -1001,6 +1005,7 @@ impl Ui {
     }
 
     fn draw_stats(&self) {
+        self.windows.stats.clear(&self.calloc);
         let turn = self.engine.turn();
         let window = self.windows.stats.window;
         let player = self.player();
@@ -1009,10 +1014,6 @@ impl Ui {
         let (ac, ev) = (player.stats.base.ac, player.stats.base.ev);
         let (dmg, acc) = (player.stats.melee_dmg, player.stats.melee_acc);
 
-        let cpair = self.text_color;
-        nc::wbkgd(window, ' ' as nc::chtype | cpair as nc::chtype);
-
-        nc::werase(window);
         nc::wmove(window, 0, 0);
 
         let mut y = 0;
@@ -1191,13 +1192,9 @@ impl Ui {
     }
 
     fn draw_log(&self) {
+        self.windows.log.clear(&self.calloc);
         let window = self.windows.log.window;
 
-        let cpair = nc::COLOR_PAIR(self.calloc
-                                       .borrow_mut()
-                                       .get(color::VISIBLE_FG, color::BACKGROUND_BG));
-        nc::wbkgd(window, ' ' as nc::chtype | cpair as nc::chtype);
-        nc::werase(window);
         nc::wmove(window, 0, 0);
 
         match self.mode {
@@ -1234,11 +1231,10 @@ impl Ui {
     }
 
     fn draw_intro(&mut self) {
+        self.windows.full.clear(&self.calloc);
+
         let window = self.windows.full.window;
-        let mut calloc = self.calloc.borrow_mut();
-        let cpair = nc::COLOR_PAIR(calloc.get(color::VISIBLE_FG, color::BACKGROUND_BG));
-        nc::wbkgd(window, ' ' as nc::chtype | cpair as nc::chtype);
-        nc::werase(window);
+
         nc::wmove(window, 0, 0);
 
         nc::waddstr(window,
@@ -1257,11 +1253,9 @@ impl Ui {
     }
 
     fn draw_pickrace(&mut self) {
+        self.windows.full.clear(&self.calloc);
         let window = self.windows.full.window;
-        let mut calloc = self.calloc.borrow_mut();
-        let cpair = nc::COLOR_PAIR(calloc.get(color::VISIBLE_FG, color::BACKGROUND_BG));
-        nc::wbkgd(window, ' ' as nc::chtype | cpair as nc::chtype);
-        nc::werase(window);
+
         nc::wmove(window, 0, 0);
 
         nc::waddstr(window, "Pick your race\n\n");
@@ -1273,11 +1267,8 @@ impl Ui {
     }
 
     fn draw_help(&mut self) {
+        self.windows.full.clear(&self.calloc);
         let window = self.windows.full.window;
-        let mut calloc = self.calloc.borrow_mut();
-        let cpair = nc::COLOR_PAIR(calloc.get(color::VISIBLE_FG, color::BACKGROUND_BG));
-        nc::wbkgd(window, ' ' as nc::chtype | cpair as nc::chtype);
-        nc::werase(window);
         nc::wmove(window, 0, 0);
 
         nc::waddstr(window, &format!("Current input mode: {} (F2 to change)\n\n", self.input_mode));
@@ -1305,15 +1296,13 @@ impl Ui {
     }
 
     fn draw_quit(&mut self) {
+        self.windows.full.clear(&self.calloc);
         let window = self.windows.full.window;
         let mut calloc = self.calloc.borrow_mut();
-        let cpair = nc::COLOR_PAIR(calloc.get(color::VISIBLE_FG, color::BACKGROUND_BG));
 
         let (max_y, max_x) = Ui::screen_size();
         let text = "Quit. Are you sure?";
 
-        nc::wbkgd(window, ' ' as nc::chtype | cpair as nc::chtype);
-        nc::werase(window);
         nc::wmove(window, max_y / 2, (max_x - text.chars().count() as i32) / 2);
 
         nc::waddstr(window, text);
