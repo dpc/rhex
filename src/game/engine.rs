@@ -80,13 +80,13 @@ impl Engine {
     }
 
     fn reload_actors_ids_to_move(&mut self) {
-        let player_id = self.current_location().player_id();
-        self.ids_to_move = self.current_location()
-                               .actors_alive_ids()
-                               .iter()
-                               .filter(|&&id| id != player_id)
-                               .cloned()
-                               .collect();
+        let current_location = &self.locations[self.location_cur];
+        let player_id = current_location.player_id();
+        self.ids_to_move.extend(current_location
+                                .actors_alive_ids()
+                                .iter()
+                                .filter(|&&id| id != player_id)
+                                .cloned());
     }
 
     // player first move
@@ -97,7 +97,6 @@ impl Engine {
         let player_id = self.current_location().player_id();
 
         self.current_location_mut().act(player_id, action);
-        self.state == State::AiMove;
 
         self.checks_after_act(player_id);
     }
@@ -107,7 +106,6 @@ impl Engine {
         assert!(!self.needs_player_input());
         let player_id = self.current_location().player_id();
         self.current_location_mut().skip_act(player_id);
-        self.state == State::AiMove;
 
         self.checks_after_act(player_id);
     }
