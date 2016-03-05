@@ -1298,7 +1298,6 @@ impl Ui {
     fn draw_quit(&mut self) {
         self.windows.full.clear(&self.calloc);
         let window = self.windows.full.window;
-        let mut calloc = self.calloc.borrow_mut();
 
         let (max_y, max_x) = Ui::screen_size();
         let text = "Quit. Are you sure?";
