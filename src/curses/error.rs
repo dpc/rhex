@@ -3,6 +3,7 @@ use std;
 
 #[derive(Debug)]
 pub enum Error {
+    ColorCount,
     Io(io::Error),
 }
 
