@@ -5,6 +5,7 @@ use std;
 use std::{thread, cmp, fmt};
 use std::io::Write;
 use std::fmt::Write as FmtWrite;
+use std::process::{Command, Output};
 
 use chrono::{self, Duration};
 use num::integer::Integer;
@@ -19,7 +20,7 @@ use hex2dext::algo::bfs;
 use super::consts::*;
 use super::{color, Window};
 use super::{LogEntry, AutoMoveType, AutoMoveAction, LogEvent, Event, GoToType};
-use super::Result;
+use super::{Error, Result};
 use super::map::MapRenderer;
 
 use game::{actor, Location, Actor, area};
@@ -160,6 +161,9 @@ enum GlobalAction {
 
 impl Ui {
     pub fn new() -> Result<Self> {
+        if Ui::get_terminal_colors() != 256 {
+            return Err(Error::ColorCount);
+        }
 
         if env::var_os("ESCDELAY").is_none() {
             env::set_var("ESCDELAY", "25");
@@ -1317,6 +1321,16 @@ impl Ui {
                 }
             }
         }
+    }
+
+    fn get_terminal_colors() -> u16 {
+        let output = Command::new("tput")
+                             .arg("colors")
+                             .output()
+                             .unwrap();
+        let output_string = String::from_utf8(output.stdout)
+                                   .unwrap_or("0".to_string());
+        output_string.trim().parse().ok().unwrap_or(0)
     }
 }
 

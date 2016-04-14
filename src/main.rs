@@ -23,7 +23,16 @@ mod logging;
 fn main() {
     logging::init();
 
-    let mut ui = curses::Ui::new().unwrap();
+    let mut ui = match curses::Ui::new() {
+        Ok(res) => res,
+        Err(err) => {
+            match err {
+                curses::Error::ColorCount => println!("rhex requires a terminal with 256 color support. Exiting."),
+                _ => println!("An error occurred while initialising the UI. Exiting."),
+            };
+            std::process::exit(1);
+        }
+    };
 
     ui.run();
 }
