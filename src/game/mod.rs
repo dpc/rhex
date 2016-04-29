@@ -1,5 +1,7 @@
 use std::collections::{HashMap, HashSet};
+use std::hash::BuildHasherDefault;
 use simplemap::SimpleMap;
+use fnv::FnvHasher;
 
 use hex2d::Coordinate;
 
@@ -34,9 +36,9 @@ impl Noise {
 }
 
 
-pub type Visibility = HashSet<Coordinate>;
-pub type NoiseMap = HashMap<Coordinate, Noise>;
-pub type Map = SimpleMap<Coordinate, Tile>;
-pub type Actors = HashMap<Coordinate, Actor>;
-pub type Items = HashMap<Coordinate, Box<Item>>;
-pub type LightMap = SimpleMap<Coordinate, u32>;
+pub type Visibility = HashSet<Coordinate, BuildHasherDefault<FnvHasher>>;
+pub type NoiseMap = HashMap<Coordinate, Noise, BuildHasherDefault<FnvHasher>>;
+pub type Map = SimpleMap<Coordinate, Tile, BuildHasherDefault<FnvHasher>>;
+pub type Actors = HashMap<Coordinate, Actor, BuildHasherDefault<FnvHasher>>;
+pub type Items = HashMap<Coordinate, Box<Item>, BuildHasherDefault<FnvHasher>>;
+pub type LightMap = SimpleMap<Coordinate, u32, BuildHasherDefault<FnvHasher>>;

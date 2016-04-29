@@ -24,6 +24,7 @@ default=[]
 num = "0.1.30"
 rand = "0.3.13"
 chrono = "0.2.17"
+fnv = "1.0.2"
 hex2d = "0.1.0"
 hex2d-dpcext = "0.0.9"
 log = "0.3.5"
@@ -31,5 +32,5 @@ fern = "0.3.5"
 schedule_recv = "0.0.1"
 #ncurses = "5.80.0"
 ncurses = { git="https://github.com/dpc/ncurses-rs" }
-dpc-simplemap = { git="https://github.com/dpc/simplemap-rs", branch="no_hash_state" }
+dpc-simplemap = "0.1.0"
 clippy = {version = "*", optional = true}
