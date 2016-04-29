@@ -4,8 +4,9 @@ version = "0.0.3"
 dependencies = [
  "chrono 0.2.20 (registry+https://github.com/rust-lang/crates.io-index)",
  "clippy 0.0.46 (registry+https://github.com/rust-lang/crates.io-index)",
- "dpc-simplemap 0.0.3 (git+https://github.com/dpc/simplemap-rs?branch=no_hash_state)",
+ "dpc-simplemap 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "fern 0.3.5 (registry+https://github.com/rust-lang/crates.io-index)",
+ "fnv 1.0.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "hex2d 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "hex2d-dpcext 0.0.9 (registry+https://github.com/rust-lang/crates.io-index)",
  "log 0.3.5 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -36,8 +37,11 @@ dependencies = [
 
 [[package]]
 name = "dpc-simplemap"
-version = "0.0.3"
-source = "git+https://github.com/dpc/simplemap-rs?branch=no_hash_state#32f57882a875992d714586549fbe5c857cf38ad1"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+dependencies = [
+ "fnv 1.0.2 (registry+https://github.com/rust-lang/crates.io-index)",
+]
 
 [[package]]
 name = "fern"
@@ -46,6 +50,11 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "log 0.3.5 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
+
+[[package]]
+name = "fnv"
+version = "1.0.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
 name = "hex2d"

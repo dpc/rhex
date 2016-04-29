@@ -1,9 +1,9 @@
 
 use rand;
 use rand::{XorShiftRng, Rng, SeedableRng};
-use std::collections::VecDeque;
-use std::collections::HashMap;
-use simplemap::SimpleMap;
+use std::collections::{HashMap, VecDeque};
+use std::hash::BuildHasherDefault;
+use fnv::FnvHasher;
 
 use hex2d as h2d;
 use hex2d::Angle::*;
@@ -21,7 +21,7 @@ pub struct DungeonGenerator {
     start: Option<Coordinate>,
     stairs: Option<Coordinate>,
     tile_count: u32,
-    map: HashMap<Coordinate, tile::Tile>,
+    map: HashMap<Coordinate, tile::Tile, BuildHasherDefault<FnvHasher>>,
     endpoints: EndpointQueue,
     actors: Actors,
     items: Items,
@@ -35,7 +35,7 @@ impl DungeonGenerator {
             start: None,
             stairs: None,
             tile_count: 0,
-            map: HashMap::new(),
+            map: Default::default(),
             endpoints: VecDeque::new(),
             actors: Default::default(),
             items: Default::default(),
@@ -271,7 +271,7 @@ impl DungeonGenerator {
             }
         }
 
-        let mut map = SimpleMap::new();
+        let mut map = Map::default();
 
         for (&coord, tile) in &self.map {
             map[coord] = tile.clone()

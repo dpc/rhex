@@ -1,10 +1,12 @@
 use std::collections::{HashMap, HashSet};
+use std::hash::BuildHasherDefault;
 
 use generate;
 
 use hex2dext::algo;
 use simplemap::SimpleMap;
 use hex2d::{Coordinate, Direction};
+use fnv::FnvHasher;
 
 use super::tile;
 use super::item::Item;
@@ -50,7 +52,7 @@ impl Location {
             items: items,
             map: map,
             level: 0,
-            light_map: LightMap::new(),
+            light_map: Default::default(),
             player_id: None,
         }
     }
@@ -90,7 +92,7 @@ impl Location {
     }
 
     pub fn recalculate_light_map(&mut self) {
-        let mut light_map: SimpleMap<Coordinate, u32> = Default::default();
+        let mut light_map: SimpleMap<Coordinate, u32, BuildHasherDefault<FnvHasher>> = Default::default();
 
         for (pos, tile) in self.map.iter() {
             let light = tile.light;

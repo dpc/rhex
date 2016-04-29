@@ -12,6 +12,7 @@ extern crate chrono;
 #[macro_use]
 extern crate log;
 extern crate fern;
+extern crate fnv;
 
 mod ai;
 mod curses;

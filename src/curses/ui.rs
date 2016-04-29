@@ -5,7 +5,7 @@ use std;
 use std::{thread, cmp, fmt};
 use std::io::Write;
 use std::fmt::Write as FmtWrite;
-use std::process::{Command, Output};
+use std::process::Command;
 
 use chrono::{self, Duration};
 use num::integer::Integer;
