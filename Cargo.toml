@@ -1,6 +1,6 @@
 [package]
 name = "rhex"
-version = "0.0.3"
+version = "0.1.0"
 authors = ["Dawid Ciężarkiewicz <dpc@dpc.pw>"]
 description = "ASCII terminal hexagonal map roguelike written in Rust"
 keywords = ["roguelike", "game", "hex", "hexagonal"]
@@ -29,8 +29,7 @@ hex2d = "0.1.0"
 hex2d-dpcext = "0.0.9"
 log = "0.3.5"
 fern = "0.3.5"
-schedule_recv = "0.0.1"
-#ncurses = "5.80.0"
-ncurses = { git="https://github.com/dpc/ncurses-rs" }
+schedule_recv = "0.1.0"
+ncurses = "5.80.0"
 dpc-simplemap = "0.1.0"
-clippy = {version = "*", optional = true}
+clippy = {version = "0.0.74", optional = true}

@@ -591,9 +591,9 @@ impl MapRenderer {
                     nc::mvwaddch(window.window, vy as i32, vx as i32, if ch.bold { c|nc::A_BOLD() } else { c });
                 } else {
                     let attrflag = if ch.bold { cpair|nc::A_BOLD() } else { cpair };
-                    nc::wattron(window.window, attrflag);
+                    nc::wattron(window.window, attrflag as i32);
                     nc::mvwaddstr(window.window, vy as i32, vx as i32, &format!("{}", ch.glyph));
-                    nc::wattroff(window.window, attrflag);
+                    nc::wattroff(window.window, attrflag as i32);
                 }
             }
         }
