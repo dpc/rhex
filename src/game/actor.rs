@@ -222,6 +222,7 @@ pub struct Actor {
     pub pos: Position,
     pub acted: bool,
     descended: bool,
+    opened_door: bool,
 
     pub race: Race,
     pub base_stats: Stats,
@@ -297,6 +298,7 @@ impl Actor {
             saved_mp: stats.max_mp,
             saved_sp: stats.max_sp,
             acted: false,
+            opened_door: false,
             descended: false,
         }
     }
@@ -540,6 +542,12 @@ impl Actor {
         }
     }
 
+    pub fn open_door(&mut self, loc : &Location) {
+        self.opened_door = true;
+        self.add_current_los_to_temporary_los(loc);
+        self.noise_makes(3);
+    }
+
     pub fn noise_hears(&mut self, coord: Coordinate, type_: Noise) {
         self.heard.insert(coord, type_);
     }
@@ -547,6 +555,7 @@ impl Actor {
     pub fn pre_any_tick(&mut self) { }
 
     pub fn pre_own_tick(&mut self) {
+        self.opened_door = false;
         self.pre_pos = Some(self.pos);
         self.pre_head = Some(self.head());
         self.did_attack = Vec::new();
@@ -582,7 +591,7 @@ impl Actor {
                     self.hp += 1
             }
 
-            if self.pre_pos != Some(self.pos){
+            if self.pre_pos != Some(self.pos) || self.opened_door {
                 self.postprocess_visibile(loc);
             }
         }
@@ -909,6 +918,7 @@ impl Actor {
                 } else if loc.at(new_pos.coord).tile().feature == Some(tile::Door(false)) {
                     // walked into door: open it
                     loc.map[new_pos.coord].add_feature(tile::Door(true));
+                    self.open_door(loc);
                     // Can't charge through the doors
                     break;
                 } else if old_pos.coord == new_pos.coord && old_pos.dir != new_pos.dir {
