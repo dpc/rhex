@@ -8,7 +8,7 @@ script:
 
 env:
   matrix:
-    -
+    - RUST_BACKTRACE=1
     - RELEASE=true
 
 notifications:
