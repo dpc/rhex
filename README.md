@@ -17,7 +17,7 @@ for details.
 
 ## Introduction
 
-Simple ASCII terminal hexagonal map  roguelike written in Rust [Rust][rust-home].
+Simple ASCII terminal hexagonal map  roguelike written in [Rust][rust-home].
 
 You can try the game without installing anything. Check
 [rhex demo server](https://github.com/dpc/rhex/wiki/Demo-server) instructions.
