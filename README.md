@@ -54,6 +54,8 @@ Game requires terminal with 256 colors support, and Unicode font.
 	cd rhex
 	cargo run --release
 
+*Note that you must to have the ncurses library installed and linkable for ncurses-rs to work. On Linux, this should be trivial. On OS X, consider installing ncurses using Homebrew. (Note that you have to force Homebrew to link the library to /usr/local/lib: brew link --force ncurses and set that path to LIBRARY_PATH environmental variable.)*
+
 ## Status
 
 The game is playable but not feature and gameplay wise complete.
