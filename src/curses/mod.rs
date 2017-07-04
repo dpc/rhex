@@ -23,7 +23,7 @@ pub struct Window {
 
 impl Window {
     pub fn new(w: i32, h: i32, x: i32, y: i32) -> Window {
-        Window { window: nc::subwin(nc::stdscr, h, w, y, x) }
+        Window { window: nc::subwin(nc::stdscr(), h, w, y, x) }
     }
 
     pub fn clear(&self, calloc : &RefCell<color::Allocator>) {

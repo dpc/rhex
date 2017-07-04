@@ -30,6 +30,6 @@ hex2d-dpcext = "0.0.9"
 log = "0.3.5"
 fern = "0.3.5"
 schedule_recv = "0.1.0"
-ncurses = "5.80.0"
+ncurses = "5.86.0"
 dpc-simplemap = "0.1.0"
 clippy = {version = "0.0.74", optional = true}

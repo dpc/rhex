@@ -152,7 +152,7 @@ impl Allocator {
         match self.map.entry((fg.clone().into(), bg.clone().into())) {
             Entry::Occupied(i) => *i.get(),
             Entry::Vacant(i) => {
-                assert!((self.cur as i32) < nc::COLOR_PAIRS,
+                assert!((self.cur as i32) < nc::COLOR_PAIRS(),
                         "curses run out of color pairs!");
                 let ret = self.cur;
                 i.insert(self.cur);
