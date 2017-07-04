@@ -1,13 +1,11 @@
 use std::cell::RefCell;
 use std::collections::{VecDeque};
 use std::env;
-use std;
 use std::{thread, cmp, fmt};
-use std::io::Write;
 use std::fmt::Write as FmtWrite;
 use std::process::Command;
+use std::time::{Instant, Duration};
 
-use chrono::{self, Duration};
 use num::integer::Integer;
 
 use game::Action::*;
@@ -137,8 +135,8 @@ pub struct Ui {
     automoving_stopped_turn: u64,
 
     anim_frame_count: u32,
-    next_turn_ts:  chrono::datetime::DateTime<chrono::offset::local::Local>,
-    next_anim_frame_ts:  chrono::datetime::DateTime<chrono::offset::local::Local>,
+    next_turn_ts: Instant,
+    next_anim_frame_ts: Instant,
 
     game_action_queue: VecDeque<game::Action>,
 
@@ -173,7 +171,7 @@ impl Ui {
 
         nc::initscr();
         nc::start_color();
-        nc::keypad(nc::stdscr, true);
+        nc::keypad(nc::stdscr(), true);
         nc::noecho();
         nc::raw();
         nc::timeout(0);
@@ -219,8 +217,8 @@ impl Ui {
             automoving_stopped_turn: 0,
 
             anim_frame_count: 0,
-            next_turn_ts: chrono::Local::now(),
-            next_anim_frame_ts: chrono::Local::now(),
+            next_turn_ts: Instant::now(),
+            next_anim_frame_ts: Instant::now(),
             game_action_queue: VecDeque::new(),
             map_renderer: MapRenderer::new(UNICODE_DOT),
         };
@@ -235,11 +233,11 @@ impl Ui {
         self.engine_change(player_id);
         self.update_changes();
         self.spawned = true;
-        self.next_turn_ts = chrono::Local::now()
+        self.next_turn_ts = Instant::now()
     }
 
     pub fn screen_size() -> (i32, i32) {
-        Ui::window_size(nc::stdscr)
+        Ui::window_size(nc::stdscr())
     }
 
     pub fn window_size(window: nc::WINDOW) -> (i32, i32) {
@@ -261,7 +259,7 @@ impl Ui {
     /// Mark the screen for redraw
     pub fn redraw(&mut self) {
         self.anim_frame_count = 0;
-        self.next_anim_frame_ts = chrono::Local::now();
+        self.next_anim_frame_ts = Instant::now();
     }
 
     pub fn redraw_now(&mut self) {
@@ -426,9 +424,9 @@ impl Ui {
 
         if actor_id == player_id {
             if self.is_automoving() {
-                self.next_turn_ts = chrono::Local::now() + Duration::milliseconds(50);
+                self.next_turn_ts = Instant::now() + Duration::from_millis(50);
             } else if self.player().is_dead() {
-                self.next_turn_ts = chrono::Local::now() + Duration::milliseconds(50);
+                self.next_turn_ts = Instant::now() + Duration::from_millis(50);
             }
         }
     }
@@ -443,11 +441,11 @@ impl Ui {
     }
 
     pub fn is_next_turn_time(&self) -> bool {
-        self.next_turn_ts <= chrono::Local::now()
+        self.next_turn_ts <= Instant::now()
     }
 
     pub fn is_next_anim_frame_time(&self) -> bool {
-        self.next_anim_frame_ts <= chrono::Local::now()
+        self.next_anim_frame_ts <= Instant::now()
     }
 
     pub fn run_engine_turn(&mut self) {
@@ -509,9 +507,9 @@ impl Ui {
         if self.is_next_anim_frame_time() {
             self.redraw_now();
             self.anim_frame_count += 1;
-            self.next_anim_frame_ts = chrono::Local::now() + Duration::milliseconds(100);
+            self.next_anim_frame_ts = Instant::now() + Duration::from_millis(100);
         } else if self.game_action_queue.is_empty() {
-            thread::sleep(std::time::Duration::new(0, 10_000_000));
+            thread::sleep(Duration::from_millis(10));
         }
     }
 
@@ -920,7 +918,7 @@ impl Ui {
         let prev = cmp::max(prev, 0) as u32;
         let max = cmp::max(max, 1) as u32;
 
-        nc::wattron(window, self.label_color as i32);
+        nc::wattron(window, self.label_color);
         nc::mvwaddstr(window, y, 0, &format!("{}: ", name));
 
         let width = max_x as u32 - 4 - name.chars().count() as u32;
@@ -945,7 +943,7 @@ impl Ui {
     {
         self.draw_label(window, label);
 
-        nc::wattron(window, self.text_color as i32);
+        nc::wattron(window, self.text_color);
         nc::waddstr(window, &format!(" {:<8}", val));
     }
 
@@ -954,12 +952,12 @@ impl Ui {
     {
         self.draw_label(window, label);
 
-        nc::wattron(window, self.text_color as i32);
+        nc::wattron(window, self.text_color);
         nc::waddstr(window, &format!("{:>2} ", val));
     }
 
     fn draw_label(&self, window: nc::WINDOW, label: &str) {
-        nc::wattron(window, self.label_color as i32);
+        nc::wattron(window, self.label_color);
         nc::waddstr(window, &format!("{}:", label));
     }
 
@@ -967,9 +965,9 @@ impl Ui {
         self.draw_label(window, label);
 
         if slot == Slot::RHand && !astate.can_attack() {
-            nc::wattron(window, self.text_gray_color as i32);
+            nc::wattron(window, self.text_gray_color);
         } else {
-            nc::wattron(window, self.text_color as i32);
+            nc::wattron(window, self.text_color);
         }
 
         if let Some(&(_, ref item)) = astate.items_equipped.get(&slot) {
@@ -986,7 +984,7 @@ impl Ui {
 
         nc::wmove(window, 0, 0);
 
-        nc::wattron(window, self.text_color as i32);
+        nc::wattron(window, self.text_color);
         if !player.items_equipped.is_empty() {
             nc::waddstr(window, &format!("Equipped: \n"));
             for (slot, &(ref ch, ref i)) in &player.items_equipped {
@@ -1092,7 +1090,7 @@ impl Ui {
         let head = pos.coord + pos.dir;
         let descr = self.tile_description(head, player, cur_loc);
         self.draw_label(window, "In front");
-        nc::wattron(window, self.text_color as i32);
+        nc::wattron(window, self.text_color);
         nc::waddstr(window, &format!(" {}", descr));
 
         y += 1;
@@ -1223,7 +1221,7 @@ impl Ui {
                     if prevcolor != color {
                         prevcolor = color;
                         let cpair = nc::COLOR_PAIR(color);
-                        nc::wattron(window, cpair as i32);
+                        nc::wattron(window, cpair);
                     }
                     nc::waddstr(window, &i.text);
                 }
