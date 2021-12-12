@@ -1,6 +1,7 @@
 use super::actor::{self, Actor, Slot};
-use rand::{self, Rng, Rand, thread_rng};
-use rand::distributions::IndependentSample;
+use rand::prelude::SliceRandom;
+use rand::{self, Rng};
+use rand::distributions::{Distribution, Standard};
 
 use std::cmp;
 use std::fmt::{self, Write};
@@ -97,9 +98,9 @@ impl fmt::Display for Feature {
     }
 }
 
-impl Rand for Feature {
-    fn rand<R: Rng>(rng: &mut R) -> Self {
-        match rng.gen_range(0, 3) {
+impl Distribution<Feature> for Standard {
+    fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> Feature {
+        match rng.gen_range(0..3) {
             0 => Infravision,
             1 => Light,
             2 => Regeneration,
@@ -232,10 +233,10 @@ impl Item {
 
 impl fmt::Display for Item {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        try!(write!(f, "{}", self.type_));
+        write!(f, "{}", self.type_)?;
 
         for feature in &self.features {
-            try!(write!(f, " of {}", feature));
+            write!(f, " of {}", feature)?;
         }
 
         Ok(())
@@ -248,27 +249,27 @@ pub fn random(level: i32) -> Box<Item> {
     let a = -(level / 2);
     let b = level + 2;
     let mut rng = rand::thread_rng();
-    let lvrange = rand::distributions::Range::new(a, b);
-    let r = lvrange.ind_sample(&mut rng) + lvrange.ind_sample(&mut rng) +
-            lvrange.ind_sample(&mut rng);
+    let lvrange = rand::distributions::Uniform::new(a, b);
+    let r = lvrange.sample(&mut rng) + lvrange.sample(&mut rng) +
+            lvrange.sample(&mut rng);
 
     let mut features = vec![];
     let mut chance = level;
     const PER_LOOP: i32 = 30;
-    let looprange = rand::distributions::Range::new(0, PER_LOOP);
-    while looprange.ind_sample(&mut rng) < chance {
-        features.push(rng.gen::<Feature>());
+    let looprange = rand::distributions::Uniform::new(0, PER_LOOP);
+    while looprange.sample(&mut rng) < chance {
+        features.push(rand::random());
         chance = cmp::max(0, chance - PER_LOOP);
     }
 
     Box::new(Item::new(match r {
-                           1 => *thread_rng().choose(&[Knife, Pickaxe]).unwrap(),
+                           1 => *[Knife, Pickaxe].choose(&mut rng).unwrap(),
                            2 => HealthPotion,
-                           3 => *thread_rng().choose(&[Bow, Cloak]).unwrap(),
-                           5 => *thread_rng().choose(&[Helmet, Sword]).unwrap(),
+                           3 => *[Bow, Cloak].choose(&mut rng).unwrap(),
+                           5 => *[Helmet, Sword].choose(&mut rng).unwrap(),
                            6 => Leather,
-                           8 => *thread_rng().choose(&[Boots, Buckler]).unwrap(),
-                           10 => *thread_rng().choose(&[Plate, Axe]).unwrap(),
+                           8 => *[Boots, Buckler].choose(&mut rng).unwrap(),
+                           10 => *[Plate, Axe].choose(&mut rng).unwrap(),
                            _ => Junk,
                        },
                        features))

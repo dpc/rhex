@@ -71,14 +71,14 @@ impl Location {
             if source_emission > 0 {
                 let source_race = self.actors_byid[id].race;
                 let source_coord = self.actors_byid[id].pos.coord;
-                source_coord.for_each_in_range(source_emission, |coord| {
+                for coord in source_coord.range_iter(source_emission) {
                     if let Some(&target_id) = self.actors_coord_to_id.get(&coord) {
                         self.actors_byid
                             .get_mut(&target_id)
                             .unwrap()
                             .noise_hears(source_coord, Noise::Creature(source_race));
                     }
-                });
+                }
             }
         }
     }

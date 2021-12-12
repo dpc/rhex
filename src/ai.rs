@@ -3,7 +3,7 @@ use rand::Rng;
 
 use hex2dext::algo::bfs;
 
-use hex2d::{Coordinate, ToCoordinate};
+use hex2d::Coordinate;
 use hex2d::Angle::{Left, Right, Forward, Back, LeftBack};
 use game;
 use game::actor;
@@ -22,7 +22,7 @@ impl Ai for Simple {
 }
 
 fn roam() -> game::Action {
-    match rand::thread_rng().gen_range(0, 10) {
+    match rand::thread_rng().gen_range(0..10) {
         0 => game::Action::Turn(Right),
         1 => game::Action::Turn(Left),
         2 => game::Action::Move(Forward),
@@ -76,7 +76,7 @@ fn grue(astate: &actor::Actor, gstate: &game::Location) -> game::Action {
         }
     }
 
-    match rand::thread_rng().gen_range(0, 5) {
+    match rand::thread_rng().gen_range(0..5) {
         0 => roam(),
         _ => game::Action::Wait,
     }
@@ -88,7 +88,7 @@ fn go_to(c: Coordinate, astate: &actor::Actor, gstate: &game::Location) -> game:
         Some(dir) => dir,
     };
 
-    let n_pos = astate.pos + ndir.to_coordinate();
+    let n_pos = astate.pos + Coordinate::from(ndir);
     if gstate.at(n_pos.coord).tile().type_.is_passable() {
         if ndir == astate.pos.dir {
             return game::Action::Move(Forward);

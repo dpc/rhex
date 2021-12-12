@@ -91,7 +91,7 @@ impl Engine {
 
     // player first move
     pub fn player_act(&mut self, action: Action) {
-        assert!(self.state == State::PlayerMove);
+        //assert!(self.state == State::PlayerMove); // redundant; in next assert
         assert!(self.needs_player_input());
 
         let player_id = self.current_location().player_id();

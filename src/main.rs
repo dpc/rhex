@@ -8,7 +8,7 @@ extern crate hex2d_dpcext as hex2dext;
 extern crate rand;
 extern crate num;
 extern crate chrono;
-#[macro_use]
+//#[macro_use]
 extern crate log;
 extern crate fern;
 extern crate fnv;

@@ -8,9 +8,10 @@ use super::Window;
 
 use game::{Location, tile, item};
 use game::actor::{self, Race};
-use hex2d::{Coordinate, Direction, Position, ToCoordinate};
+use hex2d::{Coordinate, Direction, Position};
 
-use rand::{thread_rng, Rng};
+use rand::thread_rng;
+use rand::prelude::SliceRandom;
 use ncurses as nc;
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
@@ -58,7 +59,7 @@ where T : Clone+Default {
     }
 
     pub fn reset(&mut self) {
-        for mut ch in &mut self.array {
+        for ch in &mut self.array {
             *ch = Default::default();
         }
     }
@@ -375,14 +376,14 @@ impl MapRenderer {
 
         let player = cur_loc.player();
 
-        thread_rng().shuffle(&mut actors);
+        actors.shuffle(&mut thread_rng());
 
         for &(id, _) in &actors {
             let actor = &cur_loc.actors_byid[&id];
             let race = actor.race;
 
             let actor_coord = actor.pos.coord;
-            let actor_head = actor.pos.coord + actor.pos.dir.to_coordinate();
+            let actor_head = actor.pos.coord + Coordinate::from(actor.pos.dir);
 
             if player.sees(actor_coord) {
                 if let Some((vx, vy)) = self.coord_to_glyph_xy(actor_coord) {
@@ -412,7 +413,7 @@ impl MapRenderer {
                 if let Some((vx, vy)) = self.coord_to_glyph_xy(actor_head) {
                     let base = self.base.at(vx, vy);
                     let items = self.items.at(vx, vy);
-                    let mut actors = self.actors.at_mut(vx, vy);
+                    let actors = self.actors.at_mut(vx, vy);
                     if base.known {
                         let palete = race_to_palete(race);
                         let color = palete[0];
@@ -450,8 +451,7 @@ impl MapRenderer {
 
         let player = cur_loc.player();
 
-        thread_rng().shuffle(&mut actors);
-
+        actors.shuffle(&mut thread_rng());
 
         for &(id, _) in &actors {
             let actor = &cur_loc.actors_byid[&id];
@@ -466,8 +466,8 @@ impl MapRenderer {
             let prev_and_cur = if  prev_pos.coord != cur_pos.coord {
                 Some((prev_pos.coord, cur_pos.coord))
             } else if prev_pos.dir != cur_pos.dir {
-                Some((prev_pos.coord + prev_pos.dir.to_coordinate(),
-                    cur_pos.coord + cur_pos.dir.to_coordinate()))
+                Some((prev_pos.coord + Coordinate::from(prev_pos.dir),
+                    cur_pos.coord + Coordinate::from(cur_pos.dir)))
             } else {
                 None
             };
@@ -533,9 +533,9 @@ impl MapRenderer {
     fn draw_effects_target(&mut self, cur_loc : &Location) {
 
         let mut target_line = Vec::new();
-        self.coord_center.for_each_in_line_to(self.coord_head, |c| {
+        for c in self.coord_center.line_to_iter(self.coord_head) {
             target_line.push(c);
-        });
+        }
 
         for &c in &target_line {
             if let Some((vx, vy)) = self.coord_to_glyph_xy(c) {
@@ -576,7 +576,7 @@ impl MapRenderer {
         let (max_x, max_y) = (self.base.width, self.base.height);
         for vx in 0..max_x {
             for vy in 0..max_y {
-                let ch = if let Some(ch) = thread_rng().choose(self.effects.at(vx, vy)) {
+                let ch = if let Some(ch) = self.effects.at(vx, vy).choose(&mut thread_rng()) {
                     ch
                 } else if let Some(ref ch) = *self.actors.at(vx, vy) {
                     ch
@@ -636,7 +636,7 @@ impl MapRenderer {
 
                     let (cvx, cvy) = (rvx + vpx, rvy + vpy);
 
-                    let (c, off) = Coordinate::from_pixel_integer(SPACING, (cvx as i32, cvy as i32));
+                    let (c, off) = Coordinate::nearest_with_offset(SPACING, (cvx as i32, cvy as i32));
 
                     let is_proper_coord = off == (0, 0);
 

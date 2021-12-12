@@ -2,7 +2,7 @@ use std::collections::{HashMap, HashSet};
 use std::ops::{Add, Sub};
 use std::cmp;
 
-use hex2d::{Coordinate, Angle, Position, ToCoordinate, Direction, Left, Right, Forward};
+use hex2d::{Coordinate, Angle, Position, Direction, Left, Right, Forward};
 use hex2dext::algo;
 
 use game::{self, Action, tile};
@@ -331,7 +331,7 @@ impl Actor {
     /// relating to "head" - The coordinate that is next to actor, relative
     /// to head by a given angle.
     pub fn head_rel(&self, angle : Angle) -> Coordinate {
-        self.pos.coord + (self.pos.dir + angle).to_coordinate()
+        self.pos.coord + Coordinate::from(self.pos.dir + angle)
     }
 
     pub fn pos_after_action(&self, action: Action) -> Vec<Position> {
@@ -344,17 +344,17 @@ impl Actor {
             Action::Ranged(_) |
             Action::Drop_(_) => vec![pos],
             Action::Turn(a) => vec![pos + a],
-            Action::Move(a) => vec![pos + (pos.dir + a).to_coordinate()],
+            Action::Move(a) => vec![pos + Coordinate::from(pos.dir + a)],
             Action::Charge => {
                 if self.can_charge_sp() {
-                    vec![pos + pos.dir.to_coordinate(),
-                         pos + pos.dir.to_coordinate() + pos.dir.to_coordinate()]
+                    vec![pos + Coordinate::from(pos.dir),
+                         pos + Coordinate::from(pos.dir) + Coordinate::from(pos.dir)]
                 } else {
-                    vec![pos + pos.dir.to_coordinate()]
+                    vec![pos + Coordinate::from(pos.dir)]
                 }
             }
             Action::Spin(a) => {
-                vec![pos + (pos.dir + a).to_coordinate() +
+                vec![pos + Coordinate::from(pos.dir + a) +
                      match a {
                          Angle::Right => Angle::Left,
                          Angle::Left => Angle::Right,
@@ -406,8 +406,8 @@ impl Actor {
 
         let success = util::roll(acc, ev);
 
-        let rand_ac = cmp::max(rand::thread_rng().gen_range(0, ac + 1),
-        rand::thread_rng().gen_range(0, ac + 1));
+        let rand_ac = cmp::max(rand::thread_rng().gen_range(0..(ac + 1)),
+                rand::thread_rng().gen_range(0..(ac + 1)));
 
         let dmg = cmp::max(0, dmg - rand_ac);
 
@@ -582,12 +582,12 @@ impl Actor {
     pub fn post_own_tick(&mut self, loc: &Location) {
         if !self.is_dead() {
             if self.sp < self.stats.base.max_sp &&
-                rand::thread_rng().gen_weighted_bool(10) {
+                rand::thread_rng().gen_bool(1.0 / 10.0) {
                     self.sp += 1
                 }
 
-            if self.hp < self.stats.base.max_hp &&
-                rand::thread_rng().gen_range(0, 50) < self.stats.base.regeneration {
+            if self.hp < self.stats.base.max_hp && rand::thread_rng()
+                .gen_range(0..50) < self.stats.base.regeneration {
                     self.hp += 1
             }
 
@@ -753,9 +753,8 @@ impl Actor {
         }
 
         let success = util::roll(acc, ev);
-
-        let rand_ac = cmp::max(rand::thread_rng().gen_range(0, ac + 1),
-                               rand::thread_rng().gen_range(0, ac + 1));
+        let rand_ac = cmp::max(rand::thread_rng().gen_range(0..(ac + 1)),
+                               rand::thread_rng().gen_range(0..(ac + 1)));
 
         let dmg = cmp::max(0, dmg - rand_ac);
 
