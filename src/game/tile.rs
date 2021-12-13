@@ -129,7 +129,7 @@ impl Tile {
     }
 
     pub fn dig(&mut self) {
-        let r = rand::thread_rng().gen_range(0, 10);
+        let r = rand::thread_rng().gen_range(0..10);
         match self.type_ {
             Wall => if r < 5 { self.type_ = Empty },
             _ => {}

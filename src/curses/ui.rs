@@ -11,7 +11,7 @@ use num::integer::Integer;
 use game::Action::*;
 
 use ncurses as nc;
-use hex2d::{Position, Coordinate, Angle, Left, Right, Forward, Back, ToCoordinate};
+use hex2d::{Position, Coordinate, Angle, Left, Right, Forward, Back};
 
 use hex2dext::algo::bfs;
 
@@ -684,7 +684,7 @@ impl Ui {
                 match key {
                     KEY_ESC => self.mode_switch_to(Mode::Normal),
                     _ => match ch {
-                        'a'...'z' | 'A'...'Z' => {
+                        'a'..='z' | 'A'..='Z' => {
                             if self.player().item_letter_taken(ch) {
                                 self.queue_equip(ch)
                             }
@@ -698,7 +698,7 @@ impl Ui {
                 match key {
                     KEY_ESC => self.mode_switch_to(Mode::Normal),
                     _ => match ch {
-                        'a'...'z' | 'A'...'Z' => {}
+                        'a'..='z' | 'A'..='Z' => {}
                         _ => {}
                     }
                 }
@@ -708,7 +708,7 @@ impl Ui {
                 match key {
                     KEY_ESC => self.mode_switch_to(Mode::Normal),
                     _ => match ch {
-                        'a'...'z' | 'A'...'Z' => {
+                        'a'..='z' | 'A'..='Z' => {
                             if self.player().item_letter_taken(ch as u8 as char) {
                                 self.queue_drop(ch as u8 as char)
                             }
@@ -734,20 +734,20 @@ impl Ui {
                         self.redraw();
                     }
                     KEY_LOWJ => {
-                        self.target_pos = Some(pos + (pos.dir + Angle::Back).to_coordinate());
+                        self.target_pos = Some(pos + Coordinate::from(pos.dir + Angle::Back));
                         self.redraw();
                     }
                     KEY_LOWK => {
-                        self.target_pos = Some(pos + pos.dir.to_coordinate());
+                        self.target_pos = Some(pos + Coordinate::from(pos.dir));
                         self.redraw();
                     }
                     KEY_CAPK => {
-                        self.target_pos = Some(pos + pos.dir.to_coordinate().scale(5));
+                        self.target_pos = Some(pos + Coordinate::from(pos.dir).scale(5));
                         self.redraw();
                     }
                     KEY_CAPJ => {
-                        self.target_pos = Some(pos +
-                                               (pos.dir + Angle::Back).to_coordinate().scale(5));
+                        self.target_pos = Some(pos + Coordinate::from(
+                                               pos.dir + Angle::Back).scale(5));
                         self.redraw();
                     }
                     _ => {}
@@ -763,24 +763,27 @@ impl Ui {
                         self.mode_switch_to(Mode::Normal);
                     }
                     KEY_ENTER | KEY_LOWF => {
-                        let target = self.target_pos.unwrap();
+                        match self.target_pos
+                        {
+                            Some(target) => { self.queue_ranged(target.coord); }
+                            None => { /* Nothing */ }
+                        }
                         self.target_pos = None;
                         self.mode_switch_to(Mode::Normal);
-                        self.queue_ranged(target.coord);
                     }
-                    KEY_LOWH => {
+                    KEY_LOWH | KEY_LOWA => {
                         self.target_pos = Some(util::circular_move(center, pos, Angle::Left));
                         self.redraw();
                     }
-                    KEY_LOWL => {
+                    KEY_LOWL | KEY_LOWD => {
                         self.target_pos = Some(util::circular_move(center, pos, Angle::Right));
                         self.redraw();
                     }
-                    KEY_LOWJ => {
+                    KEY_LOWJ | KEY_LOWS => {
                         self.target_pos = Some(util::circular_move(center, pos, Angle::Back));
                         self.redraw();
                     }
-                    KEY_LOWK => {
+                    KEY_LOWK | KEY_LOWW => {
                         self.target_pos = Some(util::circular_move(center, pos, Angle::Forward));
                         self.redraw();
                     }

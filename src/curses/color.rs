@@ -13,7 +13,7 @@ impl Color {
         match self.0 {
             7 => Color(255).to_rgb(),
             15 => RGB(5, 5, 5),
-            16...231 => {
+            16..=231 => {
                 let c = self.0 - 16;
                 let b = c % 6;
                 let c = (c - b) / 6;
@@ -21,7 +21,7 @@ impl Color {
                 let r = (c - g) / 6;
                 RGB::new(r, g, b)
             },
-            232...255 => {
+            232..=255 => {
                 let c = (self.0 - 232) / 4;
                 RGB::new(c, c, c)
             }
