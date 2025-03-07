@@ -26,7 +26,7 @@ rand = { version = "0.8.4", features = ["small_rng"] }
 chrono = "0.2.17"
 fnv = "1.0.2"
 hex2d = "1.1.0"
-hex2d-dpcext = "0.1.1"
+hex2d-dpcext = { git = "https://github.com/dpc/hex2d-dpcext-rs" }
 log = "0.3.5"
 fern = "0.3.5"
 ncurses = { version = "5.86.0", features = ["wide"] }
