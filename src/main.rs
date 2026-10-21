@@ -26,6 +26,6 @@ fn main() {
 }
 
 fn run() -> std::io::Result<()> {
-    let mut ui = terminal::Ui::new()?;
+    let mut ui = terminal::Runner::new()?;
     ui.run()
 }

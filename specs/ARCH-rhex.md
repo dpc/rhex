@@ -7,10 +7,12 @@ the game, controls, terminal requirements, and development commands.
 
 ## Ownership and boundaries
 
-- [`terminal::Ui`](../src/terminal/ui.rs) owns the game engine and the interactive
-  loop. It translates input into game actions or interface mode changes, queues
-  player actions, implements automatic movement, and controls animation and
-  turn pacing. It also owns menus, targeting, and the player-facing log.
+- [`terminal::Runner`](../src/terminal/runner.rs) owns the terminal session and
+  interactive loop. It supplies terminal events, dimensions, and scheduling
+  instants to the terminal-independent [`Ui`](../src/terminal/ui.rs).
+  `Ui` owns the game engine, menus, targeting, and the player-facing log. It
+  translates input into game actions or interface mode changes, queues player
+  actions, implements automatic movement, and controls animation and turn pacing.
 - [`game::Engine`](../src/game/engine.rs) owns the locations and turn progression.
   It coordinates player and AI actions and transfers the player into a newly
   generated location on descent.
@@ -27,7 +29,7 @@ the game, controls, terminal requirements, and development commands.
 ## Simulation and presentation
 
 The interface submits manual and automatic movement through the same game
-action boundary. Selected turn path, with presentation callbacks omitted:
+action boundary. The following turn path omits presentation callbacks:
 
 ```text
 terminal::Ui::run_engine_turn():
@@ -47,9 +49,14 @@ from game turns. A terminal below the minimum supported size pauses simulation.
 screen, using Crossterm for terminal operations and Ratatui for buffered output.
 Its guard restores terminal modes on drop, and its panic hook restores them
 before diagnostics. The map renderer projects hexagonal game state into
-terminal cells; buffered windows compose the map, statistics, log, and full-screen
-views into a frame. Input translation and terminal cleanup remain outside the
-simulation.
+terminal cells. Buffered windows compose the map, statistics, log, and
+full-screen views into a frame. Input translation and terminal cleanup remain
+outside the simulation.
+
+Production drawing and headless tests share composed buffer rendering and an
+event dispatcher. Hand-built test levels isolate controller and cell-buffer
+expectations from procedural generation. Presentation and simulation use ambient
+randomness, so these examples do not establish replay determinism.
 
 The [PTY integration test](../tests/terminal.rs) exercises the real binary and
 session failure probes through [a Python driver](../tests/terminal.py), covering

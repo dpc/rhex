@@ -1,16 +1,16 @@
 use std::cell::RefCell;
 use std::collections::VecDeque;
 use std::fmt::Write as FmtWrite;
-use std::io;
 use std::time::{Duration, Instant};
-use std::{cmp, fmt, thread};
+use std::{cmp, fmt};
 
 use num::integer::Integer;
 
 use crate::game::Action::*;
 
-use crossterm::event::{self, Event as TerminalEvent};
+use crossterm::event::Event as TerminalEvent;
 use hex2d::{Angle, Back, Coordinate, Forward, Left, Position, Right};
+use ratatui::buffer::Buffer;
 use ratatui::style::Style;
 
 use crate::hex2dext::algo::bfs;
@@ -18,7 +18,6 @@ use crate::hex2dext::algo::bfs;
 use super::consts::*;
 use super::input;
 use super::map::MapRenderer;
-use super::session::Session;
 use super::{AutoMoveAction, AutoMoveType, Event, GoToType, LogEntry, LogEvent};
 use super::{Window, color};
 
@@ -108,10 +107,8 @@ pub enum Mode {
     Inventory(InvMode),
 }
 
+/// Terminal-independent controller and buffered presentation state.
 pub struct Ui {
-    /// Own terminal modes before constructing any game state.
-    session: Session,
-
     windows: Windows,
 
     mode: Mode,
@@ -140,6 +137,9 @@ pub struct Ui {
     game_action_queue: VecDeque<game::Action>,
 
     map_renderer: MapRenderer,
+
+    /// Time supplied by the runner at each scheduling/event boundary.
+    now: Instant,
 }
 
 use self::Action::*;
@@ -157,20 +157,16 @@ enum GlobalAction {
 }
 
 impl Ui {
-    pub fn new() -> io::Result<Self> {
-        let session = Session::new()?;
-
+    /// Construct presentation state around an existing engine without opening a terminal.
+    pub fn new(engine: game::Engine, size: (i32, i32), now: Instant) -> Self {
         let label_color = color::style(color::LABEL_FG, color::BACKGROUND_BG);
         let text_color = color::style(color::VISIBLE_FG, color::BACKGROUND_BG);
         let text_gray_color = color::style(color::GRAY[10], color::BACKGROUND_BG);
         let green_color = color::style(color::GREEN_FG, color::BACKGROUND_BG);
         let red_color = color::style(color::RED_FG, color::BACKGROUND_BG);
 
-        let engine = game::Engine::new();
-
         let mut ui = Ui {
-            session,
-            windows: Windows::after_resize(Self::screen_size()?),
+            windows: Windows::after_resize(size),
             mode: Mode::FullScreen(FSMode::Intro),
             target_pos: None,
             log: RefCell::new(VecDeque::new()),
@@ -191,14 +187,15 @@ impl Ui {
             automoving_stopped_turn: 0,
 
             anim_frame_count: 0,
-            next_turn_ts: Instant::now(),
-            next_anim_frame_ts: Instant::now(),
+            next_turn_ts: now,
+            next_anim_frame_ts: now,
             game_action_queue: VecDeque::new(),
             map_renderer: MapRenderer::new(UNICODE_DOT),
+            now,
         };
         ui.display_intro();
-        ui.resize(Self::screen_size()?);
-        Ok(ui)
+        ui.resize(size);
+        ui
     }
 
     pub fn initial_spawn(&mut self, race: actor::Race) {
@@ -207,12 +204,7 @@ impl Ui {
         self.engine_change(player_id);
         self.update_changes();
         self.spawned = true;
-        self.next_turn_ts = Instant::now()
-    }
-
-    pub fn screen_size() -> io::Result<(i32, i32)> {
-        let (width, height) = crossterm::terminal::size()?;
-        Ok((height.into(), width.into()))
+        self.next_turn_ts = self.now
     }
 
     pub fn window_size(window: &Window) -> (i32, i32) {
@@ -230,10 +222,12 @@ impl Ui {
     /// Mark the screen for redraw
     pub fn redraw(&mut self) {
         self.anim_frame_count = 0;
-        self.next_anim_frame_ts = Instant::now();
+        self.next_anim_frame_ts = self.now;
     }
 
-    pub fn redraw_now(&mut self) -> io::Result<()> {
+    /// Compose the same complete frame for the terminal and headless tests.
+    pub fn render_into(&mut self, buffer: &mut Buffer) {
+        buffer.reset();
         if self.too_small() {
             self.windows.full.clear();
             self.windows
@@ -272,17 +266,13 @@ impl Ui {
                 },
             }
         }
-        self.session.terminal.borrow_mut().draw(|frame| {
-            let buffer = frame.buffer_mut();
-            if self.too_small() || matches!(self.mode, Mode::FullScreen(_)) {
-                self.windows.full.render(buffer);
-            } else {
-                self.windows.map.render(buffer);
-                self.windows.stats.render(buffer);
-                self.windows.log.render(buffer);
-            }
-        })?;
-        Ok(())
+        if self.too_small() || matches!(self.mode, Mode::FullScreen(_)) {
+            self.windows.full.render(buffer);
+        } else {
+            self.windows.map.render(buffer);
+            self.windows.stats.render(buffer);
+            self.windows.log.render(buffer);
+        }
     }
 
     /// Keep layout calculations and input safe when the terminal is too small.
@@ -418,9 +408,9 @@ impl Ui {
 
         if actor_id == player_id {
             if self.is_automoving() {
-                self.next_turn_ts = Instant::now() + Duration::from_millis(50);
+                self.next_turn_ts = self.now + Duration::from_millis(50);
             } else if self.player().is_dead() {
-                self.next_turn_ts = Instant::now() + Duration::from_millis(50);
+                self.next_turn_ts = self.now + Duration::from_millis(50);
             }
         }
     }
@@ -435,11 +425,11 @@ impl Ui {
     }
 
     pub fn is_next_turn_time(&self) -> bool {
-        self.next_turn_ts <= Instant::now()
+        self.next_turn_ts <= self.now
     }
 
     pub fn is_next_anim_frame_time(&self) -> bool {
-        self.next_anim_frame_ts <= Instant::now()
+        self.next_anim_frame_ts <= self.now
     }
 
     pub fn run_engine_turn(&mut self) {
@@ -497,67 +487,65 @@ impl Ui {
         }
     }
 
-    pub fn maybe_redraw_now(&mut self) -> io::Result<()> {
-        if self.is_next_anim_frame_time() {
-            self.redraw_now()?;
-            self.anim_frame_count += 1;
-            self.next_anim_frame_ts = Instant::now() + Duration::from_millis(100);
-        } else if self.too_small() || self.game_action_queue.is_empty() {
-            thread::sleep(Duration::from_millis(10));
-        }
-        Ok(())
+    /// Advance the animation schedule only after a successful draw.
+    pub fn frame_drawn(&mut self, now: Instant) {
+        self.anim_frame_count += 1;
+        self.next_anim_frame_ts = now + Duration::from_millis(100);
     }
 
-    pub fn run_once(&mut self) -> io::Result<()> {
-        // Resize notifications may be coalesced with input or other resizes.
-        // Reconcile dimensions before using any of the cached panel geometry.
-        let size = Self::screen_size()?;
+    /// Reconcile size and advance simulation before the runner drains input.
+    pub fn advance(&mut self, size: (i32, i32), now: Instant) {
+        self.now = now;
         if self.windows.full.size() != size {
             self.resize(size);
         }
         if !self.too_small() {
             self.run_engine_turn();
         }
-        self.input_handle()?;
-        self.maybe_redraw_now()
     }
 
-    pub fn run(&mut self) -> io::Result<()> {
-        while !self.exit {
-            self.run_once()?;
-        }
-        Ok(())
+    /// Report whether the runner should finish.
+    pub fn exited(&self) -> bool {
+        self.exit
     }
 
-    /// Handle input.
-    pub fn input_handle(&mut self) -> io::Result<()> {
-        // Crossterm's level-triggered Unix source requires a nonzero timeout.
-        while event::poll(Duration::from_millis(1))? {
-            let ch = match event::read()? {
-                TerminalEvent::Resize(_, _) => {
-                    self.resize(Self::screen_size()?);
-                    continue;
-                }
-                TerminalEvent::Key(key) => match input::game_key(key) {
-                    Some(ch) => ch,
-                    None => continue,
-                },
-                _ => continue,
-            };
-            if self.too_small() {
-                if ch == KEY_ESC {
-                    self.exit = true;
-                }
-                continue;
-            }
-            if self.automoving.is_some() {
-                self.automoving_stop();
-                continue;
-            }
+    /// Check rendering and idle pacing at the runner's current instant.
+    pub fn frame_due(&mut self, now: Instant) -> bool {
+        self.now = now;
+        self.is_next_anim_frame_time()
+    }
 
-            self.input_handle_key(ch);
+    /// Avoid spinning while paused or waiting for player input.
+    pub fn should_idle(&self) -> bool {
+        self.too_small() || self.game_action_queue.is_empty()
+    }
+
+    /// Dispatch native events, including resize, pause and cancellation policy.
+    pub fn handle_event(&mut self, event: TerminalEvent, now: Instant) {
+        self.now = now;
+        let ch = match event {
+            TerminalEvent::Resize(width, height) => {
+                self.resize((height.into(), width.into()));
+                return;
+            }
+            TerminalEvent::Key(key) => match input::game_key(key) {
+                Some(ch) => ch,
+                None => return,
+            },
+            _ => return,
+        };
+        if self.too_small() {
+            if ch == KEY_ESC {
+                self.exit = true;
+            }
+            return;
         }
-        Ok(())
+        if self.automoving.is_some() {
+            self.automoving_stop();
+            return;
+        }
+
+        self.input_handle_key(ch);
     }
 
     pub fn action_push(&mut self, action: game::Action) {
@@ -1318,3 +1306,7 @@ impl Ui {
 #[cfg(test)]
 #[path = "ui_input_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "ui_state_tests.rs"]
+mod state_tests;

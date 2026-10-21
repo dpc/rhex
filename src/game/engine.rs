@@ -20,6 +20,18 @@ pub struct Engine {
 }
 
 impl Engine {
+    /// Build a headless test engine without generating a dungeon.
+    #[cfg(test)]
+    pub(crate) fn fixture(location: Location) -> Self {
+        Self {
+            turn: 0,
+            location_cur: 0,
+            locations: vec![location],
+            ids_to_move: vec![],
+            state: State::TurnDone,
+        }
+    }
+
     pub fn new() -> Self {
         let location = Location::new(0);
         Engine {

@@ -8,12 +8,16 @@ mod consts;
 mod input;
 mod map;
 
+mod runner;
 mod session;
+pub use self::runner::Runner;
 mod window;
 use self::window::Window;
 
 mod ui;
-pub use self::ui::*;
+
+#[cfg(test)]
+mod fixtures;
 
 pub enum LogEvent {
     AutoExploreDone,

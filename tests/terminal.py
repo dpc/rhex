@@ -211,14 +211,14 @@ def exercise(binary, race, terminal="xterm-256color"):
         game.action(b"\x1b[C")  # Arrow right.
         game.action(b"\x1b[A")  # Arrow up.
         game.action(b"\x1b[B")  # Arrow down.
-        # Unsupported Ctrl/Alt/modified arrows must not become ordinary moves
-        # or a stray Escape opening the quit prompt.
-        game.drain(0.3)
-        before = game.screen.turn()
+        # Exercise unsupported encodings through the real terminal decoder.
+        # Help closes on any recognized key, so it is a stable transport oracle.
+        # Random-world Turn can advance independently (combat/cooldown/death);
+        # exact no-action/world guarantees live in ui_state_tests.rs fixtures.
+        game.send(b"?")
+        game.expect("Quit: ESC/q")
         game.send(b"\x04\x1bd\x1b[1;5D\x1b[1;2C" + "šŁ".encode())
         game.drain(0.3)
-        assert game.screen.turn() == before, (before, game.screen.turn(), game.screen.text())
-        game.send(b"?")
         game.expect("Quit: ESC/q")
         game.expect("Turn left/right: h/l or Left/Right arrows")
         game.expect("Move forward/back: k/j or Up/Down arrows")

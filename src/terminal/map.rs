@@ -700,3 +700,7 @@ pub fn race_to_palete(race: Race) -> [u8; 4] {
         _ => color::CHAR_ENEMY_FG,
     }
 }
+
+#[cfg(test)]
+#[path = "map_tests.rs"]
+mod tests;

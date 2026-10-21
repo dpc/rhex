@@ -29,6 +29,22 @@ pub struct Location {
 }
 
 impl Location {
+    /// Build an explicitly populated test level without procedural generation.
+    #[cfg(test)]
+    pub(crate) fn fixture(map: Map, mut player: Actor) -> Self {
+        player.recalculate_stats();
+        Self {
+            actors_coord_to_id: [(player.pos.coord, 0)].into(),
+            actors_byid: [(0, player)].into(),
+            actors_dead: Default::default(),
+            actors_counter: 1,
+            map,
+            items: Default::default(),
+            light_map: Default::default(),
+            level: 0,
+            player_id: Some(0),
+        }
+    }
     pub fn new(level: u32) -> Location {
         let (map, gen_actors, items) = generate::gen_level(level);
 
