@@ -11,6 +11,9 @@ homepage = "https://github.com/dpc/rhex"
 repository = "https://github.com/dpc/rhex"
 readme = "README.md"
 
+[lints.rust]
+warnings = "deny"
+
 [profile.dev]
 codegen-units = 2
 debug = false

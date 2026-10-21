@@ -173,18 +173,18 @@ impl Ui {
             target_pos: None,
             log: RefCell::new(VecDeque::new()),
 
-            label_color: label_color,
-            text_color: text_color,
-            text_gray_color: text_gray_color,
-            red_color: red_color,
-            green_color: green_color,
+            label_color,
+            text_color,
+            text_gray_color,
+            red_color,
+            green_color,
 
             input_mode: InputMode::Normal,
 
             exit: false,
             spawned: false,
 
-            engine: engine,
+            engine,
             automoving: None,
             automoving_stopped_turn: 0,
 
@@ -409,12 +409,8 @@ impl Ui {
 
         let player_id = self.current_location().player_id();
 
-        if actor_id == player_id {
-            if self.is_automoving() {
-                self.next_turn_ts = self.now + Duration::from_millis(50);
-            } else if self.player().is_dead() {
-                self.next_turn_ts = self.now + Duration::from_millis(50);
-            }
+        if actor_id == player_id && (self.is_automoving() || self.player().is_dead()) {
+            self.next_turn_ts = self.now + Duration::from_millis(50);
         }
     }
 
@@ -626,9 +622,7 @@ impl Ui {
                     KEY_LOWY | KEY_CAPY => self.exit = true,
                     _ => self.mode_switch_to(Mode::Normal),
                 },
-                FSMode::Intro => match key {
-                    _ => self.mode_switch_to(Mode::FullScreen(FSMode::PickRace)),
-                },
+                FSMode::Intro => self.mode_switch_to(Mode::FullScreen(FSMode::PickRace)),
                 FSMode::PickRace => match key {
                     KEY_LOWA => {
                         self.initial_spawn(Race::Human);
@@ -644,9 +638,7 @@ impl Ui {
                     }
                     _ => {}
                 },
-                _ => match key {
-                    _ => self.mode_switch_to(Mode::Normal),
-                },
+                _ => self.mode_switch_to(Mode::Normal),
             },
             Mode::Normal => {
                 if let Some(action) = Self::key_to_action_normal(self.input_mode, key) {
@@ -671,10 +663,8 @@ impl Ui {
                 match key {
                     KEY_ESC => self.mode_switch_to(Mode::Normal),
                     _ => match ch {
-                        'a'..='z' | 'A'..='Z' => {
-                            if self.player().item_letter_taken(ch) {
-                                self.queue_equip(ch)
-                            }
+                        'a'..='z' | 'A'..='Z' if self.player().item_letter_taken(ch) => {
+                            self.queue_equip(ch)
                         }
                         _ => {}
                     },
@@ -695,10 +685,8 @@ impl Ui {
                 match key {
                     KEY_ESC => self.mode_switch_to(Mode::Normal),
                     _ => match ch {
-                        'a'..='z' | 'A'..='Z' => {
-                            if self.player().item_letter_taken(ch) {
-                                self.queue_drop(ch)
-                            }
+                        'a'..='z' | 'A'..='Z' if self.player().item_letter_taken(ch) => {
+                            self.queue_drop(ch)
                         }
                         _ => {}
                     },
@@ -788,7 +776,7 @@ impl Ui {
     }
 
     pub fn input_handle_key(&mut self, key: i32) {
-        if let Some(_) = Self::key_to_action_global(key) {
+        if Self::key_to_action_global(key).is_some() {
             self.input_mode.toggle();
             self.redraw();
         } else {
@@ -872,7 +860,7 @@ impl Ui {
         let turn = self.engine.turn();
         self.log.borrow_mut().push_front(LogEntry {
             text: s.to_owned(),
-            turn: turn,
+            turn,
         });
     }
 
@@ -972,7 +960,7 @@ impl Ui {
             window.set_style(self.text_color);
         }
 
-        if let Some(&(_, ref item)) = astate.items_equipped.get(&slot) {
+        if let Some((_, item)) = astate.items_equipped.get(&slot) {
             window.write(&format!("{:^13}", item.description()));
         } else {
             window.write_char('-');
@@ -991,7 +979,7 @@ impl Ui {
             window.write("Equipped: \n");
             let mut equipped: Vec<_> = player.items_equipped.iter().collect();
             equipped.sort_by_key(|(_, (ch, _))| *ch);
-            for (slot, &(ref ch, ref i)) in equipped {
+            for (slot, (ch, i)) in equipped {
                 window.write(&format!(" {} - {} [{:?}]\n", ch, i.description(), slot));
             }
             window.write("\n");
@@ -1139,7 +1127,7 @@ impl Ui {
         match i.next() {
             Some(descr) => {
                 let mut s = String::new();
-                write!(&mut s, "{}", "You see: ").unwrap();
+                write!(&mut s, "You see: ").unwrap();
                 write!(&mut s, "{}", descr).unwrap();
 
                 for ref descr in i {
@@ -1218,7 +1206,7 @@ impl Ui {
         }
         match tile.type_ {
             tile::Wall => "a wall".to_owned(),
-            tile::Empty => match tile.area.and_then(|a| Some(a.type_)) {
+            tile::Empty => match tile.area.map(|a| a.type_) {
                 Some(area::Room(_)) => "room".to_owned(),
                 None => "nothing".to_owned(),
             },

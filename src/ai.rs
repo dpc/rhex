@@ -1,4 +1,3 @@
-use rand;
 use rand::RngExt;
 
 use crate::hex2dext::algo::bfs;

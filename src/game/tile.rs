@@ -10,6 +10,8 @@ use std::fmt;
 pub enum Type {
     Wall,
     Empty,
+    // Terrain fixtures cover water, but the current generator only places land.
+    #[cfg_attr(not(test), expect(dead_code))]
     Water,
 }
 
@@ -87,9 +89,8 @@ impl Tile {
     }
 
     pub fn is_passable(&self) -> bool {
-        match self.feature {
-            Some(Statue) => return false,
-            _ => {}
+        if let Some(Statue) = self.feature {
+            return false;
         }
 
         self.type_.is_passable()
@@ -121,13 +122,8 @@ impl Tile {
 
     pub fn dig(&mut self, rng: &mut impl rand::Rng) {
         let r = rng.random_range(0..10);
-        match self.type_ {
-            Wall => {
-                if r < 5 {
-                    self.type_ = Empty
-                }
-            }
-            _ => {}
+        if self.type_ == Wall && r < 5 {
+            self.type_ = Empty
         }
     }
 }

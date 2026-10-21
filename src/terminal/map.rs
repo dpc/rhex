@@ -55,8 +55,8 @@ where
     pub fn new(width: usize, height: usize) -> Self {
         Array2d {
             array: vec![Default::default(); width * height],
-            width: width,
-            height: height,
+            width,
+            height,
         }
     }
 
@@ -106,7 +106,7 @@ impl MapRenderer {
             coord_center: Coordinate::new(0, 0),
             coord_head: Coordinate::new(0, 0),
 
-            dot: dot,
+            dot,
         }
     }
 
@@ -169,7 +169,7 @@ impl MapRenderer {
         let player = cur_loc.player();
 
         let (visible, _in_los, knows, tt, t, light) = if is_proper_coord {
-            let t = cur_loc.map[c].clone();
+            let t = cur_loc.map[c];
             let tt = t.type_;
 
             let visible = player.sees(c) || player.is_dead();
@@ -206,7 +206,7 @@ impl MapRenderer {
 
             let c = Some(if e1 > e2 { c1 } else { c2 });
 
-            let tt = c.map_or(None, |c| Some(cur_loc.at(c).tile().type_));
+            let tt = c.map(|c| cur_loc.at(c).tile().type_);
 
             let visible = player.is_dead()
                 || (player.sees(c1) && player.sees(c2))
@@ -298,13 +298,13 @@ impl MapRenderer {
 
         *self.base.at_mut(vx, vy) = ExtendedCharacter {
             base: DisplayCharacter {
-                glyph: glyph,
-                fg: Color::from(fg),
-                bg: Color::from(bg),
-                bold: bold,
+                glyph,
+                fg,
+                bg,
+                bold,
             },
-            light: light,
-            visible: visible,
+            light,
+            visible,
             known: knows,
         }
     }
@@ -336,7 +336,7 @@ impl MapRenderer {
             let fg = color_by_visibility(color, base.visible, base.light);
 
             *self.items.at_mut(vx, vy) = Some(DisplayCharacter {
-                fg: fg,
+                fg,
                 bg: base.base.bg,
                 bold: player.discovered.contains(&c),
                 glyph: item_to_char(item.category()),
@@ -376,8 +376,8 @@ impl MapRenderer {
                 let fg = color_by_visibility(fg_palete, base.visible, base.light);
                 let bg = color_by_visibility(color::CHAR_BG, base.visible, base.light);
                 *self.actors.at_mut(vx, vy) = Some(DisplayCharacter {
-                    fg: Color::from(fg),
-                    bg: bg,
+                    fg,
+                    bg,
                     bold: base.base.bold,
                     glyph: race_to_char(race),
                 });
@@ -389,7 +389,7 @@ impl MapRenderer {
             };
             let shared = player_head && enemy_color.is_some();
             let occupied_color = if shared {
-                if presentation_elapsed.as_secs() % 2 == 0 {
+                if presentation_elapsed.as_secs().is_multiple_of(2) {
                     color::ENEMY_HEAD_ACTOR_FG
                 } else {
                     color::SELF_HEAD_ACTOR_FG
@@ -471,11 +471,7 @@ impl MapRenderer {
                 self.effects.at_mut(vx, vy).push(
                     if cur_loc.at(c).tile().is_passable() && base.known {
                         DisplayCharacter {
-                            fg: color_by_visibility(
-                                color::CHAR_SELF_FG.into(),
-                                base.visible,
-                                base.light,
-                            ),
+                            fg: color_by_visibility(color::CHAR_SELF_FG, base.visible, base.light),
                             bg: base.base.bg,
                             bold: base.base.bold,
                             glyph: '*',
@@ -536,8 +532,8 @@ impl MapRenderer {
         let (rel_vx, rel_vy) = (coord_vx - center_vx, coord_vy - center_vy);
         let (max_x, max_y) = (self.base.width as isize, self.base.height as isize);
 
-        let mid_x = max_x as isize / 2;
-        let mid_y = max_y as isize / 2;
+        let mid_x = max_x / 2;
+        let mid_y = max_y / 2;
 
         let vx = rel_vx as isize + mid_x;
         let vy = rel_vy as isize + mid_y;
@@ -565,7 +561,7 @@ impl MapRenderer {
 
                 let (cvx, cvy) = (rvx + vpx, rvy + vpy);
 
-                let (c, off) = Coordinate::nearest_with_offset(SPACING, (cvx as i32, cvy as i32));
+                let (c, off) = Coordinate::nearest_with_offset(SPACING, (cvx, cvy));
 
                 let is_proper_coord = off == (0, 0);
 

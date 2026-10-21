@@ -33,9 +33,6 @@ pub struct Area {
 
 impl Area {
     pub fn new(center: h2d::Coordinate, type_: Type) -> Area {
-        Area {
-            center: center,
-            type_: type_,
-        }
+        Area { center, type_ }
     }
 }

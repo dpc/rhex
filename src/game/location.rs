@@ -74,10 +74,10 @@ impl Location {
             rng: SmallRng::seed_from_u64(seed),
             actors_byid: actors,
             actors_coord_to_id: actors_pos,
-            actors_counter: actors_counter,
+            actors_counter,
             actors_dead: Default::default(),
-            items: items,
-            map: map,
+            items,
+            map,
             level: level as i32,
             light_map: Default::default(),
             player_id: None,
@@ -150,7 +150,7 @@ impl Location {
             }
         }
 
-        for (_, id) in &self.actors_coord_to_id {
+        for id in self.actors_coord_to_id.values() {
             let astate = &self.actors_byid[id];
             let pos = astate.pos.coord;
             if astate.light_emision() > 0 {
@@ -204,11 +204,7 @@ impl Location {
     pub fn remove(&mut self, id: actor::Id) -> Option<Actor> {
         let actor = self.actors_byid.remove(&id);
 
-        let actor = if let Some(actor) = actor {
-            actor
-        } else {
-            return None;
-        };
+        let actor = actor?;
 
         self.actors_coord_to_id.remove(&actor.pos.coord);
 
@@ -264,8 +260,8 @@ impl Location {
         }
 
         for id in &self.actors_ids() {
-            if self.actors_byid[id].is_dead() && !self.actors_dead.contains(&id) {
-                let mut a = self.actors_byid.remove(&id).unwrap();
+            if self.actors_byid[id].is_dead() && !self.actors_dead.contains(id) {
+                let mut a = self.actors_byid.remove(id).unwrap();
 
                 // Letter order determines which item occupies the corpse tile.
                 let mut items: Vec<_> = a.items_backpack.drain().collect();
@@ -291,7 +287,7 @@ impl Location {
         debug_assert!(
             self.actors_coord_to_id
                 .iter()
-                .all(|(coord, ref id)| self.actors_byid[*id].coord() == *coord)
+                .all(|(coord, id)| self.actors_byid[id].coord() == *coord)
         );
 
         self.recalculate_light_map();
@@ -300,18 +296,12 @@ impl Location {
 
     pub fn post_turn(&mut self) {}
 
-    pub fn at(&self, coord: Coordinate) -> At {
-        At {
-            coord: coord,
-            state: self,
-        }
+    pub fn at(&self, coord: Coordinate) -> At<'_> {
+        At { coord, state: self }
     }
 
-    pub fn at_mut(&mut self, coord: Coordinate) -> AtMut {
-        AtMut {
-            coord: coord,
-            state: self,
-        }
+    pub fn at_mut(&mut self, coord: Coordinate) -> AtMut<'_> {
+        AtMut { coord, state: self }
     }
 }
 
@@ -331,11 +321,11 @@ impl<'a> At<'a> {
             .actors_coord_to_id
             .get(&self.coord)
             .map(|&id| &self.state.actors_byid[&id])
-            .map_or(def, |a| cond(&a))
+            .map_or(def, cond)
     }
 
     pub fn item_map_or<R, F: Fn(&Box<Item>) -> R>(&self, def: R, cond: F) -> R {
-        self.state.items.get(&self.coord).map_or(def, |i| cond(i))
+        self.state.items.get(&self.coord).map_or(def, cond)
     }
 
     pub fn is_occupied(&self) -> bool {
@@ -390,7 +380,7 @@ impl<'a> AtMut<'a> {
                 |coord| self.state.at(coord).tile().is_passable(),
                 |coord| {
                     self.state.at(coord).tile().is_passable()
-                        && self.state.items.get(&coord).is_none()
+                        && !self.state.items.contains_key(&coord)
                 },
                 self.coord,
             );
@@ -409,14 +399,10 @@ impl<'a> AtMut<'a> {
     }
 
     pub fn pick_item(&mut self) -> Option<Box<Item>> {
-        if self.state.items.get(&self.coord).is_some() {
+        if self.state.items.contains_key(&self.coord) {
             self.state.items.remove(&self.coord)
         } else {
             None
         }
-    }
-
-    pub fn tile(&'a mut self) -> &'a mut tile::Tile {
-        &mut self.state.map[self.coord]
     }
 }

@@ -116,10 +116,7 @@ pub struct Item {
 
 impl Item {
     pub fn new(t: Type, features: Vec<Feature>) -> Item {
-        Item {
-            type_: t,
-            features: features,
-        }
+        Item { type_: t, features }
     }
 
     pub fn description(&self) -> String {

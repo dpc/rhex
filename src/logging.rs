@@ -1,7 +1,3 @@
-use chrono;
-use fern;
-use log;
-
 pub fn init() {
     fern::Dispatch::new()
         .format(|out, msg, record| {

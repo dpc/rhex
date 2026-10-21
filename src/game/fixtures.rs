@@ -66,7 +66,6 @@ pub(crate) fn outcome(loc: &Location) -> String {
             (
                 entries(actor.items_backpack.drain()),
                 entries(actor.items_equipped.drain()),
-                entries(actor.items_letters.drain()),
                 entries(actor.known.drain()),
                 entries(actor.visible.drain()),
                 entries(actor.in_los.drain()),

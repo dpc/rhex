@@ -67,16 +67,16 @@
             workspace = craneLib.buildWorkspace { cargoArtifacts = workspaceDeps; };
             tests = craneLib.cargoNextest {
               cargoArtifacts = workspace;
-              cargoNextestExtraArgs = "--workspace";
+              cargoNextestExtraArgs = "--workspace --all-features";
               doInstallCargoArtifacts = false;
               nativeBuildInputs = [ pkgs.python3 ];
             };
             clippy = craneLib.cargoClippy {
               cargoArtifacts = workspaceDeps;
-              cargoClippyExtraArgs = "--all-targets";
+              cargoClippyExtraArgs = "--all-targets --all-features -- --deny warnings";
               doInstallCargoArtifacts = false;
             };
-            cargoFmt = craneLib.cargoFmt { };
+            cargoFmt = craneLib.cargoFmt { doInstallCargoArtifacts = false; };
             ${projectName} = craneLib.buildPackage {
               cargoArtifacts = workspaceDeps;
             };
@@ -87,7 +87,7 @@
             {
               nativeBuildInputs = [
                 pkgs.treefmt
-                pkgs.nixfmt-rfc-style
+                pkgs.nixfmt
                 pkgs.rustfmt
                 pkgs.taplo
               ];

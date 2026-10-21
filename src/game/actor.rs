@@ -1,5 +1,5 @@
 use std::cmp;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::ops::{Add, Sub};
 
 use crate::hex2dext::algo;
@@ -47,7 +47,7 @@ impl Race {
     }
 }
 
-#[derive(Copy, Clone, Eq, PartialEq, Debug)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug, Default)]
 pub struct Stats {
     pub int: i32,
     pub dex: i32,
@@ -62,7 +62,7 @@ pub struct Stats {
     pub regeneration: u32,
 }
 
-#[derive(Copy, Clone, Eq, PartialEq, Debug)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug, Default)]
 pub struct EffectiveStats {
     pub base: Stats,
     pub melee_dmg: i32,
@@ -83,39 +83,10 @@ impl Stats {
         }
     }
 
-    pub fn to_effective(&self) -> EffectiveStats {
-        let mut efs = EffectiveStats::default();
-        efs.base = *self;
-        efs
-    }
-}
-
-impl Default for Stats {
-    fn default() -> Self {
-        Stats {
-            int: 0,
-            dex: 0,
-            str_: 0,
-            max_hp: 0,
-            max_mp: 0,
-            max_sp: 0,
-            ac: 0,
-            ev: 0,
-            infravision: 0,
-            vision: 0,
-            regeneration: 0,
-        }
-    }
-}
-
-impl Default for EffectiveStats {
-    fn default() -> Self {
+    pub fn to_effective(self) -> EffectiveStats {
         EffectiveStats {
-            base: Default::default(),
-            melee_dmg: 0,
-            melee_acc: 0,
-            melee_str_req: 0,
-            light_emision: 0,
+            base: self,
+            ..Default::default()
         }
     }
 }
@@ -255,7 +226,6 @@ pub struct Actor {
 
     pub action_cd: i32,
 
-    pub items_letters: HashSet<char>,
     pub items_equipped: HashMap<Slot, (char, Box<Item>)>,
     pub items_backpack: HashMap<char, Box<Item>>,
 
@@ -275,9 +245,9 @@ impl Actor {
         let stats = Stats::new(race);
 
         Actor {
-            race: race,
+            race,
             player: false,
-            pos: pos,
+            pos,
             pre_pos: None,
             pre_head: None,
             base_stats: stats,             // base stats
@@ -294,7 +264,6 @@ impl Actor {
             discovered_areas: Default::default(),
             items_backpack: Default::default(),
             items_equipped: Default::default(),
-            items_letters: Default::default(),
             action_cd: 0,
             was_attacked_by: Vec::new(),
             did_attack: Vec::new(),
@@ -320,10 +289,6 @@ impl Actor {
 
     pub fn knows(&self, pos: Coordinate) -> bool {
         self.known.contains(&pos)
-    }
-
-    pub fn hears(&self, coord: Coordinate) -> bool {
-        self.heard.contains_key(&coord)
     }
 
     pub fn coord(&self) -> Coordinate {
@@ -385,7 +350,7 @@ impl Actor {
             Some(id) => id,
         };
 
-        let mut target = match loc.actors_byid.remove(&target_id) {
+        let mut target = match loc.actors_byid.remove(target_id) {
             None => return,
             Some(target) => target,
         };
@@ -394,10 +359,10 @@ impl Actor {
 
         let (ac, ev) = (target.stats.base.ac, target.stats.base.ev);
 
-        let from_behind = match self.pos.dir - target.pos.dir {
-            Angle::Forward | Angle::Left | Angle::Right => true,
-            _ => false,
-        };
+        let from_behind = matches!(
+            self.pos.dir - target.pos.dir,
+            Angle::Forward | Angle::Left | Angle::Right
+        );
 
         if from_behind {
             acc *= 2;
@@ -427,15 +392,15 @@ impl Actor {
         }
 
         target.was_attacked_by.push(AttackResult {
-            success: success,
-            dmg: dmg,
+            success,
+            dmg,
             who: self.description(),
             behind: from_behind,
         });
 
         self.did_attack.push(AttackResult {
-            success: success,
-            dmg: dmg,
+            success,
+            dmg,
             who: target.description(),
             behind: from_behind,
         });
@@ -461,34 +426,21 @@ impl Actor {
         }
     }
 
-    pub fn can_attack_at_angle(&self, angle: Angle) -> bool {
-        match angle {
-            Forward | Left | Right => true,
-            _ => false,
-        }
-    }
-
     pub fn can_dig_at_angle(&self, angle: Angle) -> bool {
-        match angle {
-            Forward | Left | Right => true,
-            _ => false,
-        }
+        matches!(angle, Forward | Left | Right)
     }
 
     fn los_to_visible(&self, loc: &game::Location, los: &Visibility) -> Visibility {
         let mut visible: Visibility = Default::default();
 
         for &coord in los {
-            if loc.light_map[coord] > 0 {
+            if loc.light_map[coord] > 0
+                || self.pos.coord.distance(coord) <= self.stats.base.infravision
+                || coord == self.head()
+                || (loc.at(coord).tile().opaqueness() > 10
+                    && loc.at(coord).light_as_seen_by(self) > 0)
+            {
                 visible.insert(coord);
-            } else if self.pos.coord.distance(coord) <= self.stats.base.infravision {
-                visible.insert(coord);
-            } else if coord == self.head() {
-                visible.insert(coord);
-            } else if loc.at(coord).tile().opaqueness() > 10 {
-                if loc.at(coord).light_as_seen_by(self) > 0 {
-                    visible.insert(coord);
-                }
             }
         }
 
@@ -525,12 +477,7 @@ impl Actor {
         self.visible = visible;
     }
 
-    // Could this actor have seen action/movement
-    // of another actor (given by id)
-    pub fn could_have_seen(&self, actor: &Actor) -> bool {
-        self.sees(actor.pos.coord) || self.sees(actor.prev_pos().coord)
-    }
-
+    #[cfg(test)]
     pub fn prev_pos(&self) -> Position {
         self.pre_pos.unwrap_or(self.pos)
     }
@@ -622,7 +569,8 @@ impl Actor {
     }
 
     pub fn pick_item(&mut self, item: Box<Item>) -> Option<Box<Item>> {
-        for ch in ('a' as u8..'z' as u8).chain('A' as u8..'Z' as u8) {
+        // Preserve the existing inventory-letter set, which excludes z and Z.
+        for ch in (b'a'..=b'y').chain(b'A'..=b'Y') {
             let ch = ch as char;
             if !self.item_letter_taken(ch) {
                 assert!(!self.items_backpack.contains_key(&ch));
@@ -638,7 +586,7 @@ impl Actor {
             return true;
         }
 
-        for (&_, &(ref item_ch, _)) in &self.items_equipped {
+        for (&_, (item_ch, _)) in &self.items_equipped {
             if *item_ch == ch {
                 return true;
             }
@@ -705,7 +653,7 @@ impl Actor {
 
     pub fn unequip(&mut self, ch: char) {
         let mut found_slot = None;
-        for (&slot, &(ref item_ch, _)) in &self.items_equipped {
+        for (&slot, (item_ch, _)) in &self.items_equipped {
             if ch == *item_ch {
                 found_slot = Some(slot);
                 break;
@@ -734,10 +682,10 @@ impl Actor {
 
         let (ac, ev) = (target.stats.base.ac, target.stats.base.ev);
 
-        let from_behind = match dir - target.pos.dir {
-            Angle::Forward | Angle::Left | Angle::Right => true,
-            _ => false,
-        };
+        let from_behind = matches!(
+            dir - target.pos.dir,
+            Angle::Forward | Angle::Left | Angle::Right
+        );
 
         if from_behind {
             acc *= 2;
@@ -763,15 +711,15 @@ impl Actor {
         }
 
         target.was_attacked_by.push(AttackResult {
-            success: success,
-            dmg: dmg,
+            success,
+            dmg,
             who: self.description(),
             behind: from_behind,
         });
 
         self.did_attack.push(AttackResult {
-            success: success,
-            dmg: dmg,
+            success,
+            dmg,
             who: target.description(),
             behind: from_behind,
         });
@@ -818,7 +766,7 @@ impl Actor {
     }
 
     pub fn is_holding_ranged_weapon(&self) -> bool {
-        if let Some(&(_, ref box_item)) = self.items_equipped.get(&Slot::RHand) {
+        if let Some((_, box_item)) = self.items_equipped.get(&Slot::RHand) {
             box_item.is_ranged_weapon()
         } else {
             false
@@ -872,10 +820,10 @@ impl Actor {
                         let head = self.head();
                         let item = loc.at_mut(head).pick_item();
 
-                        if let Some(item) = item {
-                            if let Some(item) = self.pick_item(item) {
-                                loc.at_mut(head).drop_item(item);
-                            }
+                        if let Some(item) = item
+                            && let Some(item) = self.pick_item(item)
+                        {
+                            loc.at_mut(head).drop_item(item);
                         }
                     }
                     Action::Equip(ch) => {
@@ -938,13 +886,12 @@ impl Actor {
                 loc.actors_coord_to_id.insert(new_pos.coord, id);
             } else {
                 // we hit the wall or something
-                if let Action::Move(angle) = action {
-                    if self.can_dig()
-                        && self.can_dig_at_angle(angle)
-                        && loc.at(new_pos.coord).tile().can_dig_through()
-                    {
-                        self.dig(angle, loc)
-                    }
+                if let Action::Move(angle) = action
+                    && self.can_dig()
+                    && self.can_dig_at_angle(angle)
+                    && loc.at(new_pos.coord).tile().can_dig_through()
+                {
+                    self.dig(angle, loc)
                 }
             }
         }
@@ -952,14 +899,14 @@ impl Actor {
 
     // Item equipped in a given slot
     pub fn equipped_in_slot(&self, slot: Slot) -> Option<&Item> {
-        self.items_equipped.get(&slot).map(|&(_, ref item)| &**item)
+        self.items_equipped.get(&slot).map(|(_, item)| &**item)
     }
 
     pub fn can_dig(&self) -> bool {
         self.can_attack_sp()
             && self
                 .equipped_in_slot(Slot::RHand)
-                .map_or(false, |item| item.can_dig())
+                .is_some_and(|item| item.can_dig())
     }
 
     pub fn dig(&mut self, angle: Angle, loc: &mut Location) {
@@ -971,13 +918,9 @@ impl Actor {
     }
 
     pub fn could_be_attack(&self, action: Action) -> bool {
-        match action {
-            Action::Charge => true,
-            Action::Move(angle) => match angle {
-                Left | Right | Forward => true,
-                _ => false,
-            },
-            _ => false,
-        }
+        matches!(
+            action,
+            Action::Charge | Action::Move(Left | Right | Forward)
+        )
     }
 }

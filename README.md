@@ -24,14 +24,16 @@ or a separate `tput` program. Run from a writable directory: the game writes
 `debug.log` there. The game has no save/load support.
 
 Press any key at the introduction, then choose a race (`a` for human).
-In either input mode, use `h`/`l` or Left/Right arrows to turn left/right, and
-`k`/`j` or Up/Down arrows to move forward/backward.
-In normal input mode, use `w`/`s` to move forward/backward, `a`/`d` to turn, and
-`q`/`e` to sidestep. `.` waits, `,` picks up an item, `I` opens inventory,
-`?` shows help. Press F2 to toggle additional Vi-style controls (`u`/`i` spin,
+In either input mode, use `h`/`l` or the Left/Right arrows to turn left/right, and
+`k`/`j` or the Up/Down arrows to move forward/backward.
+In normal input mode, you can also use `w`/`s` to move forward/backward, `a`/`d`
+to turn, and `q`/`e` to sidestep. Press `.` to wait, `,` to pick up an item,
+`I` to open inventory, and `?` for help.
+Press F2 to toggle additional Vi-style controls (`u`/`i` spin,
 `H`/`L` sidestep, `K` walks automatically, and `q` quits instead of sidestepping).
 Use these movement aliases during gameplay; in menus and inventory, use letters
 to select entries.
+
 To exit, press Escape, then `y` to confirm.
 If your terminal has fewer than 60 columns or 24 rows, the game pauses and asks
 you to resize it. Press Escape at this prompt to exit without confirmation.
@@ -49,25 +51,34 @@ The project uses flakebox, treefmt, Vale, and selfci:
 ```console
 treefmt
 just vale
-cargo clippy --all-targets --locked
-nix build -L .#ci.tests
+cargo clippy --all-targets --all-features --locked -- -D warnings
+nix build --keep-failed -L .#ci.tests
 selfci check
 ```
 
 The flake exposes the game as the default package. Run individual checks with
 `ci.workspace`, `ci.clippy`, `ci.tests`, and `ci.cargoFmt`.
 The `treefmt` package checks Rust, Nix, and TOML formatting.
-Clippy reports existing legacy-code warnings without treating them as errors.
+CI rejects compiler and Clippy warnings across all test targets and features.
+The project has no optional Cargo features at present. Nix retains failed test
+build directories so PTY diagnostics remain available.
+
+GitHub Actions runs on pushes to `master`, pull requests, and manual dispatch.
+It runs the same checks as selfci: formatting, Vale, lockfile consistency,
+workspace and package builds, strict Clippy, and the full test suite including
+PTY tests. Run the hosted CI command locally with
+`nix develop -c ./.config/selfci/check.sh`.
 
 Without Nix, install a current Rust toolchain and a platform linker, then run
 `cargo run --release --locked`. Builds do not need a terminal. The PTY integration
 tests require Python 3 on Unix.
 
-At the time of the terminal migration, we updated all direct dependencies to
-their latest available stable release or upstream revision. The in-house `hex2d-dpcext`
-extension still declares an unused `rand` 0.8 dependency, so its older random-number
-dependency chain remains in the lockfile alongside the game's `rand` 0.10.
-We retain the upstream algorithms rather than vendor them to remove that
+During the terminal migration, we updated all direct dependencies to
+the latest stable release or upstream revision available at the time.
+The in-house `hex2d-dpcext` extension still declares an unused `rand` 0.8
+dependency, so its older random-number dependency chain remains in the lockfile
+alongside the game's `rand` 0.10.
+We keep the upstream algorithms rather than vendor them to remove that
 dependency.
 
 ## Contributing

@@ -35,7 +35,7 @@ impl DungeonGenerator {
     /// Create a generator with an explicit random stream.
     pub fn new(level: u32, seed: u64) -> DungeonGenerator {
         DungeonGenerator {
-            level: level,
+            level,
             start: None,
             stairs: None,
             tile_count: 0,
@@ -62,8 +62,7 @@ fn tile_is_deadend(map: &Map, coord: Coordinate) -> bool {
 
     let mut changes = 0;
     let mut last = passable[len - 1];
-    for i in 0..len {
-        let current = passable[i];
+    for current in passable {
         if last != current {
             changes += 1;
             last = current;
@@ -78,33 +77,28 @@ impl DungeonGenerator {
     fn generate_continue_corridor(&mut self, pos: h2d::Position) {
         let npos = pos + Coordinate::from(pos.dir);
 
-        let somepos = if let Some(tile) = self.map.get(&npos.coord) {
-            Some(if tile.type_.is_passable() {
+        let somepos = self.map.get(&npos.coord).map(|tile| {
+            if tile.type_.is_passable() {
                 npos
             } else {
                 pos + Right
-            })
-        } else {
-            None
-        };
+            }
+        });
         match somepos {
             Some(pos) => self.endpoint_push(pos),
             None => {
                 self.map.insert(npos.coord, tile::Tile::new(tile::Empty));
                 self.endpoint_push(npos);
-                match self.rng.random_range(0..19) {
-                    0 => {
-                        let leftwall = pos + Coordinate::from(pos.dir + h2d::Angle::Left);
-                        let rightwall = pos + Coordinate::from(pos.dir + h2d::Angle::Right);
+                if self.rng.random_range(0..19) == 0 {
+                    let leftwall = pos + Coordinate::from(pos.dir + h2d::Angle::Left);
+                    let rightwall = pos + Coordinate::from(pos.dir + h2d::Angle::Right);
 
-                        self.map
-                            .entry(leftwall.coord)
-                            .or_insert(tile::Tile::new(tile::Wall));
-                        self.map
-                            .entry(rightwall.coord)
-                            .or_insert(tile::Tile::new(tile::Wall));
-                    }
-                    _ => {}
+                    self.map
+                        .entry(leftwall.coord)
+                        .or_insert(tile::Tile::new(tile::Wall));
+                    self.map
+                        .entry(rightwall.coord)
+                        .or_insert(tile::Tile::new(tile::Wall));
                 }
 
                 self.tile_count += 1
@@ -208,30 +202,25 @@ impl DungeonGenerator {
 
         for c in coord.range_iter(r as i32 - 1) {
             if self.map.contains_key(&c) {
-                match self.rng.random_range(0..15) {
-                    0 => {
-                        self.map.get_mut(&c).unwrap().add_light((r + 4) as i32);
-                    }
-                    _ => {}
+                if self.rng.random_range(0..15) == 0 {
+                    self.map.get_mut(&c).unwrap().add_light((r + 4) as i32);
                 }
                 self.tile_count += 1;
             }
         }
 
         for c in coord.range_iter(r as i32 / 2) {
-            if c != coord && self.map.get(&c).map_or(false, |t| t.is_passable()) {
-                match self.rng.random_range(0..10) {
-                    0 => {
-                        let pos = Position::new(c, Direction::XY);
-                        let race = match self.rng.random_range(0..(1 + self.level / 2)) {
-                            0 => Race::Rat,
-                            1 => Race::Goblin,
-                            _ => Race::Troll,
-                        };
-                        self.actors.insert(c, Actor::new(race, pos));
-                    }
-                    _ => {}
-                }
+            if c != coord
+                && self.map.get(&c).is_some_and(|t| t.is_passable())
+                && self.rng.random_range(0..10) == 0
+            {
+                let pos = Position::new(c, Direction::XY);
+                let race = match self.rng.random_range(0..(1 + self.level / 2)) {
+                    0 => Race::Rat,
+                    1 => Race::Goblin,
+                    _ => Race::Troll,
+                };
+                self.actors.insert(c, Actor::new(race, pos));
             }
         }
 
@@ -293,7 +282,7 @@ impl DungeonGenerator {
         let mut map = Map::default();
 
         for (&coord, tile) in &self.map {
-            map[coord] = tile.clone()
+            map[coord] = *tile
         }
 
         // Elimination is sequential: earlier removals can expose later dead ends.

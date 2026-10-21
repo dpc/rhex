@@ -4,43 +4,32 @@ use ratatui::style::{Color as TerminalColor, Style};
 #[derive(Copy, Clone, Eq, PartialEq, Debug, Default, Hash)]
 pub struct Color(u8);
 
+#[cfg(test)]
 impl Color {
-    /// Round to nearest RGB
-    pub fn to_rgb(&self) -> RGB {
+    /// Round to nearest Rgb
+    pub fn to_rgb(self) -> Rgb {
         match self.0 {
             7 => Color(255).to_rgb(),
-            15 => RGB(5, 5, 5),
+            15 => Rgb(5, 5, 5),
             16..=231 => {
                 let c = self.0 - 16;
                 let b = c % 6;
                 let c = (c - b) / 6;
                 let g = c % 6;
                 let r = (c - g) / 6;
-                RGB::new(r, g, b)
+                Rgb::new(r, g, b)
             }
             232..=255 => {
                 let c = (self.0 - 232) / 4;
-                RGB::new(c, c, c)
+                Rgb::new(c, c, c)
             }
             _ => panic!("Unimplemented color {}", self.0),
         }
     }
-
-    pub fn mix(&self, color: Color, s: u8) -> Color {
-        assert!(s < 6);
-        let s_rgb = self.to_rgb();
-        let c_rgb = color.to_rgb();
-        RGB::new(
-            (s_rgb.0 * (5 - s) + c_rgb.0 * s) / 5,
-            (s_rgb.1 * (5 - s) + c_rgb.1 * s) / 5,
-            (s_rgb.2 * (5 - s) + c_rgb.2 * s) / 5,
-        )
-        .into()
-    }
 }
 
-impl From<RGB> for Color {
-    fn from(rgb: RGB) -> Self {
+impl From<Rgb> for Color {
+    fn from(rgb: Rgb) -> Self {
         Color(rgb.to_u8())
     }
 }
@@ -52,18 +41,19 @@ impl From<u8> for Color {
 }
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug, Default, Hash)]
-pub struct RGB(u8, u8, u8);
+pub struct Rgb(u8, u8, u8);
 
-impl RGB {
+impl Rgb {
+    #[cfg(test)]
     pub fn new(r: u8, g: u8, b: u8) -> Self {
         assert!(r < 6);
         assert!(g < 6);
         assert!(b < 6);
 
-        RGB(r, g, b)
+        Rgb(r, g, b)
     }
 
-    pub fn to_u8(&self) -> u8 {
+    pub fn to_u8(self) -> u8 {
         16 + self.0 * 36 + self.1 * 6 + self.2
     }
 }
@@ -73,7 +63,7 @@ fn to_rgb_and_back() {
     for r in 0u8..6u8 {
         for g in 0u8..6u8 {
             for b in 0u8..6u8 {
-                let rgb = RGB(r, g, b);
+                let rgb = Rgb(r, g, b);
                 let color: Color = rgb.into();
                 assert_eq!(rgb, color.to_rgb());
             }
@@ -86,20 +76,19 @@ pub const GRAY: [u8; 26] = [
     250, 251, 252, 253, 254, 255, 231,
 ];
 
-pub const RGB_GRAY: [RGB; 6] = [
-    RGB(0, 0, 0),
-    RGB(1, 1, 1),
-    RGB(2, 2, 2),
-    RGB(3, 3, 3),
-    RGB(4, 4, 4),
-    RGB(5, 5, 5),
+pub const RGB_GRAY: [Rgb; 6] = [
+    Rgb(0, 0, 0),
+    Rgb(1, 1, 1),
+    Rgb(2, 2, 2),
+    Rgb(3, 3, 3),
+    Rgb(4, 4, 4),
+    Rgb(5, 5, 5),
 ];
 
 pub const BLACK: u8 = GRAY[0];
 pub const WHITE: u8 = GRAY[25];
 
-pub const YELLOW: RGB = RGB(5, 5, 0);
-pub const ORANGE: RGB = RGB(5, 3, 0);
+pub const YELLOW: Rgb = Rgb(5, 5, 0);
 
 pub const BACKGROUND_BG: u8 = GRAY[1];
 pub const MAP_BACKGROUND_BG: u8 = BACKGROUND_BG;
@@ -129,16 +118,15 @@ pub const BLOCKED_BG: u8 = 124;
 pub const LABEL_FG: u8 = 94;
 pub const GREEN_FG: u8 = 34;
 pub const RED_FG: u8 = 124;
-pub const NOISE_BG: RGB = ORANGE;
-pub const LIGHTSOURCE: [RGB; 4] = [YELLOW, YELLOW, YELLOW, YELLOW];
-pub const LOG_1_FG: RGB = RGB_GRAY[5];
-pub const LOG_2_FG: RGB = RGB_GRAY[4];
-pub const LOG_3_FG: RGB = RGB_GRAY[3];
-pub const LOG_4_FG: RGB = RGB_GRAY[2];
-pub const LOG_5_FG: RGB = RGB_GRAY[1];
+pub const LIGHTSOURCE: [Rgb; 4] = [YELLOW, YELLOW, YELLOW, YELLOW];
+pub const LOG_1_FG: Rgb = RGB_GRAY[5];
+pub const LOG_2_FG: Rgb = RGB_GRAY[4];
+pub const LOG_3_FG: Rgb = RGB_GRAY[3];
+pub const LOG_4_FG: Rgb = RGB_GRAY[2];
+pub const LOG_5_FG: Rgb = RGB_GRAY[1];
 
-pub const SELF_HEAD_ACTOR_FG: RGB = RGB(0, 0, 5);
-pub const ENEMY_HEAD_ACTOR_FG: RGB = RGB(5, 0, 0);
+pub const SELF_HEAD_ACTOR_FG: Rgb = Rgb(0, 0, 5);
+pub const ENEMY_HEAD_ACTOR_FG: Rgb = Rgb(5, 0, 0);
 
 /// Select indexed terminal colors without allocating a bounded color-pair table.
 pub fn style(fg: impl Into<Color>, bg: impl Into<Color>) -> Style {
