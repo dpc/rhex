@@ -9,9 +9,9 @@
 |                              H:-           C:-|
 |                              Q:-|
 |                              In front: nothing|
+|                              Below: nothing|
 |                              Turn: 0       Level: 0|
 |                              A quiet room.|
-||
 ||
 ||
 ||

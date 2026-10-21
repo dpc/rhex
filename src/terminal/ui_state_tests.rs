@@ -42,6 +42,108 @@ fn frame(ui: &mut Ui, width: u16, height: u16) -> Buffer {
 }
 
 #[test]
+fn below_describes_ground_items_features_and_terrain_not_the_player() {
+    let now = Instant::now();
+    let origin = Coordinate::new(0, 0);
+    for (terrain, feature, item, area, expected) in [
+        (tile::Empty, None, false, false, "nothing"),
+        (tile::Empty, None, false, true, "room"),
+        (tile::Water, None, false, false, "water"),
+        (tile::Empty, Some(tile::Stairs), false, false, "stairs down"),
+        (
+            tile::Empty,
+            Some(tile::Door(true)),
+            false,
+            false,
+            "open door",
+        ),
+        (tile::Empty, None, true, false, "knife"),
+        // Match In front's item-before-feature convention.
+        (tile::Empty, Some(tile::Stairs), true, false, "knife"),
+    ] {
+        let mut ui = fixture(now);
+        let loc = ui.engine.current_location_mut();
+        loc.map[origin] = tile::Tile::new(terrain);
+        loc.map[origin].feature = feature;
+        if area {
+            loc.map[origin].area = Some(area::Area::new(origin, area::Room(3)));
+        }
+        if item {
+            loc.items
+                .insert(origin, Box::new(Item::new(Type::Knife, vec![])));
+        }
+        for mode in [Mode::Normal, Mode::Examine, Mode::Inventory(InvMode::View)] {
+            ui.mode_switch_to(mode);
+            ui.target_pos = Some(Position::new(Coordinate::new(2, -2), hex2d::XY));
+            let buffer = frame(&mut ui, 60, 24);
+            let row: String = (30..60).map(|x| buffer[(x, 11)].symbol()).collect();
+            assert_eq!(row, format!("{:30}", format!("Below: {expected}")));
+            let front: String = (30..60).map(|x| buffer[(x, 10)].symbol()).collect();
+            assert_eq!(front, format!("{:30}", "In front: nothing"));
+        }
+    }
+}
+
+#[test]
+fn below_updates_after_moving_onto_and_off_stairs() {
+    let now = Instant::now();
+    let mut ui = fixture(now);
+    let stairs = ui.player().head();
+    ui.engine.current_location_mut().map[stairs].feature = Some(tile::Stairs);
+    let row =
+        |buffer: &Buffer, y| -> String { (30..60).map(|x| buffer[(x, y)].symbol()).collect() };
+    let before = frame(&mut ui, 60, 24);
+    assert_eq!(row(&before, 10), format!("{:30}", "In front: stairs down"));
+    assert_eq!(row(&before, 11), format!("{:30}", "Below: nothing"));
+    for (step, expected) in [(1, "stairs down"), (2, "nothing")] {
+        key(&mut ui, KeyCode::Char('k'), now);
+        ui.advance((24, 60), now + Duration::from_secs(step));
+        let buffer = frame(&mut ui, 60, 24);
+        assert_eq!(
+            row(&buffer, 11),
+            format!("{:30}", format!("Below: {expected}"))
+        );
+    }
+    assert_ne!(ui.player().pos.coord, stairs);
+}
+
+#[test]
+fn long_ground_readouts_clip_without_overwriting_stats_or_log() {
+    use crate::game::item::Feature;
+    let now = Instant::now();
+    for (width, height) in [(60, 24), (120, 36)] {
+        let mut ui = fixture(now);
+        ui.resize((height, width));
+        for coord in [ui.player().pos.coord, ui.player().head()] {
+            ui.engine.current_location_mut().items.insert(
+                coord,
+                Box::new(Item::new(
+                    Type::Plate,
+                    vec![Feature::Infravision, Feature::Light],
+                )),
+            );
+        }
+        ui.log("A quiet room.");
+        let buffer = frame(&mut ui, width as u16, height as u16);
+        let row = |y| -> String {
+            ((width - 30) as u16..width as u16)
+                .map(|x| buffer[(x, y)].symbol())
+                .collect()
+        };
+        assert_eq!(row(10), "In front: plate armor of infra");
+        assert_eq!(row(11), "Below: plate armor of infravis");
+        assert_eq!(row(12), format!("{:30}", "Turn: 0       Level: 0"));
+        assert_eq!(row(13), format!("{:30}", "A quiet room."));
+        ui.engine.current_location_mut().items.clear();
+        let cleared = frame(&mut ui, width as u16, height as u16);
+        let row: String = ((width - 30) as u16..width as u16)
+            .map(|x| cleared[(x, 11)].symbol())
+            .collect();
+        assert_eq!(row, format!("{:30}", "Below: nothing"));
+    }
+}
+
+#[test]
 fn idle_shared_facing_uses_stable_time_across_redraws_modes_and_resize() {
     let now = Instant::now();
     let mut ui = fixture(now);
@@ -638,12 +740,12 @@ fn overflowing_inventory_and_multiline_log_stay_in_their_panels_and_clear() {
             assert!(row(&full, 2, 0, panel).starts_with("n of regeneration of light"));
         }
         assert_eq!(
-            row(&full, 12, panel, width as u16),
+            row(&full, 13, panel, width as u16),
             "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123"
         );
-        assert!(row(&full, 13, panel, width as u16).starts_with("456789"));
-        assert!(row(&full, 14, panel, width as u16).starts_with("second line"));
-        for y in 0..12 {
+        assert!(row(&full, 14, panel, width as u16).starts_with("456789"));
+        assert!(row(&full, 15, panel, width as u16).starts_with("second line"));
+        for y in 0..13 {
             for x in panel..width as u16 {
                 assert_eq!(
                     full[(x, y)],

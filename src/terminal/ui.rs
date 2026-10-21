@@ -61,7 +61,7 @@ struct Windows {
 impl Windows {
     fn after_resize((max_y, max_x): (i32, i32)) -> Self {
         let mid_x = (max_x - 30).max(0);
-        let mid_y = 12.min(max_y);
+        let mid_y = 13.min(max_y);
 
         let map_window = Window::new(mid_x, max_y, 0, 0);
         let stats_window = Window::new(max_x - mid_x, mid_y, mid_x, 0);
@@ -1103,14 +1103,30 @@ impl Ui {
 
         let head = pos.coord + pos.dir;
         let descr = self.tile_description(head, player, cur_loc);
-        self.draw_label(window, "In front");
-        window.set_style(self.text_color);
-        window.write(&format!(" {}", descr));
+        self.draw_tile_readout(window, "In front", &descr);
+
+        y += 1;
+        window.move_to(y, 0);
+        // Describe the floor, not the player occupying it, even while examining.
+        self.draw_tile_readout(
+            window,
+            "Below",
+            &Self::tile_surface_description(player.pos.coord, cur_loc),
+        );
 
         y += 1;
         window.move_to(y, 0);
         self.draw_turn(window, "Turn", turn);
         self.draw_turn(window, "Level", cur_loc.level);
+    }
+
+    /// Keep each tile readout on its own row without spilling into other stats.
+    fn draw_tile_readout(&self, window: &Window, label: &str, description: &str) {
+        self.draw_label(window, label);
+        window.set_style(self.text_color);
+        let available = (window.size().1 as usize).saturating_sub(label.len() + 2);
+        let description: String = description.chars().take(available).collect();
+        window.write(&format!(" {description}"));
     }
 
     // TODO: Consider the distance to the Item to print something
@@ -1168,13 +1184,6 @@ impl Ui {
             return "Unknown".to_owned();
         }
 
-        let tile_type = gstate.at(coord).tile().type_;
-        let tile = gstate.at(coord).tile();
-        let feature_descr = tile.feature.map(|f| f.description().to_owned());
-        let item_descr = gstate
-            .at(coord)
-            .item_map_or(None, |i| Some(i.description().to_owned()));
-
         let actor_descr = if astate.sees(coord) || astate.is_dead() {
             gstate.at(coord).actor_map_or(None, |a| {
                 Some(
@@ -1194,12 +1203,22 @@ impl Ui {
             None
         };
 
-        match (tile_type, feature_descr, actor_descr, item_descr) {
-            (_, _, Some(a_descr), _) => a_descr,
-            (_, _, _, Some(i_descr)) => i_descr,
-            (_, Some(f_descr), _, _) => f_descr.to_owned(),
-            (tile::Wall, _, _, _) => "a wall".to_owned(),
-            (tile::Empty, _, _, _) => match tile.area.and_then(|a| Some(a.type_)) {
+        actor_descr.unwrap_or_else(|| Self::tile_surface_description(coord, gstate))
+    }
+
+    /// Describe ground contents with the same item, feature, then terrain priority.
+    fn tile_surface_description(coord: Coordinate, gstate: &game::Location) -> String {
+        let at = gstate.at(coord);
+        let tile = at.tile();
+        if let Some(item) = at.item() {
+            return item.description();
+        }
+        if let Some(feature) = tile.feature {
+            return feature.description().to_owned();
+        }
+        match tile.type_ {
+            tile::Wall => "a wall".to_owned(),
+            tile::Empty => match tile.area.and_then(|a| Some(a.type_)) {
                 Some(area::Room(_)) => "room".to_owned(),
                 None => "nothing".to_owned(),
             },
