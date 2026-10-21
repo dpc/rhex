@@ -115,6 +115,74 @@ fn death_lights_remembered_terrain_without_revealing_unknown_cells() {
 }
 
 #[test]
+fn remembered_terrain_is_darker_without_changing_visible_styles_or_backgrounds() {
+    // Literal indexed colors keep this independent of the production palette.
+    // Each visible style is ordered: unlit, shaded, fully lit.
+    for (terrain, feature, glyph, fg, bg, bold) in [
+        (
+            tile::Empty,
+            None,
+            "•",
+            [247, 241, 248],
+            [235, 247, 255],
+            false,
+        ),
+        (tile::Wall, None, "#", [247, 232, 16], [235, 247, 255], true),
+        (tile::Water, None, "~", [247, 241, 248], [67, 74, 4], false),
+        (
+            tile::Empty,
+            Some(tile::Door(false)),
+            "×",
+            [247, 232, 16],
+            [235, 247, 255],
+            false,
+        ),
+        (
+            tile::Empty,
+            Some(tile::Door(true)),
+            "_",
+            [247, 232, 16],
+            [235, 247, 255],
+            false,
+        ),
+        (
+            tile::Empty,
+            Some(tile::Statue),
+            "&",
+            [247, 232, 16],
+            [235, 247, 255],
+            false,
+        ),
+        (
+            tile::Empty,
+            Some(tile::Stairs),
+            ">",
+            [247, 232, 16],
+            [235, 247, 255],
+            false,
+        ),
+    ] {
+        let mut loc = scene();
+        let coord = Coordinate::new(0, 2);
+        loc.map[coord] = tile::Tile::new(terrain);
+        loc.map[coord].feature = feature;
+        let mut renderer = MapRenderer::new(UNICODE_DOT);
+        renderer.resize(20, 12);
+        for (band, light) in [0, 1, 3].into_iter().enumerate() {
+            // Opaque terrain takes its apparent light from neighboring cells.
+            for lit_coord in Coordinate::new(0, 0).range_iter(8) {
+                loc.light_map[lit_coord] = light;
+            }
+            let buffer = render(&mut renderer, &loc, Mode::Normal, None, 0, 20, 12);
+            cell(&buffer, (8, 4), glyph, fg[band], bg[band], bold);
+        }
+        player_mut(&mut loc).visible.remove(&coord);
+        let buffer = render(&mut renderer, &loc, Mode::Normal, None, 0, 20, 12);
+        cell(&buffer, (8, 4), glyph, 241, 232, bold);
+    }
+}
+
+#[test]
 fn projected_terrain_visibility_light_and_glue_have_exact_cells() {
     let mut loc = scene();
     let unknown = Coordinate::new(-2, 2);

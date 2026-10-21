@@ -108,13 +108,14 @@ pub const VISIBLE_FG: u8 = WHITE;
 
 pub const NOT_IN_LOS_FG: u8 = GRAY[16];
 pub const NOT_IN_LOS_BG: u8 = GRAY[1];
+pub const REMEMBERED_TERRAIN_FG: u8 = GRAY[10];
 
 // in light, shaded (barely visible), in LoS but not visible (dark), not in LoS
-pub const EMPTY_FG: [u8; 4] = [GRAY[17], GRAY[10], NOT_IN_LOS_FG, NOT_IN_LOS_FG];
+pub const EMPTY_FG: [u8; 4] = [GRAY[17], GRAY[10], NOT_IN_LOS_FG, REMEMBERED_TERRAIN_FG];
 pub const EMPTY_BG: [u8; 4] = [GRAY[24], GRAY[16], GRAY[4], NOT_IN_LOS_BG];
 pub const WATER_FG: [u8; 4] = EMPTY_FG;
 pub const WATER_BG: [u8; 4] = [4, 74, 67, NOT_IN_LOS_BG];
-pub const STONE_FG: [u8; 4] = [BLACK, GRAY[1], NOT_IN_LOS_FG, NOT_IN_LOS_FG];
+pub const STONE_FG: [u8; 4] = [BLACK, GRAY[1], NOT_IN_LOS_FG, REMEMBERED_TERRAIN_FG];
 pub const WALL_FG: [u8; 4] = STONE_FG;
 pub const WALL_BG: [u8; 4] = EMPTY_BG;
 pub const CHAR_SELF_FG: [u8; 4] = [19, 18, NOT_IN_LOS_FG, NOT_IN_LOS_FG];
