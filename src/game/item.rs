@@ -242,10 +242,9 @@ impl fmt::Display for Item {
     }
 }
 
-pub fn random(level: i32) -> Box<Item> {
+pub fn random(level: i32, mut rng: &mut impl rand::Rng) -> Box<Item> {
     let a = -(level / 2);
     let b = level + 2;
-    let mut rng = rand::rng();
     let lvrange = rand::distr::Uniform::new(a, b).expect("nonempty item level range");
     let r = lvrange.sample(&mut rng) + lvrange.sample(&mut rng) + lvrange.sample(&mut rng);
 
@@ -254,7 +253,7 @@ pub fn random(level: i32) -> Box<Item> {
     const PER_LOOP: i32 = 30;
     let looprange = rand::distr::Uniform::new(0, PER_LOOP).expect("positive item feature range");
     while looprange.sample(&mut rng) < chance {
-        features.push(rand::random());
+        features.push(rng.random());
         chance = cmp::max(0, chance - PER_LOOP);
     }
 

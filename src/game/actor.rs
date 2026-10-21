@@ -264,6 +264,13 @@ pub struct Actor {
 }
 
 impl Actor {
+    /// Canonicalize the private perception set for semantic test diagnostics.
+    #[cfg(test)]
+    pub(crate) fn normalized_debug(&mut self) -> String {
+        let mut los: Vec<_> = self.temporary_los.drain().collect();
+        los.sort_by_key(|c| (c.x, c.y));
+        format!("{self:?}{los:?}")
+    }
     pub fn new(race: Race, pos: Position) -> Self {
         let stats = Stats::new(race);
 
@@ -405,11 +412,11 @@ impl Actor {
             self.substract_melee_sp_cost();
         }
 
-        let success = util::roll(acc, ev);
+        let success = util::roll(acc, ev, &mut loc.rng);
 
         let rand_ac = cmp::max(
-            rand::rng().random_range(0..(ac + 1)),
-            rand::rng().random_range(0..(ac + 1)),
+            loc.rng.random_range(0..(ac + 1)),
+            loc.rng.random_range(0..(ac + 1)),
         );
 
         let dmg = cmp::max(0, dmg - rand_ac);
@@ -578,14 +585,14 @@ impl Actor {
         }
     }
 
-    pub fn post_own_tick(&mut self, loc: &Location) {
+    pub fn post_own_tick(&mut self, loc: &mut Location) {
         if !self.is_dead() {
-            if self.sp < self.stats.base.max_sp && rand::rng().random_bool(1.0 / 10.0) {
+            if self.sp < self.stats.base.max_sp && loc.rng.random_bool(1.0 / 10.0) {
                 self.sp += 1
             }
 
             if self.hp < self.stats.base.max_hp
-                && rand::rng().random_range(0..50) < self.stats.base.regeneration
+                && loc.rng.random_range(0..50) < self.stats.base.regeneration
             {
                 self.hp += 1
             }
@@ -601,6 +608,7 @@ impl Actor {
     }
 
     pub fn pre_spawn(&mut self, loc: &Location) {
+        self.descended = false;
         self.known = Default::default();
         self.known_areas = Default::default();
         self.recalculate_stats();
@@ -720,7 +728,7 @@ impl Actor {
         self.stats.base.max_mp += self.stats.base.int * 2;
     }
 
-    pub fn attacks(&mut self, dir: Direction, target: &mut Actor) {
+    pub fn attacks(&mut self, dir: Direction, target: &mut Actor, rng: &mut impl rand::Rng) {
         let mut acc = self.stats.melee_acc;
         let mut dmg = self.stats.melee_dmg;
 
@@ -744,11 +752,8 @@ impl Actor {
             self.sp -= self.melee_sp_cost();
         }
 
-        let success = util::roll(acc, ev);
-        let rand_ac = cmp::max(
-            rand::rng().random_range(0..(ac + 1)),
-            rand::rng().random_range(0..(ac + 1)),
-        );
+        let success = util::roll(acc, ev, rng);
+        let rand_ac = cmp::max(rng.random_range(0..(ac + 1)), rng.random_range(0..(ac + 1)));
 
         let dmg = cmp::max(0, dmg - rand_ac);
 
@@ -907,7 +912,7 @@ impl Actor {
                 let target_id = loc.actors_coord_to_id[&new_pos.coord];
 
                 let mut target = loc.actors_byid.remove(&target_id).unwrap();
-                self.attacks(dir, &mut target);
+                self.attacks(dir, &mut target, &mut loc.rng);
                 loc.actors_byid.insert(target_id, target);
                 // Can't attack twice
                 break;
@@ -960,7 +965,7 @@ impl Actor {
     pub fn dig(&mut self, angle: Angle, loc: &mut Location) {
         assert!(self.can_dig_at_angle(angle));
         let target_coord = self.head_rel(angle);
-        loc.at_mut(target_coord).tile().dig();
+        loc.map[target_coord].dig(&mut loc.rng);
         self.substract_melee_sp_cost();
         self.noise_makes(9);
     }

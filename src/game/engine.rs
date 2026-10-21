@@ -2,6 +2,11 @@ use super::actor::{self, Actor};
 use super::{Action, Location};
 use crate::ai::{self, Ai};
 use crate::util;
+use rand::{RngExt, SeedableRng, rngs::SmallRng};
+
+#[cfg(test)]
+#[path = "engine_tests.rs"]
+mod tests;
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
 enum State {
@@ -11,6 +16,8 @@ enum State {
 }
 
 pub struct Engine {
+    /// Stream for level seeds, initial facing, and AI decisions.
+    rng: SmallRng,
     turn: u64,
     location_cur: usize,
     locations: Vec<Location>,
@@ -24,6 +31,7 @@ impl Engine {
     #[cfg(test)]
     pub(crate) fn fixture(location: Location) -> Self {
         Self {
+            rng: SmallRng::seed_from_u64(0),
             turn: 0,
             location_cur: 0,
             locations: vec![location],
@@ -33,8 +41,15 @@ impl Engine {
     }
 
     pub fn new() -> Self {
-        let location = Location::new(0);
+        Self::seeded(rand::rng().random())
+    }
+
+    /// Construct a repeatable game within the current RNG implementation.
+    pub fn seeded(seed: u64) -> Self {
+        let mut rng = SmallRng::seed_from_u64(seed);
+        let location = Location::new(0, rng.random());
         Engine {
+            rng,
             location_cur: 0,
             locations: vec![location],
             ids_to_move: vec![],
@@ -57,7 +72,7 @@ impl Engine {
     }
 
     pub fn initial_spawn(&mut self, race: actor::Race) {
-        let pos = util::random_pos(0, 0);
+        let pos = util::random_pos(0, 0, &mut self.rng);
         let mut player = Actor::new(race, pos);
         player.set_player();
 
@@ -78,8 +93,9 @@ impl Engine {
         {
             let mut player = self.current_location_mut().remove(actor_id).unwrap();
             self.location_cur += 1;
-            self.locations.push(Location::new(self.location_cur as u32));
-            player.pos = util::random_pos(0, 0);
+            self.locations
+                .push(Location::new(self.location_cur as u32, self.rng.random()));
+            player.pos = util::random_pos(0, 0, &mut self.rng);
             let _player = self.current_location_mut().spawn_player(player);
             self.end_turn();
         } else {
@@ -92,6 +108,7 @@ impl Engine {
     }
 
     fn reload_actors_ids_to_move(&mut self) {
+        self.ids_to_move.clear();
         let current_location = &self.locations[self.location_cur];
         let player_id = current_location.player_id();
         self.ids_to_move.extend(
@@ -101,6 +118,8 @@ impl Engine {
                 .filter(|&&id| id != player_id)
                 .cloned(),
         );
+        // Pop in ascending spawn-ID order, after the player.
+        self.ids_to_move.reverse();
     }
 
     // player first move
@@ -137,7 +156,7 @@ impl Engine {
         let actor = &self.current_location().actors_byid[&actor_id].clone();
         if actor.can_act() {
             let mut ai = ai::Simple;
-            let action = ai.action(actor_id, self);
+            let action = ai.action(actor_id, &self.locations[self.location_cur], &mut self.rng);
             self.current_location_mut().act(actor_id, action);
         } else {
             self.current_location_mut().skip_act(actor_id);
@@ -149,6 +168,8 @@ impl Engine {
     }
 
     fn end_turn(&mut self) {
+        // Descent invalidates every pending ID from the old level.
+        self.ids_to_move.clear();
         self.current_location_mut().post_turn();
         self.state = State::TurnDone;
     }

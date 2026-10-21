@@ -6,6 +6,7 @@ use crate::generate;
 use crate::hex2dext::algo;
 use fnv::FnvHasher;
 use hex2d::{Coordinate, Direction};
+use rand::{SeedableRng, rngs::SmallRng};
 use simplemap::SimpleMap;
 
 use super::Action;
@@ -15,8 +16,14 @@ use super::item::Item;
 use super::tile;
 use super::{Items, LightMap, Map};
 
+#[cfg(test)]
+#[path = "location_tests.rs"]
+mod tests;
+
 #[derive(Clone, Debug)]
 pub struct Location {
+    /// Owned tactical stream, never accessed by presentation.
+    pub(crate) rng: SmallRng,
     pub actors_byid: HashMap<actor::Id, Actor>, // id -> State
     pub actors_coord_to_id: HashMap<Coordinate, u32>, // coord -> id
     pub actors_dead: HashSet<actor::Id>,
@@ -34,6 +41,7 @@ impl Location {
     pub(crate) fn fixture(map: Map, mut player: Actor) -> Self {
         player.recalculate_stats();
         Self {
+            rng: SmallRng::seed_from_u64(0),
             actors_coord_to_id: [(player.pos.coord, 0)].into(),
             actors_byid: [(0, player)].into(),
             actors_dead: Default::default(),
@@ -45,14 +53,17 @@ impl Location {
             player_id: Some(0),
         }
     }
-    pub fn new(level: u32) -> Location {
-        let (map, gen_actors, items) = generate::gen_level(level);
+    pub fn new(level: u32, seed: u64) -> Location {
+        let (map, gen_actors, items) = generate::gen_level(level, seed);
 
         let mut actors: HashMap<u32, Actor> = Default::default();
         let mut actors_pos: HashMap<Coordinate, u32> = Default::default();
 
         let mut actors_counter = 0u32;
 
+        // Coordinates assign stable actor IDs independent of hash table layout.
+        let mut gen_actors: Vec<_> = gen_actors.into_iter().collect();
+        gen_actors.sort_by_key(|(coord, _)| (coord.x, coord.y));
         for (coord, astate) in gen_actors {
             actors_pos.insert(coord, actors_counter);
             actors.insert(actors_counter, astate);
@@ -60,13 +71,14 @@ impl Location {
         }
 
         Location {
+            rng: SmallRng::seed_from_u64(seed),
             actors_byid: actors,
             actors_coord_to_id: actors_pos,
             actors_counter: actors_counter,
             actors_dead: Default::default(),
             items: items,
             map: map,
-            level: 0,
+            level: level as i32,
             light_map: Default::default(),
             player_id: None,
         }
@@ -99,14 +111,15 @@ impl Location {
     }
 
     pub fn actors_ids(&self) -> Vec<u32> {
-        self.actors_byid.keys().cloned().collect()
+        let mut ids: Vec<_> = self.actors_byid.keys().copied().collect();
+        ids.sort_unstable();
+        ids
     }
 
     pub fn actors_alive_ids(&self) -> Vec<u32> {
-        self.actors_byid
-            .keys()
-            .filter(|&id| !self.actors_byid[id].is_dead())
-            .cloned()
+        self.actors_ids()
+            .into_iter()
+            .filter(|id| !self.actors_byid[id].is_dead())
             .collect()
     }
 
@@ -254,15 +267,13 @@ impl Location {
             if self.actors_byid[id].is_dead() && !self.actors_dead.contains(&id) {
                 let mut a = self.actors_byid.remove(&id).unwrap();
 
-                for (_, item) in &a.items_backpack {
-                    self.at_mut(a.pos.coord).drop_item(item.clone());
+                // Letter order determines which item occupies the corpse tile.
+                let mut items: Vec<_> = a.items_backpack.drain().collect();
+                items.extend(a.items_equipped.drain().map(|(_, entry)| entry));
+                items.sort_by_key(|(letter, _)| *letter);
+                for (_, item) in items {
+                    self.at_mut(a.pos.coord).drop_item(item);
                 }
-                a.items_backpack.clear();
-
-                for (_, &(_, ref item)) in &a.items_equipped {
-                    self.at_mut(a.pos.coord).drop_item(item.clone());
-                }
-                a.items_equipped.clear();
 
                 self.actors_byid.insert(*id, a);
 

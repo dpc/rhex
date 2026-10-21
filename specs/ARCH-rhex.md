@@ -12,14 +12,14 @@ the game, controls, terminal requirements, and development commands.
   instants to the terminal-independent [`Ui`](../src/terminal/ui.rs).
   `Ui` owns the game engine, menus, targeting, and the player-facing log. It
   translates input into game actions or interface mode changes, queues player
-  actions, implements automatic movement, and controls animation and turn pacing.
+  actions, handles automatic movement, and controls animation and turn pacing.
 - [`game::Engine`](../src/game/engine.rs) owns the locations and turn progression.
   It coordinates player and AI actions and transfers the player into a newly
   generated location on descent.
 - [`game::Location`](../src/game/location.rs) owns a level's terrain, actors,
   ground items, and lighting. It applies actions and coordinates their effects
   with the actor and item models. Actor state includes perception and discovery
-  information that the interface uses to present the player's view.
+  information for the player's view.
 - [`generate`](../src/generate.rs) builds levels from game types;
   [`ai`](../src/ai.rs) chooses actions from the current location and actor state.
   Neither these modules nor `game` depend on the terminal interface. Shared
@@ -29,7 +29,7 @@ the game, controls, terminal requirements, and development commands.
 ## Simulation and presentation
 
 The interface submits manual and automatic movement through the same game
-action boundary. The following turn path omits presentation callbacks:
+action boundary. This turn path omits presentation callbacks:
 
 ```text
 terminal::Ui::run_engine_turn():
@@ -55,8 +55,19 @@ outside the simulation.
 
 Production drawing and headless tests share composed buffer rendering and an
 event dispatcher. Hand-built test levels isolate controller and cell-buffer
-expectations from procedural generation. Presentation and simulation use ambient
-randomness, so these examples do not establish replay determinism.
+expectations from procedural generation.
+
+The engine owns the random stream for level seeds, player facing, and AI.
+Each location owns its tactical stream; the map renderer owns a separate
+cosmetic stream. Drawing cannot consume simulation randomness. Explicit seeds
+reproduce worlds and action outcomes within the current RNG implementation,
+not across versions or platforms.
+
+The player acts first, followed by living actors in ascending spawn-ID order.
+Descent transfers the player and discards the old location's pending schedule.
+Coordinate order resolves AI cue ties and generation dependencies; inventory
+letters determine row and corpse-loot placement order. These orders replace
+hash-table iteration wherever it could change behavior.
 
 The [PTY integration test](../tests/terminal.rs) exercises the real binary and
 session failure probes through [a Python driver](../tests/terminal.py), covering

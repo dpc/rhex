@@ -119,8 +119,8 @@ impl Tile {
         self.type_.can_dig_through()
     }
 
-    pub fn dig(&mut self) {
-        let r = rand::rng().random_range(0..10);
+    pub fn dig(&mut self, rng: &mut impl rand::Rng) {
+        let r = rng.random_range(0..10);
         match self.type_ {
             Wall => {
                 if r < 5 {

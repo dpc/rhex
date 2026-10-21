@@ -8,23 +8,34 @@ use crate::game::actor;
 use hex2d::Angle::{Back, Forward, Left, LeftBack, Right};
 use hex2d::Coordinate;
 
+#[cfg(test)]
+#[path = "ai_tests.rs"]
+mod tests;
+
 pub trait Ai {
-    fn action(&mut self, id: actor::Id, engine: &game::Engine) -> game::Action;
+    fn action(
+        &mut self,
+        id: actor::Id,
+        location: &game::Location,
+        rng: &mut impl rand::Rng,
+    ) -> game::Action;
 }
 
 pub struct Simple;
 
 impl Ai for Simple {
-    fn action(&mut self, id: actor::Id, engine: &game::Engine) -> game::Action {
-        grue(
-            &engine.current_location().actors_byid[&id],
-            engine.current_location(),
-        )
+    fn action(
+        &mut self,
+        id: actor::Id,
+        location: &game::Location,
+        rng: &mut impl rand::Rng,
+    ) -> game::Action {
+        grue(&location.actors_byid[&id], location, rng)
     }
 }
 
-fn roam() -> game::Action {
-    match rand::rng().random_range(0..10) {
+fn roam(rng: &mut impl rand::Rng) -> game::Action {
+    match rng.random_range(0..10) {
         0 => game::Action::Turn(Right),
         1 => game::Action::Turn(Left),
         2 => game::Action::Move(Forward),
@@ -55,13 +66,16 @@ where
         .map(|pos| (pos, bfs.backtrace_last(pos).unwrap()))
 }
 
-fn grue(astate: &actor::Actor, gstate: &game::Location) -> game::Action {
-    for &visible_pos in &astate.visible {
+fn grue(astate: &actor::Actor, gstate: &game::Location, rng: &mut impl rand::Rng) -> game::Action {
+    // Equally eligible cues use coordinate order, not hash-table iteration.
+    let mut visible: Vec<_> = astate.visible.iter().copied().collect();
+    visible.sort_by_key(|c| (c.x, c.y));
+    for &visible_pos in &visible {
         if gstate
             .at(visible_pos)
             .actor_map_or(false, |a| a.is_player())
         {
-            return go_to(visible_pos, astate, gstate);
+            return go_to(visible_pos, astate, gstate, rng);
         }
     }
 
@@ -73,25 +87,32 @@ fn grue(astate: &actor::Actor, gstate: &game::Location) -> game::Action {
         return game::Action::Move(Back);
     }
 
-    for &visible_coord in &astate.visible {
+    for &visible_coord in &visible {
         if gstate.at(visible_coord).item_map_or(false, |_| true) {
-            return go_to(visible_coord, astate, gstate);
+            return go_to(visible_coord, astate, gstate, rng);
         }
     }
 
-    for (&coord, _) in &astate.heard {
+    let mut heard: Vec<_> = astate.heard.keys().copied().collect();
+    heard.sort_by_key(|c| (c.x, c.y));
+    for coord in heard {
         if astate.pos.coord != coord {
-            return go_to(coord, astate, gstate);
+            return go_to(coord, astate, gstate, rng);
         }
     }
 
-    match rand::rng().random_range(0..5) {
-        0 => roam(),
+    match rng.random_range(0..5) {
+        0 => roam(rng),
         _ => game::Action::Wait,
     }
 }
 
-fn go_to(c: Coordinate, astate: &actor::Actor, gstate: &game::Location) -> game::Action {
+fn go_to(
+    c: Coordinate,
+    astate: &actor::Actor,
+    gstate: &game::Location,
+    rng: &mut impl rand::Rng,
+) -> game::Action {
     let ndir = match astate.pos.coord.direction_to_cw(c) {
         None => return game::Action::Wait,
         Some(dir) => dir,
@@ -120,14 +141,20 @@ fn go_to(c: Coordinate, astate: &actor::Actor, gstate: &game::Location) -> game:
     // TODO: fallaback to A* instead of BFS
     let reachable = closest_reachable(gstate, astate.pos.coord, 10, |pos| pos == c);
 
-    if let Some((_, n)) = reachable {
-        go_to(n, astate, gstate)
+    // BFS may accept a blocked goal before checking traversability. Recursing
+    // on that adjacent wall would retry the same step forever.
+    if let Some((_, n)) = reachable.filter(|(_, n)| gstate.at(*n).tile().type_.is_passable()) {
+        go_to(n, astate, gstate, rng)
     } else {
-        roam()
+        roam(rng)
     }
 }
 
-fn _pony_follow(astate: &actor::Actor, gstate: &game::Location) -> game::Action {
+fn _pony_follow(
+    astate: &actor::Actor,
+    gstate: &game::Location,
+    rng: &mut impl rand::Rng,
+) -> game::Action {
     let start = astate.pos.coord;
 
     let player_pos = closest_reachable(gstate, start, 10, |pos| {
@@ -150,8 +177,8 @@ fn _pony_follow(astate: &actor::Actor, gstate: &game::Location) -> game::Action 
     };
 
     if let Some((_, neigh)) = player_pos {
-        go_to(neigh, astate, gstate)
+        go_to(neigh, astate, gstate, rng)
     } else {
-        roam()
+        roam(rng)
     }
 }

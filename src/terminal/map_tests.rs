@@ -50,6 +50,71 @@ fn cell(buffer: &Buffer, xy: (u16, u16), glyph: &str, fg: u8, bg: u8, bold: bool
 }
 
 #[test]
+fn heard_only_enemy_is_not_drawn_but_previously_seen_movement_leaves_a_trail() {
+    let mut loc = scene();
+    let coord = Coordinate::new(0, 2);
+    let prev = Coordinate::new(-1, 2);
+    let mut enemy = Actor::new(actor::Race::Rat, Position::new(coord, XY));
+    enemy.pre_pos = Some(Position::new(prev, XY));
+    enemy.recalculate_stats();
+    loc.actors_byid.insert(1, enemy);
+    loc.actors_coord_to_id.insert(coord, 1);
+    player_mut(&mut loc).visible.remove(&coord);
+    player_mut(&mut loc).visible.remove(&prev);
+    player_mut(&mut loc).noise_hears(coord, crate::game::Noise::Creature(actor::Race::Rat));
+    let mut renderer = MapRenderer::new(UNICODE_DOT);
+    renderer.resize(20, 12);
+    let heard = render(&mut renderer, &loc, Mode::Normal, None, 0, 20, 12);
+    let actor = loc.actors_byid.remove(&1).unwrap();
+    loc.actors_coord_to_id.remove(&coord);
+    let absent = render(&mut renderer, &loc, Mode::Normal, None, 0, 20, 12);
+    assert_eq!(
+        heard, absent,
+        "sound alone must not reveal body or movement"
+    );
+    loc.actors_byid.insert(1, actor);
+    loc.actors_coord_to_id.insert(coord, 1);
+    player_mut(&mut loc).visible.insert(prev);
+    let moving = render(&mut renderer, &loc, Mode::Normal, None, 0, 20, 12);
+    assert_eq!(moving[(7, 5)].symbol(), "/");
+    assert_ne!(moving[(8, 4)].symbol(), "r");
+    let faded = render(&mut renderer, &loc, Mode::Normal, None, 6, 20, 12);
+    assert_ne!(faded[(7, 5)].symbol(), "/");
+}
+
+#[test]
+fn death_lights_remembered_terrain_without_revealing_unknown_cells() {
+    let mut loc = scene();
+    let remembered = Coordinate::new(0, 2);
+    let unknown = Coordinate::new(-2, 2);
+    loc.map[remembered] = tile::Tile::new(tile::Wall);
+    loc.map[unknown] = tile::Tile::new(tile::Wall);
+    player_mut(&mut loc).visible.remove(&remembered);
+    player_mut(&mut loc).visible.remove(&unknown);
+    player_mut(&mut loc).known.remove(&unknown);
+    player_mut(&mut loc).hp = 0;
+    let mut renderer = MapRenderer::new(UNICODE_DOT);
+    renderer.resize(20, 12);
+    let buffer = render(&mut renderer, &loc, Mode::Normal, None, 0, 20, 12);
+    cell(
+        &buffer,
+        (8, 4),
+        "#",
+        color::WALL_FG[0],
+        color::WALL_BG[0],
+        true,
+    );
+    cell(
+        &buffer,
+        (6, 6),
+        " ",
+        color::MAP_BACKGROUND_BG,
+        color::MAP_BACKGROUND_BG,
+        false,
+    );
+}
+
+#[test]
 fn projected_terrain_visibility_light_and_glue_have_exact_cells() {
     let mut loc = scene();
     let unknown = Coordinate::new(-2, 2);

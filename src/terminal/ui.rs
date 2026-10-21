@@ -802,18 +802,20 @@ impl Ui {
             return;
         }
 
-        let discovered_areas = player
-            .discovered_areas
-            .iter()
+        let mut area_coords: Vec<_> = player.discovered_areas.iter().collect();
+        area_coords.sort_by_key(|c| (c.x, c.y));
+        let discovered_areas = area_coords
+            .into_iter()
             .filter_map(|coord| cur_loc.at(*coord).tile().area);
 
         if let Some(s) = self.format_areas(discovered_areas.map(|area| area.type_)) {
             self.log(&s);
         }
 
-        for item_coord in player
-            .discovered
-            .iter()
+        let mut discovered: Vec<_> = player.discovered.iter().collect();
+        discovered.sort_by_key(|c| (c.x, c.y));
+        for item_coord in discovered
+            .into_iter()
             .filter(|&coord| cur_loc.at(*coord).item_map_or(false, |_| true))
         {
             let item_descr = cur_loc
@@ -981,7 +983,9 @@ impl Ui {
         window.set_style(self.text_color);
         if !player.items_equipped.is_empty() {
             window.write("Equipped: \n");
-            for (slot, &(ref ch, ref i)) in &player.items_equipped {
+            let mut equipped: Vec<_> = player.items_equipped.iter().collect();
+            equipped.sort_by_key(|(_, (ch, _))| *ch);
+            for (slot, &(ref ch, ref i)) in equipped {
                 window.write(&format!(" {} - {} [{:?}]\n", ch, i.description(), slot));
             }
             window.write("\n");
@@ -989,7 +993,9 @@ impl Ui {
 
         window.write("Inventory: \n");
         if !player.items_backpack.is_empty() {
-            for (ch, i) in &player.items_backpack {
+            let mut backpack: Vec<_> = player.items_backpack.iter().collect();
+            backpack.sort_by_key(|(ch, _)| **ch);
+            for (ch, i) in backpack {
                 window.write(&format!(" {} - {}\n", ch, i.description()));
             }
         }

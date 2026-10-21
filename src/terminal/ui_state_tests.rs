@@ -42,6 +42,148 @@ fn frame(ui: &mut Ui, width: u16, height: u16) -> Buffer {
 }
 
 #[test]
+fn stochastic_world_trace_is_independent_of_zero_one_or_many_renders() {
+    use crate::game::fixtures::{occupancy, outcome};
+    use rand::{SeedableRng, rngs::SmallRng};
+
+    fn run(seed: u64, renders: u32, generated: bool) -> (Vec<String>, usize, i32) {
+        let now = Instant::now();
+        let engine = if generated {
+            let mut engine = game::Engine::seeded(seed);
+            engine.initial_spawn(actor::Race::Human);
+            engine
+        } else {
+            let mut loc = game::fixtures::room();
+            loc.rng = SmallRng::seed_from_u64(seed);
+            let player = loc.actors_byid.get_mut(&0).unwrap();
+            player.hp = 500;
+            player.base_stats.max_hp = 500;
+            player.base_stats.regeneration = 10;
+            player.sp = 1;
+            let head = player.head();
+            let mut enemy = Actor::new(actor::Race::Troll, Position::new(head, hex2d::YX));
+            enemy.hp = 500;
+            enemy.base_stats.max_hp = 500;
+            loc.spawn(enemy);
+            game::Engine::fixture(loc)
+        };
+        let mut ui = Ui::new(engine, (24, 60), now);
+        ui.spawned = true;
+        ui.mode_switch_to(Mode::Normal);
+        let mut trace = vec![outcome(ui.current_location())];
+        let mut attacks = 0;
+        let mut damage = 0;
+        for turn in 0..20 {
+            ui.engine.start_turn();
+            if ui.engine.needs_player_input() {
+                ui.engine.player_act(if turn % 3 == 0 {
+                    game::Action::Wait
+                } else {
+                    game::Action::Move(Angle::Forward)
+                });
+            } else {
+                ui.engine.player_skip_act();
+            }
+            attacks += ui.player().did_attack.len();
+            damage += ui
+                .player()
+                .did_attack
+                .iter()
+                .filter(|r| r.success)
+                .map(|r| r.dmg)
+                .sum::<i32>();
+            loop {
+                let before = outcome(ui.current_location());
+                // Include base-layer rebuilds and animation-only effect frames.
+                for index in 0..renders {
+                    ui.anim_frame_count = index;
+                    frame(&mut ui, 60, 24);
+                }
+                assert_eq!(outcome(ui.current_location()), before);
+                if ui.engine.is_turn_done() {
+                    break;
+                }
+                ui.engine.one_actor_tick();
+            }
+            occupancy(ui.current_location());
+            trace.push(outcome(ui.current_location()));
+        }
+        (trace, attacks, damage)
+    }
+
+    let mut damages = std::collections::BTreeSet::new();
+    for seed in [0, 1, 7, 42] {
+        for generated in [false, true] {
+            let baseline = run(seed, 0, generated);
+            assert_eq!(
+                run(seed, 1, generated),
+                baseline,
+                "seed {seed}, generated={generated}"
+            );
+            assert_eq!(
+                run(seed, 7, generated),
+                baseline,
+                "seed {seed}, generated={generated}"
+            );
+            if !generated {
+                assert!(baseline.1 > 5, "must exercise repeated stochastic combat");
+                assert!(baseline.2 > 0, "must exercise successful damage");
+                damages.insert(baseline.2);
+            }
+        }
+    }
+    assert!(
+        damages.len() > 1,
+        "seeds must affect outcomes, not just rendering"
+    );
+}
+
+#[test]
+fn automove_stairs_occupancy_and_perception_interruptions() {
+    let now = Instant::now();
+    let mut ui = fixture(now);
+    let head = ui.player().head();
+    let goto = AutoMoveType::GoTo(GoToType::Stairs);
+    assert!(matches!(ui.automove_action(goto), AutoMoveAction::Blocked));
+    ui.engine.current_location_mut().map[head].feature = Some(tile::Stairs);
+    assert!(matches!(
+        ui.automove_action(goto),
+        AutoMoveAction::Action(game::Action::Move(Angle::Forward))
+    ));
+    let id = ui
+        .engine
+        .current_location_mut()
+        .spawn(Actor::new(actor::Race::Rat, Position::new(head, hex2d::XY)));
+    assert!(matches!(ui.automove_action(goto), AutoMoveAction::Blocked));
+    assert!(ui.should_stop_automoving());
+    ui.engine.current_location_mut().remove(id);
+    player_mut(&mut ui).discovered.clear();
+    player_mut(&mut ui).discovered_areas.clear();
+    player_mut(&mut ui).heard.clear();
+    assert!(!ui.should_stop_automoving());
+    player_mut(&mut ui).visible.remove(&head);
+    player_mut(&mut ui).noise_hears(head, game::Noise::Creature(actor::Race::Rat));
+    assert!(ui.should_stop_automoving());
+    player_mut(&mut ui).heard.clear();
+    player_mut(&mut ui).discovered.insert(head);
+    assert!(ui.should_stop_automoving(), "new stairs interrupt travel");
+    player_mut(&mut ui).discovered.clear();
+    ui.engine.current_location_mut().map[head].feature = None;
+    ui.engine
+        .current_location_mut()
+        .items
+        .insert(head, Box::new(Item::new(Type::Knife, vec![])));
+    player_mut(&mut ui).discovered.insert(head);
+    assert!(ui.should_stop_automoving(), "new items interrupt travel");
+    player_mut(&mut ui).discovered.clear();
+    ui.engine.current_location_mut().map[head] = tile::Tile::new(tile::Wall);
+    assert!(matches!(
+        ui.automove_action(AutoMoveType::Walk),
+        AutoMoveAction::Finish
+    ));
+}
+
+#[test]
 fn unsupported_events_cannot_act_select_or_cancel() {
     let now = Instant::now();
     let mut ui = fixture(now);

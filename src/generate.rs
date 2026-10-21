@@ -1,5 +1,4 @@
 use fnv::FnvHasher;
-use rand;
 use rand::rngs::SmallRng;
 use rand::{RngExt, SeedableRng};
 use std::collections::{HashMap, VecDeque};
@@ -16,6 +15,10 @@ use hex2d::{Coordinate, Direction, Position};
 
 type EndpointQueue = VecDeque<h2d::Position>;
 
+#[cfg(test)]
+#[path = "generate_tests.rs"]
+mod tests;
+
 pub struct DungeonGenerator {
     level: u32,
     start: Option<Coordinate>,
@@ -29,7 +32,8 @@ pub struct DungeonGenerator {
 }
 
 impl DungeonGenerator {
-    pub fn new(level: u32) -> DungeonGenerator {
+    /// Create a generator with an explicit random stream.
+    pub fn new(level: u32, seed: u64) -> DungeonGenerator {
         DungeonGenerator {
             level: level,
             start: None,
@@ -39,7 +43,7 @@ impl DungeonGenerator {
             endpoints: VecDeque::new(),
             actors: Default::default(),
             items: Default::default(),
-            rng: SmallRng::from_seed(rand::rng().random::<[u8; 32]>()),
+            rng: SmallRng::seed_from_u64(seed),
         }
     }
 }
@@ -232,7 +236,8 @@ impl DungeonGenerator {
         }
 
         if self.rng.random_bool(1.0 / 2.0) {
-            self.items.insert(coord, item::random(self.level as i32));
+            self.items
+                .insert(coord, item::random(self.level as i32, &mut self.rng));
         }
     }
 
@@ -291,8 +296,11 @@ impl DungeonGenerator {
             map[coord] = tile.clone()
         }
 
-        // eliminate dead ends
-        for (&coord, tile) in &self.map {
+        // Elimination is sequential: earlier removals can expose later dead ends.
+        // Fix that dependency to coordinate order rather than hash-table order.
+        let mut tiles: Vec<_> = self.map.iter().collect();
+        tiles.sort_by_key(|(coord, _)| (coord.x, coord.y));
+        for (&coord, tile) in tiles {
             if tile.feature == Some(tile::Door(false)) && tile_is_deadend(&map, coord) {
                 map[coord] = tile::Tile::new(tile::Wall);
             }
@@ -302,6 +310,6 @@ impl DungeonGenerator {
     }
 }
 
-pub fn gen_level(level: u32) -> (Map, Actors, Items) {
-    DungeonGenerator::new(level).generate_map(Coordinate::new(0, 0), 25 + level * 50)
+pub fn gen_level(level: u32, seed: u64) -> (Map, Actors, Items) {
+    DungeonGenerator::new(level, seed).generate_map(Coordinate::new(0, 0), 25 + level * 50)
 }

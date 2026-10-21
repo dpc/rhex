@@ -10,7 +10,7 @@ use crate::game::{Location, item, tile};
 use hex2d::{Coordinate, Direction, Position};
 
 use rand::prelude::{IndexedRandom, SliceRandom};
-use rand::rng;
+use rand::{SeedableRng, rngs::SmallRng};
 use ratatui::style::Modifier;
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
@@ -79,6 +79,8 @@ where
 }
 
 pub struct MapRenderer {
+    /// Cosmetic randomness must not consume the simulation's streams.
+    rng: SmallRng,
     base: Array2d<ExtendedCharacter>,
     items: Array2d<Option<DisplayCharacter>>,
     actors: Array2d<Option<DisplayCharacter>>,
@@ -99,6 +101,7 @@ pub struct MapRenderer {
 impl MapRenderer {
     pub fn new(dot: char) -> Self {
         MapRenderer {
+            rng: SmallRng::from_rng(&mut rand::rng()),
             base: Array2d::new(0, 0),
             items: Array2d::new(0, 0),
             actors: Array2d::new(0, 0),
@@ -388,7 +391,8 @@ impl MapRenderer {
 
         let player = cur_loc.player();
 
-        actors.shuffle(&mut rng());
+        actors.sort_by_key(|(id, _)| *id);
+        actors.shuffle(&mut self.rng);
 
         for &(id, _) in &actors {
             let actor = &cur_loc.actors_byid[&id];
@@ -464,7 +468,8 @@ impl MapRenderer {
 
         let player = cur_loc.player();
 
-        actors.shuffle(&mut rng());
+        actors.sort_by_key(|(id, _)| *id);
+        actors.shuffle(&mut self.rng);
 
         for &(id, _) in &actors {
             let actor = &cur_loc.actors_byid[&id];
@@ -589,13 +594,13 @@ impl MapRenderer {
         }
     }
 
-    pub fn draw_into(&self, window: &Window) {
+    pub fn draw_into(&mut self, window: &Window) {
         window.clear();
 
         let (max_x, max_y) = (self.base.width, self.base.height);
         for vx in 0..max_x {
             for vy in 0..max_y {
-                let ch = match self.effects.at(vx, vy).choose(&mut rng()) {
+                let ch = match self.effects.at(vx, vy).choose(&mut self.rng) {
                     Some(ch) => ch,
                     _ => {
                         if let Some(ref ch) = *self.actors.at(vx, vy) {

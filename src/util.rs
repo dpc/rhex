@@ -3,8 +3,8 @@ use std::cmp;
 
 use hex2d::{Angle, Coordinate, Direction, Position};
 
-pub fn random_pos(x: i32, y: i32) -> Position {
-    let dir = Direction::from_int(rand::rng().random_range(0..6));
+pub fn random_pos(x: i32, y: i32, rng: &mut impl rand::Rng) -> Position {
+    let dir = Direction::from_int(rng.random_range(0..6));
 
     Position::new(Coordinate::new(x, y), dir)
 }
@@ -14,13 +14,13 @@ pub fn random_pos(x: i32, y: i32) -> Position {
 mod tests;
 
 /// Roll a against b
-pub fn roll(a: i32, b: i32) -> bool {
+pub fn roll(a: i32, b: i32, rng: &mut impl rand::Rng) -> bool {
     let base = cmp::max(a, b) / 4;
 
     let a = cmp::max(a - base, 1);
     let b = cmp::max(b - base, 1);
 
-    rand::rng().random_range(0..(a + b)) < a
+    rng.random_range(0..(a + b)) < a
 }
 
 pub fn circular_move(center: Position, cur: Position, angle: Angle) -> Position {
