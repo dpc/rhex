@@ -1,6 +1,7 @@
 """Exercise the real game and terminal-session failures through a PTY."""
 
-import codecs
+import collections
+import json
 import fcntl
 import os
 import pty
@@ -15,86 +16,71 @@ import termios
 import time
 
 
+def deadline_expired(_signal, _frame):
+    raise TimeoutError("PTY suite exceeded its 120-second deadline")
+
+
+signal.signal(signal.SIGALRM, deadline_expired)
+signal.alarm(120)
+
+
 class Screen:
-    """Interpret the cursor, erase and style commands emitted by our backend."""
+    """Python owns the PTY; only the Rust vt100 bridge interprets its output."""
 
     def __init__(self, rows=36, cols=120):
-        self.decoder = codecs.getincrementaldecoder("utf-8")()
-        self.pending = ""
+        self.parser = subprocess.Popen(
+            PARSER_COMMAND, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE, bufsize=0,
+        )
+        self.pending = bytearray()
         self.resize(rows, cols)
-        self.fg, self.bg, self.bold = None, None, False
 
     def resize(self, rows, cols):
-        self.rows, self.cols = rows, cols
-        self.cells = [[" "] * cols for _ in range(rows)]
-        self.styles = [[None] * cols for _ in range(rows)]
-        self.x = self.y = 0
+        self.request(f"resize {rows} {cols}")
 
     def feed(self, data):
-        self.pending += self.decoder.decode(data)
-        while self.pending:
-            if self.pending[0] == "\x1b":
-                match = re.match(r"\x1b\[([0-?]*)([ -/]*)([@-~])", self.pending)
-                if not match:
-                    # The backend only uses CSI sequences; incomplete chunks
-                    # stay buffered, while unexpected commands fail the test.
-                    assert len(self.pending) < 64, repr(self.pending)
-                    return
-                args, _, command = match.groups()
-                self.pending = self.pending[match.end():]
-                self.command(args, command)
-            else:
-                ch, self.pending = self.pending[0], self.pending[1:]
-                if ch == "\r":
-                    self.x = 0
-                elif ch == "\n":
-                    self.y += 1
-                elif ch == "\b":
-                    self.x = max(0, self.x - 1)
-                elif ord(ch) >= 32:
-                    if self.x >= self.cols:
-                        self.x = 0
-                        self.y += 1
-                    if 0 <= self.y < self.rows:
-                        self.cells[self.y][self.x] = ch
-                        self.styles[self.y][self.x] = (self.fg, self.bg, self.bold)
-                    self.x += 1
+        self.request("data " + data.hex())
 
-    def command(self, args, command):
-        if command in "hl":
-            return  # Alternate screen, cursor visibility and wrap modes.
-        values = [int(v) if v else 0 for v in args.split(";")]
-        if command in "Hf":
-            self.y = (values[0] or 1) - 1
-            self.x = ((values[1] if len(values) > 1 else 1) or 1) - 1
-        elif command == "J":
-            assert values == [2], values
-            self.resize(self.rows, self.cols)
-        elif command == "K":
-            for x in range(self.x, self.cols):
-                self.cells[self.y][x] = " "
-        elif command == "m":
-            while values:
-                code = values.pop(0)
-                if code == 0:
-                    self.fg, self.bg, self.bold = None, None, False
-                elif code == 1:
-                    self.bold = True
-                elif code == 22:
-                    self.bold = False
-                elif code in (38, 48):
-                    assert values.pop(0) == 5, "Expected indexed palette"
-                    color = values.pop(0)
-                    if code == 38:
-                        self.fg = color
-                    else:
-                        self.bg = color
-                elif code == 39:
-                    self.fg = None
-                elif code == 49:
-                    self.bg = None
-        else:
-            raise AssertionError(f"Unexpected terminal command: {args!r} {command!r}")
+    def request(self, command):
+        pending = (command + "\n").encode()
+        while pending:
+            pending = pending[self.parser.stdin.write(pending):]
+        deadline = time.monotonic() + 5
+        while True:
+            while b"\n" in self.pending:
+                line, _, rest = self.pending.partition(b"\n")
+                self.pending = bytearray(rest)
+                if not line.startswith(b"SCREEN\t"):
+                    continue  # Rust test harness banner.
+                _, rows, cols, alternate, hidden, self.current_style, encoded = line.decode().split("\t")
+                self.rows, self.cols = int(rows), int(cols)
+                self.alternate, self.hidden = alternate == "true", hidden == "true"
+                cells, styles = [], []
+                for cell in encoded.split(";"):
+                    text, fg, bg, bold, wide, continuation = cell.split(",")
+                    cells.append(bytes.fromhex(text).decode() or " ")
+                    styles.append((None if fg == "-" else int(fg) if fg.isdigit() else fg,
+                                   None if bg == "-" else int(bg) if bg.isdigit() else bg, bold == "1",
+                                   wide == "1", continuation == "1"))
+                self.cells = [cells[i:i+self.cols] for i in range(0, len(cells), self.cols)]
+                self.styles = [styles[i:i+self.cols] for i in range(0, len(styles), self.cols)]
+                return
+            assert time.monotonic() < deadline, "Terminal parser response timed out"
+            if select.select([self.parser.stdout], [], [], 0.05)[0]:
+                data = os.read(self.parser.stdout.fileno(), 65536)
+                assert data, "Terminal parser exited unexpectedly"
+                self.pending.extend(data)
+                assert len(self.pending) < 2_000_000
+
+    def close(self):
+        self.parser.stdin.close()
+        try:
+            self.parser.wait(timeout=2)
+        except subprocess.TimeoutExpired:
+            self.parser.kill()
+            self.parser.wait()
+        self.parser.stdout.close()
+        self.parser.stderr.close()
 
     def text(self):
         return "\n".join("".join(row) for row in self.cells)
@@ -105,14 +91,21 @@ class Screen:
 
 
 class Game:
-    def __init__(self, command, terminal="xterm-256color", rows=36, cols=120):
+    def __init__(self, command, terminal="xterm-256color", rows=36, cols=120, extra_env=None):
         self.master, self.slave = pty.openpty()
         fcntl.ioctl(self.slave, termios.TIOCSWINSZ, struct.pack("HHHH", rows, cols, 0, 0))
         self.original = termios.tcgetattr(self.slave)
         self.screen = Screen(rows, cols)
         self.transcript = bytearray()
+        self.total_bytes = 0
+        self.events = collections.deque(maxlen=4096)
+        self.command = command
+        self.started = time.monotonic()
+        self.events.append({"time": 0, "start": command, "size": [rows, cols],
+                            "TERM": terminal, "seed": "entropy (transport only)"})
         self.work = tempfile.TemporaryDirectory(prefix="rhex-test-")
         env = dict(os.environ, TERM=terminal, LANG="C.UTF-8", LC_ALL="C.UTF-8")
+        env.update(extra_env or {})
         self.process = subprocess.Popen(
             command, stdin=self.slave, stdout=self.slave, stderr=self.slave,
             cwd=self.work.name, env=env, start_new_session=True,
@@ -124,6 +117,8 @@ class Game:
             if select.select([self.master], [], [], 0.02)[0]:
                 data = os.read(self.master, 65536)
                 self.transcript.extend(data)
+                self.total_bytes += len(data)
+                del self.transcript[:-1_048_576]
                 self.screen.feed(data)
 
     def until(self, condition, description, timeout=15):
@@ -137,7 +132,15 @@ class Game:
         self.until(lambda: text in self.screen.text(), repr(text))
 
     def send(self, keys):
-        os.write(self.master, keys)
+        assert len(keys) <= 8192, "Input traces must stay bounded"
+        self.events.append({"time": time.monotonic() - self.started, "input_hex": keys.hex()})
+        while keys:
+            keys = keys[os.write(self.master, keys):]
+
+    def fragments(self, *parts):
+        for part in parts:
+            self.send(part)
+            self.drain(0.025)
 
     def action(self, keys):
         before = self.screen.turn()
@@ -146,6 +149,7 @@ class Game:
         self.until(lambda: (self.screen.turn() or 0) > before, f"turn after {keys!r}")
 
     def resize(self, rows, cols):
+        self.events.append({"time": time.monotonic() - self.started, "resize": [rows, cols]})
         self.screen.resize(rows, cols)
         fcntl.ioctl(self.slave, termios.TIOCSWINSZ, struct.pack("HHHH", rows, cols, 0, 0))
         os.kill(self.process.pid, signal.SIGWINCH)
@@ -162,11 +166,48 @@ class Game:
         assert termios.tcgetattr(self.slave) == self.original, "Terminal modes leaked"
         assert b"\x1b[?1049l" in self.transcript, "Alternate screen not left"
         assert b"\x1b[?25h" in self.transcript, "Cursor not restored"
+        assert not self.screen.alternate, "Parser still in alternate screen"
+        assert not self.screen.hidden, "Parser cursor still hidden"
+        assert self.screen.current_style == "-,-,0", "Terminal attributes leaked"
 
     def close(self):
+        failure = sys.exc_info()[1]
+        exit_before_cleanup = self.process.poll()
         if self.process.poll() is None:
             self.process.kill()
             self.process.wait()
+        if failure:
+            # Outside the disposable game cwd and source tree, including Nix builds.
+            root = os.environ.get("RHEX_PTY_DIAGNOSTICS", tempfile.gettempdir())
+            try:
+                os.makedirs(root, exist_ok=True)
+                path = tempfile.mkdtemp(prefix="rhex-pty-failure-", dir=root)
+                with open(os.path.join(path, "output.bin"), "wb") as output:
+                    output.write(self.transcript)
+                with open(os.path.join(path, "screen.json"), "w") as output:
+                    json.dump({"cells": self.screen.cells, "styles": self.screen.styles,
+                               "alternate": self.screen.alternate, "hidden": self.screen.hidden,
+                               "current_style": self.screen.current_style},
+                              output)
+                with open(os.path.join(path, "trace.json"), "w") as output:
+                    json.dump({"failure": str(failure), "events": list(self.events),
+                               "game_workdir": self.work.name,
+                               "exit_before_cleanup": exit_before_cleanup,
+                               "exit_after_cleanup": self.process.returncode,
+                               "total_output_bytes": self.total_bytes,
+                               "retained_output_bytes": len(self.transcript),
+                               "termios_before": repr(self.original),
+                               "termios_after": repr(termios.tcgetattr(self.slave))}, output)
+                if os.environ.get("NIX_BUILD_TOP") and not os.environ.get("IN_NIX_SHELL"):
+                    # Retained Nix builds use another uid. These three files contain
+                    # synthetic test output/paths, not user sessions or environment.
+                    for name in ("output.bin", "screen.json", "trace.json"):
+                        os.chmod(os.path.join(path, name), 0o644)
+                    os.chmod(path, 0o755)
+                print(f"PTY failure artifacts: {path}", file=sys.stderr, flush=True)
+            except OSError as error:
+                print(f"Could not preserve PTY diagnostics: {error}", file=sys.stderr)
+        self.screen.close()
         os.close(self.master)
         os.close(self.slave)
         self.work.cleanup()
@@ -185,7 +226,7 @@ def exercise(binary, race, terminal="xterm-256color"):
         game.expect("Level")
         # Preserve the 30-column stats panel, indexed palette and Unicode map.
         assert "Str:" in "".join(game.screen.cells[0][90:])
-        assert game.screen.styles[0][90] == (94, 232, False), (
+        assert game.screen.styles[0][90][:3] == (94, 232, False), (
             game.screen.styles[0][90], bytes(game.transcript[-2000:])
         )
         assert "\u2022" in game.screen.text()
@@ -223,7 +264,15 @@ def exercise(binary, race, terminal="xterm-256color"):
         game.expect("Turn left/right: h/l or Left/Right arrows")
         game.expect("Move forward/back: k/j or Up/Down arrows")
         game.expect("Current input mode: Normal")
+        # Fragmented unsupported UTF-8 and modified CSI must not close Help.
+        game.fragments(b"\xc5", b"\xa1", b"\x1b[1;", b"5D")
+        game.expect("Current input mode: Normal")
+        # Fragment the SS3 prefix, not a lone Escape (which is inherently ambiguous).
+        game.fragments(b"\x1bO", b"Q")
+        game.expect("Current input mode: Vi")
         game.send(b"\x1bOQ")  # F2, xterm SS3 encoding.
+        game.expect("Current input mode: Normal")
+        game.send(b"\x1bOQ")
         game.expect("Current input mode: Vi")
         game.send(b" ")
         game.expect("Level")
@@ -262,11 +311,15 @@ def small_start(binary):
         game.expect("Press anything to start.")
         game.send(b" ")
         game.expect("Pick your race")
+        if os.environ.get("RHEX_TEST_FORCE_ARTIFACT_FAILURE"):
+            raise AssertionError("safe forced artifact failure after tiny/recovery")
         game.send(b"a")
         game.expect("Level")
         # Build a pending action queue before pausing, rather than testing only
         # an idle game. A paused queue must not turn the event loop into a spin.
-        game.send(b"d" * 2048)
+        # A final Help command must eventually be observed, not merely some turn.
+        game.send(b"d" * 2048 + b"?")
+        game.expect("Quit: ESC/q")
         game.drain(0.05)
         game.resize(8, 24)
         game.expect("Terminal too small.")
@@ -290,30 +343,59 @@ def cleanup_probe(test_binary, mode):
     game = Game([
         test_binary, "--ignored", "--exact", "terminal_session_failure_probe",
         "--nocapture", "--test-threads=1",
-    ])
+    ], extra_env={"RHEX_TEST_PARTIAL_SETUP": "1"} if mode == b"s" else None)
     try:
-        game.expect("Session ready")
-        game.send(mode)
+        if mode != b"s":
+            game.expect("Session ready")
+            game.send(mode)
         game.finished(101 if mode == b"p" else 0)
-        if mode == b"p":
-            assert b"injected terminal panic" in game.transcript
-            assert game.transcript.index(b"\x1b[?1049l") < game.transcript.index(
-                b"injected terminal panic"
-            ), "Panic diagnostics printed before terminal restoration"
+        diagnostic = {b"p": b"injected terminal panic", b"e": b"injected terminal error",
+                      b"s": b"injected partial setup error"}[mode]
+        assert diagnostic in game.transcript
+        assert game.transcript.index(b"\x1b[?1049l") < game.transcript.index(
+            diagnostic
+        ), "Diagnostics printed before terminal restoration"
     finally:
         game.close()
 
 
+def runner_probe(test_binary):
+    game = Game([test_binary, "--ignored", "--exact",
+                 "terminal::runner::tests::ui_draw_failure_probe",
+                 "--nocapture", "--test-threads=1"])
+    try:
+        game.expect("Session ready")
+        game.send(b"d")
+        game.finished(0)
+        diagnostic = b"injected UI draw error"
+        assert diagnostic in game.transcript
+        assert game.transcript.index(b"\x1b[?1049l") < game.transcript.index(diagnostic)
+    finally:
+        game.close()
+
+
+if sys.argv[1] == "--runner-probes":
+    executable = os.path.abspath(sys.argv[2])
+    PARSER_COMMAND = [executable, "--ignored", "--exact",
+                      "terminal::parser::terminal_parser_bridge", "--nocapture"]
+    runner_probe(executable)
+    sys.exit(0)
+
 binary = os.path.abspath(sys.argv[1])
+PARSER_COMMAND = [os.path.abspath(sys.argv[2]), "--ignored", "--exact",
+                  "parser::terminal_parser_bridge", "--nocapture"]
+if os.environ.get("RHEX_TEST_FORCE_ARTIFACT_FAILURE"):
+    small_start(binary)
+    raise AssertionError("forced failure did not fire")
 for race in (b"a", b"b", b"c"):
     exercise(binary, race)
 exercise(binary, b"a", "xterm")
 small_start(binary)
 if len(sys.argv) > 2:
-    for mode in (b"e", b"p"):
+    for mode in (b"s", b"e", b"p"):
         cleanup_probe(os.path.abspath(sys.argv[2]), mode)
 with tempfile.TemporaryDirectory(prefix="rhex-test-") as work:
-    result = subprocess.run([binary], input=b"", capture_output=True, cwd=work)
+    result = subprocess.run([binary], input=b"", capture_output=True, cwd=work, timeout=5)
 assert result.returncode == 1
 assert b"interactive stdin and stdout terminals are required" in result.stderr
 print("PTY: races, layout/palette/Unicode, actions/arrows/modifiers/F2, help/inventory, "

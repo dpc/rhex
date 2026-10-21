@@ -48,3 +48,4 @@ ratatui = { version = "0.30.2", default-features = false, features = [
 
 [dev-dependencies]
 proptest = { version = "1.11", default-features = false, features = ["std"] }
+vt100 = "0.16.2"

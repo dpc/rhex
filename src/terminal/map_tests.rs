@@ -355,6 +355,37 @@ fn layers_target_blockage_and_attribute_reset_are_exact() {
 }
 
 #[test]
+fn occupied_heads_use_distinct_colors_then_reset_when_the_head_turns_away() {
+    let mut loc = scene();
+    let coord = loc.player().head();
+    loc.actors_byid
+        .insert(1, Actor::new(Race::Rat, Position::new(coord, XY)));
+    loc.actors_coord_to_id.insert(coord, 1);
+    let mut renderer = MapRenderer::new(UNICODE_DOT);
+    renderer.resize(20, 12);
+    let occupied = render(&mut renderer, &loc, Mode::Normal, None, 0, 20, 12);
+    cell(&occupied, (12, 6), "r", 231, 21, false);
+    // A different enemy's head now overlaps the same rat.
+    player_mut(&mut loc).pos.dir = hex2d::YX;
+    let other = Coordinate::new(2, -2);
+    loc.actors_byid
+        .insert(2, Actor::new(Race::Rat, Position::new(other, hex2d::YX)));
+    loc.actors_coord_to_id.insert(other, 2);
+    let occupied = render(&mut renderer, &loc, Mode::Normal, None, 0, 20, 12);
+    cell(&occupied, (12, 6), "r", 231, 196, false);
+    loc.actors_byid.get_mut(&2).unwrap().pos.dir = XY;
+    let clear = render(&mut renderer, &loc, Mode::Normal, None, 0, 20, 12);
+    cell(
+        &clear,
+        (12, 6),
+        "r",
+        color::CHAR_ENEMY_FG[0],
+        color::CHAR_BG[0],
+        false,
+    );
+}
+
+#[test]
 fn movement_and_turn_trails_expire_and_mode_changes_rebuild_camera_cache() {
     let mut loc = scene();
     let coord = Coordinate::new(2, -2);

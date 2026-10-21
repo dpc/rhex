@@ -508,3 +508,102 @@ fn scheduling_uses_supplied_instants_and_rendering_does_not_advance_world() {
     ui.advance((24, 60), now + Duration::from_millis(2050));
     assert_eq!(ui.player().pos.coord, Coordinate::new(2, -2));
 }
+
+#[test]
+fn dead_player_turns_are_paced_but_live_cooldown_is_not_idle() {
+    let now = Instant::now();
+    let mut ui = fixture(now);
+    player_mut(&mut ui).hp = 0;
+    ui.advance((24, 60), now);
+    assert_eq!(ui.engine.turn(), 1);
+    assert!(ui.engine.is_turn_done());
+    let after = crate::game::fixtures::outcome(ui.current_location());
+    ui.advance((24, 60), now + Duration::from_millis(49));
+    assert_eq!(ui.engine.turn(), 1);
+    assert_eq!(crate::game::fixtures::outcome(ui.current_location()), after);
+    ui.advance((24, 60), now + Duration::from_millis(50));
+    assert_eq!(ui.engine.turn(), 2);
+    ui.advance((24, 60), now + Duration::from_millis(99));
+    assert_eq!(ui.engine.turn(), 2);
+    ui.advance((24, 60), now + Duration::from_millis(100));
+    assert_eq!(ui.engine.turn(), 3);
+
+    let mut ui = fixture(now);
+    player_mut(&mut ui).action_cd = 2;
+    ui.queue_action(Turn(Left));
+    let pose = ui.player().pos;
+    for (turn, cooldown) in [(1, 1), (2, 0)] {
+        ui.advance((24, 60), now);
+        assert_eq!(ui.engine.turn(), turn);
+        assert_eq!(ui.player().action_cd, cooldown);
+        assert_eq!(ui.player().pos, pose);
+        assert_eq!(ui.game_action_queue, [Turn(Left)]);
+    }
+    ui.advance((24, 60), now);
+    assert_eq!(ui.engine.turn(), 3);
+    assert_eq!(ui.player().pos.dir, pose.dir + Left);
+    assert!(ui.game_action_queue.is_empty());
+}
+
+#[test]
+fn overflowing_inventory_and_multiline_log_stay_in_their_panels_and_clear() {
+    use crate::game::item::Feature;
+    let now = Instant::now();
+    for (width, height) in [(60, 24), (120, 36)] {
+        let mut ui = fixture(now);
+        ui.resize((height, width));
+        ui.mode_switch_to(Mode::Inventory(InvMode::View));
+        let baseline = frame(&mut ui, width as u16, height as u16);
+        for ch in 'a'..='z' {
+            player_mut(&mut ui).items_backpack.insert(
+                ch,
+                Box::new(Item::new(
+                    Type::Plate,
+                    vec![Feature::Infravision, Feature::Regeneration, Feature::Light],
+                )),
+            );
+        }
+        // Newest first, enough wrapped lines to exceed the log region.
+        for _ in 0..30 {
+            ui.log("ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789\nsecond line");
+        }
+        let full = frame(&mut ui, width as u16, height as u16);
+        let panel = (width - 30) as u16;
+        let row = |buffer: &Buffer, y, from, to| -> String {
+            (from..to).map(|x| buffer[(x, y)].symbol()).collect()
+        };
+        assert!(
+            row(&full, 1, 0, panel).starts_with(" a - plate armor of infravisio"),
+            "width {width}: {:?}",
+            row(&full, 1, 0, panel)
+        );
+        if width == 60 {
+            assert!(row(&full, 2, 0, panel).starts_with("n of regeneration of light"));
+        }
+        assert_eq!(
+            row(&full, 12, panel, width as u16),
+            "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123"
+        );
+        assert!(row(&full, 13, panel, width as u16).starts_with("456789"));
+        assert!(row(&full, 14, panel, width as u16).starts_with("second line"));
+        for y in 0..12 {
+            for x in panel..width as u16 {
+                assert_eq!(
+                    full[(x, y)],
+                    baseline[(x, y)],
+                    "inventory/log spilled into stats"
+                );
+            }
+        }
+        // The lower left remains inventory, not the overflowing log's alphabet.
+        assert!(!row(&full, 14, 0, panel).contains("second line"));
+        ui.handle_event(TerminalEvent::Resize(59, 23), now);
+        let _ = frame(&mut ui, 59, 23);
+        ui.handle_event(TerminalEvent::Resize(width as u16, height as u16), now);
+        assert_eq!(frame(&mut ui, width as u16, height as u16), full);
+        player_mut(&mut ui).items_backpack.clear();
+        ui.log.borrow_mut().clear();
+        // Includes styles and formerly occupied cells, not just text.
+        assert_eq!(frame(&mut ui, width as u16, height as u16), baseline);
+    }
+}

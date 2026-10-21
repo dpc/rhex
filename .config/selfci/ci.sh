@@ -18,7 +18,7 @@ function job_cargo() {
   selfci step start "clippy"
   if ! nix build -L .#ci.clippy; then selfci step fail; fi
   selfci step start "nextest"
-  if ! nix build -L .#ci.tests; then selfci step fail; fi
+  if ! nix build --keep-failed -L .#ci.tests; then selfci step fail; fi
 }
 case "$SELFCI_JOB_NAME" in
   main) selfci job start "lint"; selfci job start "cargo" ;;

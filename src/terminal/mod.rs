@@ -19,6 +19,10 @@ mod ui;
 #[cfg(test)]
 mod fixtures;
 
+#[cfg(all(test, unix))]
+#[path = "../../tests/support/parser.rs"]
+mod parser;
+
 pub enum LogEvent {
     AutoExploreDone,
     AutoExploreBlocked,

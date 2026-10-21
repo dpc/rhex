@@ -16,6 +16,10 @@ pub struct Runner {
     ui: Ui,
 }
 
+#[cfg(all(test, unix))]
+#[path = "runner_tests.rs"]
+mod tests;
+
 impl Runner {
     /// Acquire the terminal before generating the initial game.
     pub fn new() -> io::Result<Self> {
