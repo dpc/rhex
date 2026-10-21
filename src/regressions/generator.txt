@@ -1,0 +1,1 @@
+# A supervised seed corpus complements generated cases; see generate_tests.rs.

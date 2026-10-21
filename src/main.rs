@@ -16,6 +16,9 @@ mod logging;
 mod terminal;
 mod util;
 
+#[cfg(test)]
+mod property_support;
+
 fn main() {
     logging::init();
 

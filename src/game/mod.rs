@@ -24,6 +24,9 @@ pub use self::location::Location;
 #[cfg(test)]
 pub(crate) mod fixtures;
 
+#[cfg(test)]
+mod property_tests;
+
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub enum Noise {
     Creature(actor::Race),

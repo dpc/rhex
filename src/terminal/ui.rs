@@ -1316,3 +1316,11 @@ mod tests;
 #[cfg(test)]
 #[path = "ui_state_tests.rs"]
 mod state_tests;
+
+#[cfg(test)]
+#[path = "ui_property_tests.rs"]
+mod property_tests;
+
+#[cfg(test)]
+#[path = "ui_snapshot_tests.rs"]
+mod snapshot_tests;
