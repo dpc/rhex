@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::time::Duration;
 
 use super::Window;
 use super::color::{self, Color};
@@ -9,7 +10,7 @@ use crate::game::actor::{self, Race};
 use crate::game::{Location, item, tile};
 use hex2d::{Coordinate, Direction, Position};
 
-use rand::prelude::{IndexedRandom, SliceRandom};
+use rand::prelude::IndexedRandom;
 use rand::{SeedableRng, rngs::SmallRng};
 use ratatui::style::Modifier;
 
@@ -90,12 +91,7 @@ pub struct MapRenderer {
     coord_center: Coordinate,
     coord_head: Coordinate,
 
-    actors_aheads: HashMap<Coordinate, Coordinate>,
-    enemies_prev_pos: HashMap<Coordinate, Coordinate>,
-    enemies_prev_head: HashMap<Coordinate, Coordinate>,
-
     dot: char,
-    anim_frame_count: u32,
 }
 
 impl MapRenderer {
@@ -110,12 +106,7 @@ impl MapRenderer {
             coord_center: Coordinate::new(0, 0),
             coord_head: Coordinate::new(0, 0),
 
-            actors_aheads: Default::default(),
-            enemies_prev_pos: Default::default(),
-            enemies_prev_head: Default::default(),
-
             dot: dot,
-            anim_frame_count: 0,
         }
     }
 
@@ -132,11 +123,11 @@ impl MapRenderer {
         mode: Mode,
         target_pos: Option<Position>,
         anim_frame_count: u32,
+        presentation_elapsed: Duration,
     ) {
         let player = cur_loc.player();
 
         self.mode = mode;
-        self.anim_frame_count = anim_frame_count;
 
         let (center, head) = match mode {
             Mode::Examine => match target_pos {
@@ -156,43 +147,15 @@ impl MapRenderer {
         if anim_frame_count == 0 {
             self.base.reset();
             self.items.reset();
-            self.actors.reset();
-            self.update_turn_changed(cur_loc);
             self.for_each_glyph(cur_loc, Self::draw_map_base_glyph);
             self.for_each_glyph(cur_loc, Self::draw_items);
-            self.draw_actors(cur_loc);
         }
+        // Facing colors animate even while the simulation and terrain are idle.
+        self.actors.reset();
+        self.draw_actors(cur_loc, presentation_elapsed);
 
         self.effects.reset();
         self.draw_effects(cur_loc);
-    }
-
-    pub fn update_turn_changed(&mut self, cur_loc: &Location) {
-        self.actors_aheads = cur_loc
-            .actors_byid
-            .iter()
-            .filter(|&(_, a)| !a.is_dead())
-            .map(|(_, a)| (a.head(), a.pos.coord))
-            .collect();
-
-        self.enemies_prev_pos = cur_loc
-            .actors_byid
-            .iter()
-            .filter(|&(_, a)| !a.is_dead())
-            .filter(|&(_, a)| !a.is_player())
-            .map(|(_, a)| (a.pre_pos.unwrap_or(a.pos).coord, a.pos.coord))
-            .filter(|&(pre_pos, pos)| pre_pos != pos)
-            .collect();
-
-        self.enemies_prev_head = cur_loc
-            .actors_byid
-            .iter()
-            .filter(|&(_, a)| !a.is_dead())
-            .filter(|&(_, a)| !a.is_player())
-            .filter(|&(_, a)| a.pre_pos.unwrap_or(a.pos).coord == a.pos.coord)
-            .map(|(_, a)| (a.pre_head.unwrap_or(a.head()), a.head()))
-            .filter(|&(pre, now)| pre != now)
-            .collect();
     }
 
     fn draw_map_base_glyph(
@@ -381,146 +344,91 @@ impl MapRenderer {
         }
     }
 
-    fn draw_actors(&mut self, cur_loc: &Location) {
+    fn draw_actors(&mut self, cur_loc: &Location, presentation_elapsed: Duration) {
         let mut actors: Vec<(actor::Id, Position)> = cur_loc
             .actors_byid
             .iter()
-            .filter(|&(_, a)| !a.is_dead())
+            .filter(|&(_, a)| !a.is_dead() && cur_loc.player().sees(a.pos.coord))
             .map(|(id, a)| (*id, a.pos))
             .collect();
 
         let player = cur_loc.player();
 
         actors.sort_by_key(|(id, _)| *id);
-        actors.shuffle(&mut self.rng);
-
+        // Collect before painting: overlapping heads must not depend on draw order.
+        let mut heads = HashMap::<Coordinate, (bool, Option<Color>)>::new();
         for &(id, _) in &actors {
             let actor = &cur_loc.actors_byid[&id];
             let race = actor.race;
 
             let actor_coord = actor.pos.coord;
-            let actor_head = actor.pos.coord + Coordinate::from(actor.pos.dir);
+            let head = heads.entry(actor.head()).or_default();
+            if actor.is_player() {
+                head.0 = true;
+            } else {
+                head.1 = Some(race_to_palete(race)[0].into());
+            }
 
-            if player.sees(actor_coord) {
-                if let Some((vx, vy)) = self.coord_to_glyph_xy(actor_coord) {
-                    let base = self.base.at(vx, vy);
-                    debug_assert!(base.known);
-                    let fg_palete = race_to_palete(race);
-                    let mut fg = color_by_visibility(fg_palete, base.visible, base.light);
-
-                    let mut bg = color_by_visibility(color::CHAR_BG, base.visible, base.light);
-                    if self.actors_aheads.contains_key(&actor_coord)
-                        && player.sees(self.actors_aheads[&actor_coord])
-                    {
-                        bg = Color::from(if actor_coord == player.head() {
-                            color::SELF_HEAD_ACTOR_BG
-                        } else {
-                            color::ENEMY_HEAD_ACTOR_BG
-                        });
-                        fg = Color::from(color::ACTOR_HEAD_ACTOR_FG);
-                    }
-                    *self.actors.at_mut(vx, vy) = Some(DisplayCharacter {
-                        fg: Color::from(fg),
-                        bg: bg,
-                        bold: base.base.bold,
-                        glyph: race_to_char(race),
-                    });
-                }
-
-                if let Some((vx, vy)) = self.coord_to_glyph_xy(actor_head) {
-                    let base = self.base.at(vx, vy);
-                    let items = self.items.at(vx, vy);
-                    let actors = self.actors.at_mut(vx, vy);
-                    if base.known {
-                        let palete = race_to_palete(race);
-                        let color = palete[0];
-
-                        if !cur_loc.at(actor_head).is_occupied() {
-                            *actors = Some(DisplayCharacter {
-                                fg: Color::from(color),
-                                bg: base.base.bg,
-                                bold: true,
-                                glyph: items.unwrap_or(base.base).glyph,
-                            });
-                        }
-                    } else {
-                        let palete = race_to_palete(race);
-                        let bg = palete[0];
-                        *actors = Some(DisplayCharacter {
-                            fg: base.base.fg,
-                            bg: Color::from(bg),
-                            bold: true,
-                            glyph: ' ',
-                        });
-                    }
-                }
+            if let Some((vx, vy)) = self.coord_to_glyph_xy(actor_coord) {
+                let base = self.base.at(vx, vy);
+                debug_assert!(base.known);
+                let fg_palete = race_to_palete(race);
+                let fg = color_by_visibility(fg_palete, base.visible, base.light);
+                let bg = color_by_visibility(color::CHAR_BG, base.visible, base.light);
+                *self.actors.at_mut(vx, vy) = Some(DisplayCharacter {
+                    fg: Color::from(fg),
+                    bg: bg,
+                    bold: base.base.bold,
+                    glyph: race_to_char(race),
+                });
             }
         }
-    }
-
-    fn draw_effects_normal(&mut self, cur_loc: &Location) {
-        let mut actors: Vec<(actor::Id, Position)> = cur_loc
-            .actors_byid
-            .iter()
-            .filter(|&(_, a)| !a.is_dead())
-            .map(|(id, a)| (*id, a.pos))
-            .collect();
-
-        let player = cur_loc.player();
-
-        actors.sort_by_key(|(id, _)| *id);
-        actors.shuffle(&mut self.rng);
-
-        for &(id, _) in &actors {
-            let actor = &cur_loc.actors_byid[&id];
-
-            let cur_pos = actor.pos;
-            let prev_pos = actor.prev_pos();
-
-            if !player.could_have_seen(actor) {
+        for (coord, (player_head, enemy_color)) in heads {
+            let Some((vx, vy)) = self.coord_to_glyph_xy(coord) else {
                 continue;
-            }
-
-            let prev_and_cur = if prev_pos.coord != cur_pos.coord {
-                Some((prev_pos.coord, cur_pos.coord))
-            } else if prev_pos.dir != cur_pos.dir {
-                Some((
-                    prev_pos.coord + Coordinate::from(prev_pos.dir),
-                    cur_pos.coord + Coordinate::from(cur_pos.dir),
-                ))
-            } else {
-                None
             };
-
-            if let Some((prev_coord, cur_coord)) = prev_and_cur {
-                if let Some((tail_vx, tail_vy)) = self.coord_to_glyph_xy(prev_coord) {
-                    let base = self.base.at(tail_vx, tail_vy);
-                    if self.anim_frame_count < 6 {
-                        let fg: Color = if actor.is_player() {
-                            color::RGB::new(0, 0, 5)
-                        } else {
-                            color::RGB::new(5, 0, 0)
-                        }
-                        .into();
-
-                        // TODO: use effective fg, not base one
-                        let fg: Color = fg.mix(base.base.bg, self.anim_frame_count as u8);
-
-                        let glyph = match cur_coord.direction_to_cw(prev_coord) {
-                            Some(Direction::XY) | Some(Direction::YX) => '-',
-                            Some(Direction::ZY) | Some(Direction::YZ) => '\\',
-                            Some(Direction::ZX) | Some(Direction::XZ) => '/',
-                            None => panic!(),
-                        };
-                        self.effects
-                            .at_mut(tail_vx, tail_vy)
-                            .push(DisplayCharacter {
-                                fg: Color::from(fg),
-                                bg: base.base.bg,
-                                bold: false,
-                                glyph: glyph,
-                            });
+            let shared = player_head && enemy_color.is_some();
+            let occupied_color = if shared {
+                if presentation_elapsed.as_secs() % 2 == 0 {
+                    color::ENEMY_HEAD_ACTOR_FG
+                } else {
+                    color::SELF_HEAD_ACTOR_FG
+                }
+            } else if player_head {
+                color::SELF_HEAD_ACTOR_FG
+            } else {
+                color::ENEMY_HEAD_ACTOR_FG
+            };
+            let base = self.base.at(vx, vy);
+            let cell = self.actors.at_mut(vx, vy);
+            if let Some(body) = cell {
+                body.fg = occupied_color.into();
+            } else {
+                let fg = if shared {
+                    occupied_color.into()
+                } else if player_head {
+                    race_to_palete(player.race)[0].into()
+                } else {
+                    enemy_color.unwrap()
+                };
+                if base.known {
+                    // Do not expose a concealed occupant through its facing cue.
+                    if !cur_loc.at(coord).is_occupied() {
+                        *cell = Some(DisplayCharacter {
+                            fg,
+                            bg: base.base.bg,
+                            bold: true,
+                            glyph: self.items.at(vx, vy).unwrap_or(base.base).glyph,
+                        });
                     }
+                } else {
+                    // Preserve the existing blank-cell marker for unknown space.
+                    *cell = Some(DisplayCharacter {
+                        fg: base.base.fg,
+                        bg: fg,
+                        bold: true,
+                        glyph: ' ',
+                    });
                 }
             }
         }
@@ -587,7 +495,7 @@ impl MapRenderer {
 
     fn draw_effects(&mut self, cur_loc: &Location) {
         match self.mode {
-            Mode::Normal | Mode::GoTo => self.draw_effects_normal(cur_loc),
+            Mode::Normal | Mode::GoTo => {}
             Mode::Examine => self.draw_effects_examine(cur_loc),
             Mode::Target(_) => self.draw_effects_target(cur_loc),
             _ => panic!("wrong mode"),

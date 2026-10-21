@@ -25,7 +25,13 @@ fn render(
     width: u16,
     height: u16,
 ) -> Buffer {
-    renderer.update(loc, mode, target, frame);
+    renderer.update(
+        loc,
+        mode,
+        target,
+        frame,
+        Duration::from_millis(u64::from(frame) * 100),
+    );
     let window = Window::new(width.into(), height.into(), 0, 0);
     renderer.draw_into(&window);
     let mut buffer = Buffer::empty(Rect::new(0, 0, width, height));
@@ -50,7 +56,7 @@ fn cell(buffer: &Buffer, xy: (u16, u16), glyph: &str, fg: u8, bg: u8, bold: bool
 }
 
 #[test]
-fn heard_only_enemy_is_not_drawn_but_previously_seen_movement_leaves_a_trail() {
+fn heard_only_enemy_and_previously_seen_movement_leave_no_trail() {
     let mut loc = scene();
     let coord = Coordinate::new(0, 2);
     let prev = Coordinate::new(-1, 2);
@@ -76,7 +82,7 @@ fn heard_only_enemy_is_not_drawn_but_previously_seen_movement_leaves_a_trail() {
     loc.actors_coord_to_id.insert(coord, 1);
     player_mut(&mut loc).visible.insert(prev);
     let moving = render(&mut renderer, &loc, Mode::Normal, None, 0, 20, 12);
-    assert_eq!(moving[(7, 5)].symbol(), "/");
+    assert_eq!(moving[(7, 5)].symbol(), "•");
     assert_ne!(moving[(8, 4)].symbol(), "r");
     let faded = render(&mut renderer, &loc, Mode::Normal, None, 6, 20, 12);
     assert_ne!(faded[(7, 5)].symbol(), "/");
@@ -432,7 +438,7 @@ fn occupied_heads_use_distinct_colors_then_reset_when_the_head_turns_away() {
     let mut renderer = MapRenderer::new(UNICODE_DOT);
     renderer.resize(20, 12);
     let occupied = render(&mut renderer, &loc, Mode::Normal, None, 0, 20, 12);
-    cell(&occupied, (12, 6), "r", 231, 21, false);
+    cell(&occupied, (12, 6), "r", 21, color::CHAR_BG[0], false);
     // A different enemy's head now overlaps the same rat.
     player_mut(&mut loc).pos.dir = hex2d::YX;
     let other = Coordinate::new(2, -2);
@@ -440,7 +446,7 @@ fn occupied_heads_use_distinct_colors_then_reset_when_the_head_turns_away() {
         .insert(2, Actor::new(Race::Rat, Position::new(other, hex2d::YX)));
     loc.actors_coord_to_id.insert(other, 2);
     let occupied = render(&mut renderer, &loc, Mode::Normal, None, 0, 20, 12);
-    cell(&occupied, (12, 6), "r", 231, 196, false);
+    cell(&occupied, (12, 6), "r", 196, color::CHAR_BG[0], false);
     loc.actors_byid.get_mut(&2).unwrap().pos.dir = XY;
     let clear = render(&mut renderer, &loc, Mode::Normal, None, 0, 20, 12);
     cell(
@@ -451,10 +457,14 @@ fn occupied_heads_use_distinct_colors_then_reset_when_the_head_turns_away() {
         color::CHAR_BG[0],
         false,
     );
+    // An enemy pointing at the player changes only the player's foreground too.
+    loc.actors_byid.get_mut(&1).unwrap().pos.dir = hex2d::YX;
+    let player_head = render(&mut renderer, &loc, Mode::Normal, None, 0, 20, 12);
+    cell(&player_head, (10, 6), "@", 196, color::CHAR_BG[0], false);
 }
 
 #[test]
-fn movement_and_turn_trails_expire_and_mode_changes_rebuild_camera_cache() {
+fn movement_and_turns_leave_no_trails_and_mode_changes_rebuild_camera_cache() {
     let mut loc = scene();
     let coord = Coordinate::new(2, -2);
     let mut rat = Actor::new(Race::Rat, Position::new(coord, XY));
@@ -465,7 +475,7 @@ fn movement_and_turn_trails_expire_and_mode_changes_rebuild_camera_cache() {
     renderer.resize(20, 12);
     for frame in [0, 1, 5, 6] {
         let buffer = render(&mut renderer, &loc, Mode::Normal, None, frame, 20, 12);
-        assert_eq!(buffer[(12, 6)].symbol(), if frame < 6 { "-" } else { "•" });
+        assert_eq!(buffer[(12, 6)].symbol(), "•");
         assert_eq!(buffer[(14, 6)].symbol(), "r");
     }
     let target = Some(Position::new(coord, XY));
@@ -494,8 +504,115 @@ fn movement_and_turn_trails_expire_and_mode_changes_rebuild_camera_cache() {
     rat.pre_pos = Some(rat.pos);
     rat.pos.dir = hex2d::XZ;
     let buffer = render(&mut renderer, &loc, Mode::Normal, None, 0, 20, 12);
-    assert_eq!(buffer[(16, 6)].symbol(), "\\");
+    assert_eq!(buffer[(16, 6)].symbol(), "•");
     let buffer = render(&mut renderer, &loc, Mode::Normal, None, 6, 20, 12);
     assert_eq!(buffer[(16, 6)].symbol(), "•");
     assert_eq!(loc.player().pos.coord, Coordinate::new(0, 0));
+}
+
+#[test]
+fn shared_heads_blink_on_elapsed_seconds_independent_of_order_and_occupancy() {
+    for occupied in [false, true] {
+        for reverse in [false, true] {
+            let mut loc = scene();
+            let head = loc.player().head();
+            let enemy_coord = Coordinate::new(2, -2);
+            let mut additions = vec![
+                (
+                    1,
+                    Actor::new(Race::Rat, Position::new(enemy_coord, hex2d::YX)),
+                ),
+                (
+                    2,
+                    Actor::new(
+                        Race::Goblin,
+                        Position::new(Coordinate::new(1, 0), hex2d::YZ),
+                    ),
+                ),
+            ];
+            if occupied {
+                additions.push((3, Actor::new(Race::Rat, Position::new(head, XY))));
+            }
+            if reverse {
+                additions.reverse();
+            }
+            for (id, actor) in additions {
+                loc.actors_coord_to_id.insert(actor.pos.coord, id);
+                loc.actors_byid.insert(id, actor);
+            }
+            let mut renderer = MapRenderer::new(UNICODE_DOT);
+            renderer.resize(20, 12);
+            for (ms, fg) in [(0, 196), (999, 196), (1000, 21), (1999, 21), (2000, 196)] {
+                // Exercise both terrain rebuilds and animation-only draws.
+                for frame in [0, 7] {
+                    renderer.update(&loc, Mode::Normal, None, frame, Duration::from_millis(ms));
+                    let window = Window::new(20, 12, 0, 0);
+                    renderer.draw_into(&window);
+                    let mut buffer = Buffer::empty(Rect::new(0, 0, 20, 12));
+                    window.render(&mut buffer);
+                    cell(
+                        &buffer,
+                        (12, 6),
+                        if occupied { "r" } else { "•" },
+                        fg,
+                        if occupied {
+                            color::CHAR_BG[0]
+                        } else {
+                            color::EMPTY_BG[0]
+                        },
+                        !occupied,
+                    );
+                }
+            }
+            // Losing all visible enemy contributors restores the player's cue.
+            player_mut(&mut loc).visible.remove(&enemy_coord);
+            let other = loc.actors_byid[&2].pos.coord;
+            player_mut(&mut loc).visible.remove(&other);
+            let buffer = render(&mut renderer, &loc, Mode::Normal, None, 0, 20, 12);
+            cell(
+                &buffer,
+                (12, 6),
+                if occupied { "r" } else { "•" },
+                if occupied { 21 } else { color::CHAR_SELF_FG[0] },
+                if occupied {
+                    color::CHAR_BG[0]
+                } else {
+                    color::EMPTY_BG[0]
+                },
+                !occupied,
+            );
+
+            player_mut(&mut loc).visible.insert(enemy_coord);
+            loc.actors_byid.get_mut(&1).unwrap().hp = 0;
+            let dead = render(&mut renderer, &loc, Mode::Normal, None, 0, 20, 12);
+            assert_eq!(dead[(12, 6)], buffer[(12, 6)]);
+            loc.actors_byid.get_mut(&1).unwrap().hp = 1;
+            loc.actors_byid.get_mut(&1).unwrap().pos.dir = XY;
+            let turned = render(&mut renderer, &loc, Mode::Normal, None, 0, 20, 12);
+            assert_eq!(turned[(12, 6)], buffer[(12, 6)]);
+        }
+    }
+}
+
+#[test]
+fn player_movement_and_turns_never_replace_terrain_with_trail_glyphs() {
+    for previous in [
+        Position::new(Coordinate::new(-1, 1), XY),
+        Position::new(Coordinate::new(0, 0), hex2d::XZ),
+    ] {
+        let mut loc = scene();
+        player_mut(&mut loc).pre_pos = Some(previous);
+        let mut renderer = MapRenderer::new(UNICODE_DOT);
+        renderer.resize(20, 12);
+        for frame in [0, 1, 5, 6] {
+            let buffer = render(&mut renderer, &loc, Mode::Normal, None, frame, 20, 12);
+            assert!(
+                buffer
+                    .content
+                    .iter()
+                    .all(|cell| !matches!(cell.symbol(), "-" | "/" | "\\"))
+            );
+            assert_eq!(loc.player().pre_pos, Some(previous));
+        }
+    }
 }

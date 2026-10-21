@@ -140,6 +140,8 @@ pub struct Ui {
 
     /// Time supplied by the runner at each scheduling/event boundary.
     now: Instant,
+    /// Stable presentation epoch; redraws and game turns never reset blink phase.
+    presentation_started: Instant,
 }
 
 use self::Action::*;
@@ -192,6 +194,7 @@ impl Ui {
             game_action_queue: VecDeque::new(),
             map_renderer: MapRenderer::new(UNICODE_DOT),
             now,
+            presentation_started: now,
         };
         ui.display_intro();
         ui.resize(size);
@@ -885,6 +888,8 @@ impl Ui {
             target_pos,
             ref windows,
             anim_frame_count,
+            now,
+            presentation_started,
             ..
         } = *self;
 
@@ -893,6 +898,7 @@ impl Ui {
             mode,
             target_pos,
             anim_frame_count,
+            now.saturating_duration_since(presentation_started),
         );
         map_renderer.draw_into(&windows.map);
     }

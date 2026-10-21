@@ -42,6 +42,63 @@ fn frame(ui: &mut Ui, width: u16, height: u16) -> Buffer {
 }
 
 #[test]
+fn idle_shared_facing_uses_stable_time_across_redraws_modes_and_resize() {
+    let now = Instant::now();
+    let mut ui = fixture(now);
+    let enemy_coord = Coordinate::new(2, -2);
+    ui.engine.current_location_mut().spawn(Actor::new(
+        actor::Race::Rat,
+        Position::new(enemy_coord, hex2d::YX),
+    ));
+    ui.advance((24, 60), now);
+    let turn = ui.engine.turn();
+    // Follow the idle runner path without events or explicit redraw requests.
+    for tick in 0..=20 {
+        let instant = now + Duration::from_millis(tick * 100);
+        ui.advance((24, 60), instant);
+        assert!(ui.frame_due(instant));
+        let buffer = frame(&mut ui, 60, 24);
+        let body = buffer
+            .content
+            .iter()
+            .position(|cell| cell.symbol() == "@")
+            .unwrap();
+        assert_eq!(
+            buffer.content[body + 2].fg,
+            ratatui::style::Color::Indexed(if tick / 10 % 2 == 0 { 196 } else { 21 })
+        );
+        ui.frame_drawn(instant);
+        assert_eq!(ui.engine.turn(), turn);
+    }
+    for (ms, expected) in [(2999, 196), (3000, 21), (3999, 21), (4000, 196)] {
+        let instant = now + Duration::from_millis(ms);
+        ui.advance((24, 60), instant);
+        assert!(ui.frame_due(instant));
+        let buffer = frame(&mut ui, 60, 24);
+        let body = buffer
+            .content
+            .iter()
+            .position(|cell| cell.symbol() == "@")
+            .unwrap();
+        assert_eq!(
+            buffer.content[body + 2].fg,
+            ratatui::style::Color::Indexed(expected)
+        );
+        ui.frame_drawn(instant);
+        // Reset the animation frame repeatedly, without resetting presentation time.
+        ui.redraw();
+        ui.mode_switch_to(Mode::Examine);
+        frame(&mut ui, 60, 24);
+        ui.mode_switch_to(Mode::Normal);
+        ui.resize((23, 59));
+        ui.resize((24, 60));
+        assert!(ui.frame_due(instant));
+        assert_eq!(frame(&mut ui, 60, 24), buffer);
+        assert_eq!(ui.engine.turn(), turn);
+    }
+}
+
+#[test]
 fn stochastic_world_trace_is_independent_of_zero_one_or_many_renders() {
     use crate::game::fixtures::{occupancy, outcome};
     use rand::{SeedableRng, rngs::SmallRng};

@@ -76,8 +76,8 @@ describes bounded evidence, not exhaustive state-space or platform coverage.
 | Stage 2: shared production paths | `Runner` owns the session; headless `Ui` consumes events, dimensions and explicit time. Production and tests call the same dispatch and composition methods. |
 | Stage 2: modes and queues | `ui_state_tests.rs` checks exact actions/target coordinates, inventory ownership, race/quit, examine, modal burst order, auto-move cancellation and stairs selection. |
 | Stage 2: small-size and recovery | Boundary sizes, zero buffers, mode/target preservation, pre-shrink queue retention, discarded small-mode input, and recovered cell/style equality. |
-| Stages 2–3: rendering | `map_tests.rs` checks exact symbols/styles, light/glue, signed projections, concealment, authorized head/trail/death exceptions, target blockage, layer precedence, occupied heads and reset. |
-| Stages 2–3: composition and time | Long inventory/multiline log overflow remains inside panels, clears and survives shrink/grow. Explicit 49/50 ms dead/auto-move and 99/100 ms render deadlines; `cooldown` progression is separate from idle behavior. |
+| Stages 2–3: rendering | `map_tests.rs` checks exact symbols/styles, light/glue, signed projections, concealment, authorized head/death exceptions, target blockage, layer precedence, foreground-only occupied-head cues and their reset, and the absence of movement/turn trails. Tests sample shared player/enemy heads at 0/999/1000/1999/2000 ms to check one-second red/blue alternation independent of insertion order and occupancy. Hidden, dead, or turned-away contributors no longer affect the cue. |
+| Stages 2–3: composition and time | Tests check that long inventory/multiline log overflow stays inside panels, clears, and survives shrink/grow. They cover explicit 49/50 ms dead/auto-move and 99/100 ms render deadlines; `cooldown` progression is separate from idle behavior. Idle shared-facing blink uses elapsed presentation time through production scheduling/composition without advancing turns or resetting phase on redraw, mode changes, or resize. |
 | Stage 3: independent randomness | Identical seeded simulation traces with zero/one/seven renders compare normalized outcomes and next tactical draw; combat must occur. |
 | Stage 3: tactics | Engine/location/AI examples cover exact actor order, descent, occupancy, six-direction movement, doors/charge/digging, ownership/equipment, seeded combat, perception/discovery and AI priorities/fallback. |
 | Stages 3–4: generation | Fixed 20-case corpus and 16 generated seed/level pairs check free spawn, door-aware reachable stairs, placement, occupancy and repeat generation. Approachable statue loot remains valid. |
@@ -111,7 +111,7 @@ each real run. Changing `TERM` alone is not another emulator or platform.
 - [ ] SSH, if used, including remote resize propagation.
 - [ ] Resize while targeting and auto-moving, shrink below minimum, recover.
 - [ ] Long inventory/log content; bullet and door glyphs; visibility contrast,
-      facing/occupied-head cues and fading trails.
+      facing cues, foreground-only occupied-head cues, and one-second shared-facing blink.
 - [ ] Normal quit and panic recovery: shell echo/canonical input, visible cursor,
       original screen and reset colors.
 

@@ -137,9 +137,8 @@ pub const LOG_3_FG: RGB = RGB_GRAY[3];
 pub const LOG_4_FG: RGB = RGB_GRAY[2];
 pub const LOG_5_FG: RGB = RGB_GRAY[1];
 
-pub const SELF_HEAD_ACTOR_BG: RGB = RGB(0, 0, 5);
-pub const ENEMY_HEAD_ACTOR_BG: RGB = RGB(5, 0, 0);
-pub const ACTOR_HEAD_ACTOR_FG: RGB = RGB(5, 5, 5);
+pub const SELF_HEAD_ACTOR_FG: RGB = RGB(0, 0, 5);
+pub const ENEMY_HEAD_ACTOR_FG: RGB = RGB(5, 0, 0);
 
 /// Select indexed terminal colors without allocating a bounded color-pair table.
 pub fn style(fg: impl Into<Color>, bg: impl Into<Color>) -> Style {
