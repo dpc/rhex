@@ -591,15 +591,15 @@ impl Ui {
 
     fn key_to_action_normal(&self, key: i32) -> Option<Action> {
         let action = match (key, self.in_vi_input_mode()) {
-            (KEY_LOWH, true) | (KEY_LOWA, false) | (input::LEFT, _) => Game(Turn(Left)),
-            (KEY_LOWL, true) | (KEY_LOWD, false) | (input::RIGHT, _) => Game(Turn(Right)),
-            (KEY_LOWK, true) | (KEY_LOWW, false) | (input::UP, _) => Game(Move(Forward)),
+            (KEY_LOWH, _) | (KEY_LOWA, false) | (input::LEFT, _) => Game(Turn(Left)),
+            (KEY_LOWL, _) | (KEY_LOWD, false) | (input::RIGHT, _) => Game(Turn(Right)),
+            (KEY_LOWK, _) | (KEY_LOWW, false) | (input::UP, _) => Game(Move(Forward)),
             (KEY_LOWC, _) => Game(Charge),
             (KEY_LOWU, true) => Game(Spin(Left)),
             (KEY_LOWI, true) => Game(Spin(Right)),
             (KEY_CAPH, true) | (KEY_LOWQ, false) => Game(Move(Left)),
             (KEY_CAPL, true) | (KEY_LOWE, false) => Game(Move(Right)),
-            (KEY_LOWJ, true) | (KEY_LOWS, false) | (input::DOWN, _) => Game(Move(Back)),
+            (KEY_LOWJ, _) | (KEY_LOWS, false) | (input::DOWN, _) => Game(Move(Back)),
             (KEY_DOT, _) => Game(Wait),
             (KEY_COMMA, _) => Game(Pick),
             (KEY_DESCEND, _) => Game(Descend),
@@ -1270,6 +1270,8 @@ impl Ui {
             "Current input mode: {} (F2 to change)\n\n",
             self.input_mode
         ));
+        window.write("Turn left/right: h/l or Left/Right arrows\n");
+        window.write("Move forward/back: k/j or Up/Down arrows\n");
         if self.in_vi_input_mode() {
             window.write("Move/attack: hjklui\n");
             window.write("Strafe/attack: Shift + h/l\n");

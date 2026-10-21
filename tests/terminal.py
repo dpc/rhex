@@ -178,6 +178,9 @@ def exercise(binary, race, terminal="xterm-256color"):
         game.expect("Press anything to start.")
         game.send(b" ")
         game.expect("Pick your race")
+        game.send(b"hjkl")
+        game.drain()
+        game.expect("Pick your race")
         game.send(race)
         game.expect("Level")
         # Preserve the 30-column stats panel, indexed palette and Unicode map.
@@ -186,8 +189,24 @@ def exercise(binary, race, terminal="xterm-256color"):
             game.screen.styles[0][90], bytes(game.transcript[-2000:])
         )
         assert "\u2022" in game.screen.text()
+        # Movement keys must not leak through any inventory mode.
+        for command in (b"I", b"E", b"D"):
+            game.drain()
+            before = game.screen.turn()
+            game.send(command)  # Shifted characters must remain uppercase.
+            game.expect("Inventory")
+            game.send(b"hjkl\x1b[D\x1b[C\x1b[A\x1b[B")
+            game.drain()
+            game.expect("Inventory")
+            game.send(b"\x1b")
+            game.until(lambda: "Inventory:" not in game.screen.text(), "inventory close")
+            game.expect("Level")
+            assert game.screen.turn() == before, (before, game.screen.turn())
         game.action(b"d")
         game.action(b".")
+        # These aliases must work from fresh startup, without an F2 toggle.
+        for key in (b"h", b"l", b"k", b"j"):
+            game.action(key)
         game.action(b"\x1b[D")  # Arrow left.
         game.action(b"\x1b[C")  # Arrow right.
         game.action(b"\x1b[A")  # Arrow up.
@@ -201,16 +220,14 @@ def exercise(binary, race, terminal="xterm-256color"):
         assert game.screen.turn() == before, (before, game.screen.turn(), game.screen.text())
         game.send(b"?")
         game.expect("Quit: ESC/q")
+        game.expect("Turn left/right: h/l or Left/Right arrows")
+        game.expect("Move forward/back: k/j or Up/Down arrows")
+        game.expect("Current input mode: Normal")
         game.send(b"\x1bOQ")  # F2, xterm SS3 encoding.
         game.expect("Current input mode: Vi")
         game.send(b" ")
         game.expect("Level")
         game.action(b"h")
-        game.send(b"I")  # Shifted character must remain uppercase.
-        game.expect("Inventory")
-        game.send(b"\x1b")
-        game.until(lambda: "Inventory:" not in game.screen.text(), "inventory close")
-        game.expect("Level")
         game.send(b"?")
         game.expect("Quit: ESC/q")
         game.resize(8, 24)

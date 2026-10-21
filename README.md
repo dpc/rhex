@@ -24,9 +24,14 @@ or a separate `tput` program. Run from a writable directory: the game writes
 `debug.log` there. The game has no save/load support.
 
 Press any key at the introduction, then choose a race (`a` for human).
+In either input mode, use `h`/`l` or Left/Right arrows to turn left/right, and
+`k`/`j` or Up/Down arrows to move forward/backward.
 In normal input mode, use `w`/`s` to move forward/backward, `a`/`d` to turn, and
 `q`/`e` to sidestep. `.` waits, `,` picks up an item, `I` opens inventory,
-`?` shows help, and F2 toggles Vi-style controls.
+`?` shows help. Press F2 to toggle additional Vi-style controls (`u`/`i` spin,
+`H`/`L` sidestep, `K` walks automatically, and `q` quits instead of sidestepping).
+Use these movement aliases during gameplay; in menus and inventory, use letters
+to select entries.
 To exit, press Escape, then `y` to confirm.
 If your terminal has fewer than 60 columns or 24 rows, the game pauses and asks
 you to resize it. Press Escape at this prompt to exit without confirmation.
