@@ -146,3 +146,7 @@ pub fn style(fg: impl Into<Color>, bg: impl Into<Color>) -> Style {
         .fg(TerminalColor::Indexed(fg.into().0))
         .bg(TerminalColor::Indexed(bg.into().0))
 }
+
+#[cfg(test)]
+#[path = "color_tests.rs"]
+mod tests;

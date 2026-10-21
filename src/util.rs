@@ -9,6 +9,10 @@ pub fn random_pos(x: i32, y: i32) -> Position {
     Position::new(Coordinate::new(x, y), dir)
 }
 
+#[cfg(test)]
+#[path = "util_tests.rs"]
+mod tests;
+
 /// Roll a against b
 pub fn roll(a: i32, b: i32) -> bool {
     let base = cmp::max(a, b) / 4;

@@ -589,8 +589,8 @@ impl Ui {
         self.input_mode == InputMode::Vi
     }
 
-    fn key_to_action_normal(&self, key: i32) -> Option<Action> {
-        let action = match (key, self.in_vi_input_mode()) {
+    fn key_to_action_normal(input_mode: InputMode, key: i32) -> Option<Action> {
+        let action = match (key, input_mode == InputMode::Vi) {
             (KEY_LOWH, _) | (KEY_LOWA, false) | (input::LEFT, _) => Game(Turn(Left)),
             (KEY_LOWL, _) | (KEY_LOWD, false) | (input::RIGHT, _) => Game(Turn(Right)),
             (KEY_LOWK, _) | (KEY_LOWW, false) | (input::UP, _) => Game(Move(Forward)),
@@ -619,7 +619,7 @@ impl Ui {
         Some(action)
     }
 
-    fn key_to_action_global(&self, key: i32) -> Option<GlobalAction> {
+    fn key_to_action_global(key: i32) -> Option<GlobalAction> {
         let action = match key {
             input::F2 => ToggleInputMode,
             _ => return None,
@@ -658,7 +658,7 @@ impl Ui {
                 },
             },
             Mode::Normal => {
-                if let Some(action) = self.key_to_action_normal(key) {
+                if let Some(action) = Self::key_to_action_normal(self.input_mode, key) {
                     match action {
                         Game(action) => self.queue_action(action),
                         ModeSwitch(mode @ Mode::Target(TargetMode::Ranged)) => {
@@ -797,7 +797,7 @@ impl Ui {
     }
 
     pub fn input_handle_key(&mut self, key: i32) {
-        if let Some(_) = self.key_to_action_global(key) {
+        if let Some(_) = Self::key_to_action_global(key) {
             self.input_mode.toggle();
             self.redraw();
         } else {
@@ -1314,3 +1314,7 @@ impl Ui {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "ui_input_tests.rs"]
+mod tests;

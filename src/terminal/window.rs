@@ -18,6 +18,10 @@ pub struct Window {
     style: Cell<Style>,
 }
 
+#[cfg(test)]
+#[path = "window_tests.rs"]
+mod tests;
+
 impl Window {
     /// Create a region with nonnegative dimensions.
     pub fn new(w: i32, h: i32, x: i32, y: i32) -> Self {
