@@ -13,3 +13,6 @@ gameplay
 toolchain
 Clippy
 terminfo
+Crossterm
+Ratatui
+lockfile

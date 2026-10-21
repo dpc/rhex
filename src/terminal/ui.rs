@@ -1,7 +1,7 @@
 use std::cell::RefCell;
 use std::collections::VecDeque;
-use std::env;
 use std::fmt::Write as FmtWrite;
+use std::io;
 use std::time::{Duration, Instant};
 use std::{cmp, fmt, thread};
 
@@ -9,15 +9,17 @@ use num::integer::Integer;
 
 use crate::game::Action::*;
 
+use crossterm::event::{self, Event as TerminalEvent};
 use hex2d::{Angle, Back, Coordinate, Forward, Left, Position, Right};
-use ncurses as nc;
+use ratatui::style::Style;
 
 use crate::hex2dext::algo::bfs;
 
 use super::consts::*;
+use super::input;
 use super::map::MapRenderer;
+use super::session::Session;
 use super::{AutoMoveAction, AutoMoveType, Event, GoToType, LogEntry, LogEvent};
-use super::{Error, Result};
 use super::{Window, color};
 
 use crate::game;
@@ -58,11 +60,9 @@ struct Windows {
 }
 
 impl Windows {
-    fn after_resize() -> Self {
-        let (max_y, max_x) = Ui::screen_size();
-
-        let mid_x = max_x - 30;
-        let mid_y = 12;
+    fn after_resize((max_y, max_x): (i32, i32)) -> Self {
+        let mid_x = (max_x - 30).max(0);
+        let mid_y = 12.min(max_y);
 
         let map_window = Window::new(mid_x, max_y, 0, 0);
         let stats_window = Window::new(max_x - mid_x, mid_y, mid_x, 0);
@@ -109,7 +109,8 @@ pub enum Mode {
 }
 
 pub struct Ui {
-    calloc: RefCell<color::Allocator>,
+    /// Own terminal modes before constructing any game state.
+    session: Session,
 
     windows: Windows,
 
@@ -117,11 +118,11 @@ pub struct Ui {
     log: RefCell<VecDeque<LogEntry>>,
     target_pos: Option<Position>,
 
-    label_color: nc::attr_t,
-    text_color: nc::attr_t,
-    text_gray_color: nc::attr_t,
-    red_color: nc::attr_t,
-    green_color: nc::attr_t,
+    label_color: Style,
+    text_color: Style,
+    text_gray_color: Style,
+    red_color: Style,
+    green_color: Style,
 
     input_mode: InputMode,
 
@@ -156,43 +157,20 @@ enum GlobalAction {
 }
 
 impl Ui {
-    pub fn new() -> Result<Self> {
-        nc::setlocale(nc::constants::LcCategory::all, "");
+    pub fn new() -> io::Result<Self> {
+        let session = Session::new()?;
 
-        nc::initscr();
-        nc::start_color();
-        if !nc::has_colors() || nc::COLORS() < 256 {
-            nc::endwin();
-            return Err(Error::ColorCount);
-        }
-        if env::var_os("ESCDELAY").is_none() {
-            nc::set_escdelay(25);
-        }
-        nc::keypad(nc::stdscr(), true);
-        nc::noecho();
-        nc::raw();
-        nc::timeout(0);
-        nc::flushinp();
-        nc::curs_set(nc::CURSOR_VISIBILITY::CURSOR_INVISIBLE);
-
-        assert!(nc::has_colors());
-
-        let mut calloc = color::Allocator::new();
-        let label_color = nc::COLOR_PAIR(calloc.get(color::LABEL_FG, color::BACKGROUND_BG));
-        let text_color = nc::COLOR_PAIR(calloc.get(color::VISIBLE_FG, color::BACKGROUND_BG));
-        let text_gray_color = nc::COLOR_PAIR(calloc.get(color::GRAY[10], color::BACKGROUND_BG));
-        let green_color = nc::COLOR_PAIR(calloc.get(color::GREEN_FG, color::BACKGROUND_BG));
-        let red_color = nc::COLOR_PAIR(calloc.get(color::RED_FG, color::BACKGROUND_BG));
+        let label_color = color::style(color::LABEL_FG, color::BACKGROUND_BG);
+        let text_color = color::style(color::VISIBLE_FG, color::BACKGROUND_BG);
+        let text_gray_color = color::style(color::GRAY[10], color::BACKGROUND_BG);
+        let green_color = color::style(color::GREEN_FG, color::BACKGROUND_BG);
+        let red_color = color::style(color::RED_FG, color::BACKGROUND_BG);
 
         let engine = game::Engine::new();
 
-        let cpair = nc::COLOR_PAIR(calloc.get(color::VISIBLE_FG, color::BACKGROUND_BG));
-        nc::bkgd(cpair);
-        nc::doupdate();
-
         let mut ui = Ui {
-            calloc: RefCell::new(calloc),
-            windows: Windows::after_resize(),
+            session,
+            windows: Windows::after_resize(Self::screen_size()?),
             mode: Mode::FullScreen(FSMode::Intro),
             target_pos: None,
             log: RefCell::new(VecDeque::new()),
@@ -219,7 +197,7 @@ impl Ui {
             map_renderer: MapRenderer::new(UNICODE_DOT),
         };
         ui.display_intro();
-        ui.resize();
+        ui.resize(Self::screen_size()?);
         Ok(ui)
     }
 
@@ -232,21 +210,18 @@ impl Ui {
         self.next_turn_ts = Instant::now()
     }
 
-    pub fn screen_size() -> (i32, i32) {
-        Ui::window_size(nc::stdscr())
+    pub fn screen_size() -> io::Result<(i32, i32)> {
+        let (width, height) = crossterm::terminal::size()?;
+        Ok((height.into(), width.into()))
     }
 
-    pub fn window_size(window: nc::WINDOW) -> (i32, i32) {
-        let mut max_x = 0;
-        let mut max_y = 0;
-        nc::getmaxyx(window, &mut max_y, &mut max_x);
-
-        (max_y, max_x)
+    pub fn window_size(window: &Window) -> (i32, i32) {
+        window.size()
     }
 
-    pub fn resize(&mut self) {
-        self.windows = Windows::after_resize();
-        let window = self.windows.map.window;
+    pub fn resize(&mut self, size: (i32, i32)) {
+        self.windows = Windows::after_resize(size);
+        let window = &self.windows.map;
         let (y, x) = Ui::window_size(window);
         self.map_renderer.resize(x as usize, y as usize);
         self.redraw();
@@ -258,39 +233,62 @@ impl Ui {
         self.next_anim_frame_ts = Instant::now();
     }
 
-    pub fn redraw_now(&mut self) {
-        match self.mode {
-            Mode::Normal | Mode::Examine | Mode::Inventory(_) | Mode::Target(_) | Mode::GoTo => {
-                if let Mode::Inventory(_) = self.mode {
-                    self.draw_inventory();
-                } else {
-                    self.draw_map();
+    pub fn redraw_now(&mut self) -> io::Result<()> {
+        if self.too_small() {
+            self.windows.full.clear();
+            self.windows
+                .full
+                .write("Terminal too small.\nResize to at least 60x24.\nEsc to quit.");
+        } else {
+            match self.mode {
+                Mode::Normal
+                | Mode::Examine
+                | Mode::Inventory(_)
+                | Mode::Target(_)
+                | Mode::GoTo => {
+                    if let Mode::Inventory(_) = self.mode {
+                        self.draw_inventory();
+                    } else {
+                        self.draw_map();
+                    }
+
+                    self.draw_log();
+
+                    self.draw_stats();
                 }
-
-                self.draw_log();
-
-                self.draw_stats();
+                Mode::FullScreen(fs_mode) => match fs_mode {
+                    FSMode::Help => {
+                        self.draw_help();
+                    }
+                    FSMode::Quit => {
+                        self.draw_quit();
+                    }
+                    FSMode::Intro => {
+                        self.draw_intro();
+                    }
+                    FSMode::PickRace => {
+                        self.draw_pickrace();
+                    }
+                },
             }
-            Mode::FullScreen(fs_mode) => match fs_mode {
-                FSMode::Help => {
-                    self.draw_help();
-                }
-                FSMode::Quit => {
-                    self.draw_quit();
-                }
-                FSMode::Intro => {
-                    self.draw_intro();
-                }
-                FSMode::PickRace => {
-                    self.draw_pickrace();
-                }
-            },
         }
+        self.session.terminal.borrow_mut().draw(|frame| {
+            let buffer = frame.buffer_mut();
+            if self.too_small() || matches!(self.mode, Mode::FullScreen(_)) {
+                self.windows.full.render(buffer);
+            } else {
+                self.windows.map.render(buffer);
+                self.windows.stats.render(buffer);
+                self.windows.log.render(buffer);
+            }
+        })?;
+        Ok(())
+    }
 
-        let (max_y, max_x) = Ui::screen_size();
-
-        nc::mv(max_y - 1, max_x - 1);
-        nc::doupdate();
+    /// Keep layout calculations and input safe when the terminal is too small.
+    fn too_small(&self) -> bool {
+        let (height, width) = self.windows.full.size();
+        width < 60 || height < 24
     }
 
     pub fn is_automoving(&self) -> bool {
@@ -499,38 +497,58 @@ impl Ui {
         }
     }
 
-    pub fn maybe_redraw_now(&mut self) {
+    pub fn maybe_redraw_now(&mut self) -> io::Result<()> {
         if self.is_next_anim_frame_time() {
-            self.redraw_now();
+            self.redraw_now()?;
             self.anim_frame_count += 1;
             self.next_anim_frame_ts = Instant::now() + Duration::from_millis(100);
-        } else if self.game_action_queue.is_empty() {
+        } else if self.too_small() || self.game_action_queue.is_empty() {
             thread::sleep(Duration::from_millis(10));
         }
+        Ok(())
     }
 
-    pub fn run_once(&mut self) {
-        self.run_engine_turn();
-        self.input_handle();
-        self.maybe_redraw_now();
-    }
-
-    pub fn run(&mut self) {
-        while !self.exit {
-            self.run_once();
+    pub fn run_once(&mut self) -> io::Result<()> {
+        // Resize notifications may be coalesced with input or other resizes.
+        // Reconcile dimensions before using any of the cached panel geometry.
+        let size = Self::screen_size()?;
+        if self.windows.full.size() != size {
+            self.resize(size);
         }
+        if !self.too_small() {
+            self.run_engine_turn();
+        }
+        self.input_handle()?;
+        self.maybe_redraw_now()
+    }
+
+    pub fn run(&mut self) -> io::Result<()> {
+        while !self.exit {
+            self.run_once()?;
+        }
+        Ok(())
     }
 
     /// Handle input.
-    pub fn input_handle(&mut self) {
-        loop {
-            let ch = nc::getch();
-            if ch == nc::KEY_RESIZE {
-                self.resize();
-                self.redraw();
-            }
-            if ch == -1 {
-                return;
+    pub fn input_handle(&mut self) -> io::Result<()> {
+        // Crossterm's level-triggered Unix source requires a nonzero timeout.
+        while event::poll(Duration::from_millis(1))? {
+            let ch = match event::read()? {
+                TerminalEvent::Resize(_, _) => {
+                    self.resize(Self::screen_size()?);
+                    continue;
+                }
+                TerminalEvent::Key(key) => match input::game_key(key) {
+                    Some(ch) => ch,
+                    None => continue,
+                },
+                _ => continue,
+            };
+            if self.too_small() {
+                if ch == KEY_ESC {
+                    self.exit = true;
+                }
+                continue;
             }
             if self.automoving.is_some() {
                 self.automoving_stop();
@@ -539,6 +557,7 @@ impl Ui {
 
             self.input_handle_key(ch);
         }
+        Ok(())
     }
 
     pub fn action_push(&mut self, action: game::Action) {
@@ -572,15 +591,15 @@ impl Ui {
 
     fn key_to_action_normal(&self, key: i32) -> Option<Action> {
         let action = match (key, self.in_vi_input_mode()) {
-            (KEY_LOWH, true) | (KEY_LOWA, false) | (nc::KEY_LEFT, _) => Game(Turn(Left)),
-            (KEY_LOWL, true) | (KEY_LOWD, false) | (nc::KEY_RIGHT, _) => Game(Turn(Right)),
-            (KEY_LOWK, true) | (KEY_LOWW, false) | (nc::KEY_UP, _) => Game(Move(Forward)),
+            (KEY_LOWH, true) | (KEY_LOWA, false) | (input::LEFT, _) => Game(Turn(Left)),
+            (KEY_LOWL, true) | (KEY_LOWD, false) | (input::RIGHT, _) => Game(Turn(Right)),
+            (KEY_LOWK, true) | (KEY_LOWW, false) | (input::UP, _) => Game(Move(Forward)),
             (KEY_LOWC, _) => Game(Charge),
             (KEY_LOWU, true) => Game(Spin(Left)),
             (KEY_LOWI, true) => Game(Spin(Right)),
             (KEY_CAPH, true) | (KEY_LOWQ, false) => Game(Move(Left)),
             (KEY_CAPL, true) | (KEY_LOWE, false) => Game(Move(Right)),
-            (KEY_LOWJ, true) | (KEY_LOWS, false) | (nc::KEY_DOWN, _) => Game(Move(Back)),
+            (KEY_LOWJ, true) | (KEY_LOWS, false) | (input::DOWN, _) => Game(Move(Back)),
             (KEY_DOT, _) => Game(Wait),
             (KEY_COMMA, _) => Game(Pick),
             (KEY_DESCEND, _) => Game(Descend),
@@ -602,7 +621,7 @@ impl Ui {
 
     fn key_to_action_global(&self, key: i32) -> Option<GlobalAction> {
         let action = match key {
-            key if key == nc::KEY_F(2) => ToggleInputMode,
+            input::F2 => ToggleInputMode,
             _ => return None,
         };
 
@@ -657,7 +676,7 @@ impl Ui {
                 }
             }
             Mode::Inventory(InvMode::Equip) => {
-                let ch = key as u8 as char;
+                let ch = char::from_u32(key as u32).unwrap_or('\0');
                 match key {
                     KEY_ESC => self.mode_switch_to(Mode::Normal),
                     _ => match ch {
@@ -671,7 +690,7 @@ impl Ui {
                 }
             }
             Mode::Inventory(InvMode::View) => {
-                let ch = key as u8 as char;
+                let ch = char::from_u32(key as u32).unwrap_or('\0');
                 match key {
                     KEY_ESC => self.mode_switch_to(Mode::Normal),
                     _ => match ch {
@@ -681,13 +700,13 @@ impl Ui {
                 }
             }
             Mode::Inventory(InvMode::Drop_) => {
-                let ch = key as u8 as char;
+                let ch = char::from_u32(key as u32).unwrap_or('\0');
                 match key {
                     KEY_ESC => self.mode_switch_to(Mode::Normal),
                     _ => match ch {
                         'a'..='z' | 'A'..='Z' => {
-                            if self.player().item_letter_taken(ch as u8 as char) {
-                                self.queue_drop(ch as u8 as char)
+                            if self.player().item_letter_taken(ch) {
+                                self.queue_drop(ch)
                             }
                         }
                         _ => {}
@@ -875,7 +894,6 @@ impl Ui {
             mode,
             target_pos,
             ref windows,
-            ref calloc,
             anim_frame_count,
             ..
         } = *self;
@@ -886,19 +904,10 @@ impl Ui {
             target_pos,
             anim_frame_count,
         );
-        map_renderer.draw_into(&windows.map, &calloc);
-        nc::wnoutrefresh(windows.map.window);
+        map_renderer.draw_into(&windows.map);
     }
 
-    fn draw_stats_bar(
-        &self,
-        window: nc::WINDOW,
-        y: i32,
-        name: &str,
-        cur: i32,
-        prev: i32,
-        max: i32,
-    ) {
+    fn draw_stats_bar(&self, window: &Window, y: i32, name: &str, cur: i32, prev: i32, max: i32) {
         let (max_y, max_x) = Ui::window_size(window);
 
         if max_x < 6 || max_y < 1 {
@@ -910,132 +919,126 @@ impl Ui {
         let prev = cmp::max(prev, 0) as u32;
         let max = cmp::max(max, 1) as u32;
 
-        nc::wattron(window, self.label_color);
-        nc::mvwaddstr(window, y, 0, &format!("{}: ", name)).expect("UI text must not contain NUL");
+        window.set_style(self.label_color);
+        window.move_to(y, 0);
+        window.write(&format!("{}: ", name));
 
         let width = max_x as u32 - 4 - name.chars().count() as u32;
         let cur_w = cur * width / max;
         let prev_w = prev * width / max;
 
-        nc::waddch(window, self.text_color | ('[' as nc::chtype));
+        window.set_style(self.text_color);
+        window.write_char('[');
         for i in 0..width {
-            let ch = match (i < cur_w, i < prev_w) {
-                (true, true) => self.text_color | ('=' as nc::chtype),
-                (false, true) => self.red_color | ('-' as nc::chtype),
-                (true, false) => self.green_color | ('+' as nc::chtype),
+            let (ch, style) = match (i < cur_w, i < prev_w) {
+                (true, true) => ('=', self.text_color),
+                (false, true) => ('-', self.red_color),
+                (true, false) => ('+', self.green_color),
                 (false, false) => break,
             };
-            nc::waddch(window, ch);
+            window.set_style(style);
+            window.write_char(ch);
         }
-        nc::mvwaddch(window, y, max_x - 1, self.text_color | (']' as nc::chtype));
+        window.put(y, max_x - 1, ']', self.text_color);
     }
 
-    fn draw_turn<T>(&self, window: nc::WINDOW, label: &str, val: T)
+    fn draw_turn<T>(&self, window: &Window, label: &str, val: T)
     where
         T: Integer + fmt::Display,
     {
         self.draw_label(window, label);
 
-        nc::wattron(window, self.text_color);
-        nc::waddstr(window, &format!(" {:<8}", val)).expect("UI text must not contain NUL");
+        window.set_style(self.text_color);
+        window.write(&format!(" {:<8}", val));
     }
 
-    fn draw_val<T>(&self, window: nc::WINDOW, label: &str, val: T)
+    fn draw_val<T>(&self, window: &Window, label: &str, val: T)
     where
         T: Integer + fmt::Display,
     {
         self.draw_label(window, label);
 
-        nc::wattron(window, self.text_color);
-        nc::waddstr(window, &format!("{:>2} ", val)).expect("UI text must not contain NUL");
+        window.set_style(self.text_color);
+        window.write(&format!("{:>2} ", val));
     }
 
-    fn draw_label(&self, window: nc::WINDOW, label: &str) {
-        nc::wattron(window, self.label_color);
-        nc::waddstr(window, &format!("{}:", label)).expect("UI text must not contain NUL");
+    fn draw_label(&self, window: &Window, label: &str) {
+        window.set_style(self.label_color);
+        window.write(&format!("{}:", label));
     }
 
-    fn draw_item(&self, window: nc::WINDOW, astate: &Actor, label: &str, slot: Slot) {
+    fn draw_item(&self, window: &Window, astate: &Actor, label: &str, slot: Slot) {
         self.draw_label(window, label);
 
         if slot == Slot::RHand && !astate.can_attack() {
-            nc::wattron(window, self.text_gray_color);
+            window.set_style(self.text_gray_color);
         } else {
-            nc::wattron(window, self.text_color);
+            window.set_style(self.text_color);
         }
 
         if let Some(&(_, ref item)) = astate.items_equipped.get(&slot) {
-            nc::waddstr(window, &format!("{:^13}", item.description()))
-                .expect("UI text must not contain NUL");
+            window.write(&format!("{:^13}", item.description()));
         } else {
-            nc::waddch(window, '-' as nc::chtype);
+            window.write_char('-');
         }
     }
 
     fn draw_inventory(&self) {
-        self.windows.map.clear(&self.calloc);
-        let window = self.windows.map.window;
+        self.windows.map.clear();
+        let window = &self.windows.map;
         let player = self.player();
 
-        nc::wmove(window, 0, 0);
+        window.move_to(0, 0);
 
-        nc::wattron(window, self.text_color);
+        window.set_style(self.text_color);
         if !player.items_equipped.is_empty() {
-            nc::waddstr(window, &format!("Equipped: \n")).expect("UI text must not contain NUL");
+            window.write("Equipped: \n");
             for (slot, &(ref ch, ref i)) in &player.items_equipped {
-                nc::waddstr(
-                    window,
-                    &format!(" {} - {} [{:?}]\n", ch, i.description(), slot),
-                )
-                .expect("UI text must not contain NUL");
+                window.write(&format!(" {} - {} [{:?}]\n", ch, i.description(), slot));
             }
-            nc::waddstr(window, &format!("\n")).expect("UI text must not contain NUL");
+            window.write("\n");
         }
 
-        nc::waddstr(window, &format!("Inventory: \n")).expect("UI text must not contain NUL");
+        window.write("Inventory: \n");
         if !player.items_backpack.is_empty() {
             for (ch, i) in &player.items_backpack {
-                nc::waddstr(window, &format!(" {} - {}\n", ch, i.description()))
-                    .expect("UI text must not contain NUL");
+                window.write(&format!(" {} - {}\n", ch, i.description()));
             }
         }
 
-        nc::waddstr(window, &format!("\n[ESC] to close...\n"))
-            .expect("UI text must not contain NUL");
-
-        nc::wnoutrefresh(window);
+        window.write("\n[ESC] to close...\n");
     }
 
     fn draw_stats(&self) {
-        self.windows.stats.clear(&self.calloc);
+        self.windows.stats.clear();
         let turn = self.engine.turn();
-        let window = self.windows.stats.window;
+        let window = &self.windows.stats;
         let player = self.player();
         let cur_loc = self.current_location();
 
         let (ac, ev) = (player.stats.base.ac, player.stats.base.ev);
         let (dmg, acc) = (player.stats.melee_dmg, player.stats.melee_acc);
 
-        nc::wmove(window, 0, 0);
+        window.move_to(0, 0);
 
         let mut y = 0;
-        nc::wmove(window, y, 0);
+        window.move_to(y, 0);
         self.draw_val(window, "Str", player.stats.base.str_);
-        nc::wmove(window, y, 7);
+        window.move_to(y, 7);
         self.draw_val(window, "DMG", dmg);
-        nc::wmove(window, y, 15);
+        window.move_to(y, 15);
         self.draw_val(window, "ACC", acc);
 
         y += 1;
-        nc::wmove(window, y, 0);
+        window.move_to(y, 0);
         self.draw_val(window, "Int", player.stats.base.int);
-        nc::wmove(window, y, 7);
+        window.move_to(y, 7);
         self.draw_val(window, " AC", ac);
-        nc::wmove(window, y, 15);
+        window.move_to(y, 15);
         self.draw_val(window, "EV", ev);
 
         y += 1;
-        nc::wmove(window, y, 0);
+        window.move_to(y, 0);
         self.draw_val(window, "Dex", player.stats.base.dex);
 
         y += 1;
@@ -1081,16 +1084,16 @@ impl Ui {
         for (i, &(string, slot)) in slots.iter().enumerate() {
             if i & 1 == 0 {
                 y += 1;
-                nc::wmove(window, y, 0);
+                window.move_to(y, 0);
             } else {
-                nc::wmove(window, y, 14);
+                window.move_to(y, 14);
             }
 
             self.draw_item(window, player, string, slot);
         }
 
         y += 1;
-        nc::wmove(window, y, 0);
+        window.move_to(y, 0);
 
         let pos = if self.mode == Mode::Examine {
             self.target_pos.unwrap_or(self.player().pos)
@@ -1101,15 +1104,13 @@ impl Ui {
         let head = pos.coord + pos.dir;
         let descr = self.tile_description(head, player, cur_loc);
         self.draw_label(window, "In front");
-        nc::wattron(window, self.text_color);
-        nc::waddstr(window, &format!(" {}", descr)).expect("UI text must not contain NUL");
+        window.set_style(self.text_color);
+        window.write(&format!(" {}", descr));
 
         y += 1;
-        nc::wmove(window, y, 0);
+        window.move_to(y, 0);
         self.draw_turn(window, "Turn", turn);
         self.draw_turn(window, "Level", cur_loc.level);
-
-        nc::wnoutrefresh(window);
     }
 
     // TODO: Consider the distance to the Item to print something
@@ -1137,9 +1138,7 @@ impl Ui {
         }
     }
 
-    fn turn_to_color(&self, turn: u64, calloc: &RefCell<color::Allocator>) -> Option<i16> {
-        let mut calloc = calloc.borrow_mut();
-
+    fn turn_to_color(&self, turn: u64) -> Option<Style> {
         let dturn = self.engine.turn() - turn;
 
         let fg = if dturn < 1 {
@@ -1156,7 +1155,7 @@ impl Ui {
             None
         };
 
-        fg.map(|fg| calloc.get(fg, color::BACKGROUND_BG))
+        fg.map(|fg| color::style(fg, color::BACKGROUND_BG))
     }
 
     fn tile_description(
@@ -1209,138 +1208,99 @@ impl Ui {
     }
 
     fn draw_log(&self) {
-        self.windows.log.clear(&self.calloc);
-        let window = self.windows.log.window;
+        self.windows.log.clear();
+        let window = &self.windows.log;
 
-        nc::wmove(window, 0, 0);
+        window.move_to(0, 0);
 
         match self.mode {
             Mode::GoTo => {
-                nc::waddstr(window, &format!("Go to where?\n"))
-                    .expect("UI text must not contain NUL");
+                window.write("Go to where?\n");
             }
             Mode::Inventory(InvMode::Drop_) => {
-                nc::waddstr(window, &format!("Drop what?\n"))
-                    .expect("UI text must not contain NUL");
+                window.write("Drop what?\n");
             }
             Mode::Inventory(InvMode::Equip) => {
-                nc::waddstr(window, &format!("Equip/use what?\n"))
-                    .expect("UI text must not contain NUL");
+                window.write("Equip/use what?\n");
             }
             _ => {}
         }
 
-        let cury = nc::getcury(window);
-        let maxy = nc::getmaxy(window) - 1;
+        let cury = window.cursor_y();
+        let maxy = window.size().0 - 1;
         if cury < maxy {
-            let mut prevcolor = -1;
             for i in self.log.borrow().iter().take((maxy - cury) as usize) {
-                if let Some(color) = self.turn_to_color(i.turn, &self.calloc) {
-                    if prevcolor != color {
-                        prevcolor = color;
-                        let cpair = nc::COLOR_PAIR(color);
-                        nc::wattron(window, cpair);
-                    }
-                    nc::waddstr(window, &i.text).expect("UI text must not contain NUL");
+                if let Some(style) = self.turn_to_color(i.turn) {
+                    window.set_style(style);
+                    window.write(&i.text);
                 }
-                nc::waddch(window, '\n' as nc::chtype);
+                window.write_char('\n');
             }
         }
-
-        nc::wnoutrefresh(window);
     }
 
     fn draw_intro(&mut self) {
-        self.windows.full.clear(&self.calloc);
+        let window = &self.windows.full;
+        window.clear();
 
-        let window = self.windows.full.window;
-
-        nc::wmove(window, 0, 0);
-
-        nc::waddstr(window,
-                    "This game is in very early development. We are looking for feedback and contributors!\n\n").expect("UI text must not contain NUL");
-        nc::waddstr(
-            window,
-            "See help: https://github.com/dpc/rhex/wiki/Help-How-to-Play\n",
-        )
-        .expect("UI text must not contain NUL");
-        nc::waddstr(window, "Join chat: https://gitter.im/dpc/rhex\n")
-            .expect("UI text must not contain NUL");
-        nc::waddstr(window, "Project page: https://github.com/dpc/rhex\n\n")
-            .expect("UI text must not contain NUL");
-        nc::waddstr(
-            window,
-            &format!(
-                "You can press {} in the game for offline help.\n\n",
-                KEY_HELP as u8 as char
-            ),
-        )
-        .expect("UI text must not contain NUL");
-        nc::waddstr(window, "Press anything to start.").expect("UI text must not contain NUL");
-        nc::wnoutrefresh(window);
+        window.write("This game is in very early development. We are looking for feedback and contributors!\n\n");
+        window.write("See help: https://github.com/dpc/rhex/wiki/Help-How-to-Play\n");
+        window.write("Join chat: https://gitter.im/dpc/rhex\n");
+        window.write("Project page: https://github.com/dpc/rhex\n\n");
+        window.write(&format!(
+            "You can press {} in the game for offline help.\n\n",
+            KEY_HELP as u8 as char
+        ));
+        window.write("Press anything to start.");
     }
 
     fn draw_pickrace(&mut self) {
-        self.windows.full.clear(&self.calloc);
-        let window = self.windows.full.window;
-
-        nc::wmove(window, 0, 0);
-
-        nc::waddstr(window, "Pick your race\n\n").expect("UI text must not contain NUL");
-        nc::waddstr(window, "a) Human\n").expect("UI text must not contain NUL");
-        nc::waddstr(window, "b) Elf\n").expect("UI text must not contain NUL");
-        nc::waddstr(window, "c) Dwarf\n").expect("UI text must not contain NUL");
-
-        nc::wnoutrefresh(window);
+        let window = &self.windows.full;
+        window.clear();
+        window.write("Pick your race\n\n");
+        window.write("a) Human\n");
+        window.write("b) Elf\n");
+        window.write("c) Dwarf\n");
     }
 
     fn draw_help(&mut self) {
-        self.windows.full.clear(&self.calloc);
-        let window = self.windows.full.window;
-        nc::wmove(window, 0, 0);
-
-        nc::waddstr(
-            window,
-            &format!("Current input mode: {} (F2 to change)\n\n", self.input_mode),
-        )
-        .expect("UI text must not contain NUL");
+        let window = &self.windows.full;
+        window.clear();
+        window.write(&format!(
+            "Current input mode: {} (F2 to change)\n\n",
+            self.input_mode
+        ));
         if self.in_vi_input_mode() {
-            nc::waddstr(window, "Move/attack: hjklui\n").expect("UI text must not contain NUL");
-            nc::waddstr(window, "Strafe/attack: Shift + h/l\n")
-                .expect("UI text must not contain NUL");
-            nc::waddstr(window, "Automove: shift + k\n").expect("UI text must not contain NUL");
+            window.write("Move/attack: hjklui\n");
+            window.write("Strafe/attack: Shift + h/l\n");
+            window.write("Automove: shift + k\n");
         } else {
-            nc::waddstr(window, "Move/attack: awsdqe\n").expect("UI text must not contain NUL");
-            nc::waddstr(window, "Automove: shift + w\n").expect("UI text must not contain NUL");
+            window.write("Move/attack: awsdqe\n");
+            window.write("Automove: shift + w\n");
         }
-        nc::waddstr(window, "Charge: c\n").expect("UI text must not contain NUL");
-        nc::waddstr(window, "Wait: .\n").expect("UI text must not contain NUL");
-        nc::waddstr(window, "Descend: >\n").expect("UI text must not contain NUL");
-        nc::waddstr(window, "Autoexplore: o\n").expect("UI text must not contain NUL");
-        nc::waddstr(window, "Go to: G (only '>' follow-up implemented)\n")
-            .expect("UI text must not contain NUL");
-        nc::waddstr(window, "Examine: x\n").expect("UI text must not contain NUL");
-        nc::waddstr(window, "Pick item in front: ,\n").expect("UI text must not contain NUL");
-        nc::waddstr(window, "Look at Inventory: I\n").expect("UI text must not contain NUL");
-        nc::waddstr(window, "Equip/Use: E\n").expect("UI text must not contain NUL");
-        nc::waddstr(window, "Drop: D\n").expect("UI text must not contain NUL");
-        nc::waddstr(window, "Ranged/Throw: f (not fully working)\n")
-            .expect("UI text must not contain NUL");
-        nc::waddstr(window, "Quit: ESC/q\n").expect("UI text must not contain NUL");
-        nc::wnoutrefresh(window);
+        window.write("Charge: c\n");
+        window.write("Wait: .\n");
+        window.write("Descend: >\n");
+        window.write("Autoexplore: o\n");
+        window.write("Go to: G (only '>' follow-up implemented)\n");
+        window.write("Examine: x\n");
+        window.write("Pick item in front: ,\n");
+        window.write("Look at Inventory: I\n");
+        window.write("Equip/Use: E\n");
+        window.write("Drop: D\n");
+        window.write("Ranged/Throw: f (not fully working)\n");
+        window.write("Quit: ESC/q\n");
     }
 
     fn draw_quit(&mut self) {
-        self.windows.full.clear(&self.calloc);
-        let window = self.windows.full.window;
+        let window = &self.windows.full;
+        window.clear();
 
-        let (max_y, max_x) = Ui::screen_size();
+        let (max_y, max_x) = window.size();
         let text = "Quit. Are you sure?";
 
-        nc::wmove(window, max_y / 2, (max_x - text.chars().count() as i32) / 2);
-
-        nc::waddstr(window, text).expect("UI text must not contain NUL");
-        nc::wnoutrefresh(window);
+        window.move_to(max_y / 2, (max_x - text.chars().count() as i32) / 2);
+        window.write(text);
     }
 
     fn event(&mut self, event: Event) {
@@ -1350,11 +1310,5 @@ impl Ui {
                 LogEvent::AutoExploreBlocked => self.log("Can't get there."),
             },
         }
-    }
-}
-
-impl Drop for Ui {
-    fn drop(&mut self) {
-        nc::endwin();
     }
 }

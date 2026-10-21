@@ -1,6 +1,4 @@
-use ncurses as nc;
-use std::collections::HashMap;
-use std::collections::hash_map::Entry;
+use ratatui::style::{Color as TerminalColor, Style};
 
 /// One of 256 colors
 #[derive(Copy, Clone, Eq, PartialEq, Debug, Default, Hash)]
@@ -142,37 +140,9 @@ pub const SELF_HEAD_ACTOR_BG: RGB = RGB(0, 0, 5);
 pub const ENEMY_HEAD_ACTOR_BG: RGB = RGB(5, 0, 0);
 pub const ACTOR_HEAD_ACTOR_FG: RGB = RGB(5, 5, 5);
 
-pub struct Allocator {
-    map: HashMap<(Color, Color), i16>,
-    cur: i16,
-}
-
-impl Allocator {
-    pub fn new() -> Allocator {
-        Allocator {
-            cur: 1i16, // 0 is reserved for defaults
-            map: HashMap::new(),
-        }
-    }
-
-    pub fn get<C1, C2>(&mut self, fg: C1, bg: C2) -> i16
-    where
-        C1: Into<Color> + Clone,
-        C2: Into<Color> + Clone,
-    {
-        match self.map.entry((fg.clone().into(), bg.clone().into())) {
-            Entry::Occupied(i) => *i.get(),
-            Entry::Vacant(i) => {
-                assert!(
-                    (self.cur as i32) < nc::COLOR_PAIRS(),
-                    "curses run out of color pairs!"
-                );
-                let ret = self.cur;
-                i.insert(self.cur);
-                nc::init_pair(ret, fg.into().0 as i16, bg.into().0 as i16);
-                self.cur += 1;
-                ret
-            }
-        }
-    }
+/// Select indexed terminal colors without allocating a bounded color-pair table.
+pub fn style(fg: impl Into<Color>, bg: impl Into<Color>) -> Style {
+    Style::default()
+        .fg(TerminalColor::Indexed(fg.into().0))
+        .bg(TerminalColor::Indexed(bg.into().0))
 }

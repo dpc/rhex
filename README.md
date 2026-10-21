@@ -18,8 +18,9 @@ the `nix-command` feature in Nix.
 nix run .
 ```
 
-The flake supplies the Rust toolchain and native ncurses library; you do not need
-a separate `tput` program. Run from a writable directory: the game writes
+The terminal interface uses Crossterm for input and terminal modes, and Ratatui
+for buffered rendering. You do not need an ncurses library, a terminfo database,
+or a separate `tput` program. Run from a writable directory: the game writes
 `debug.log` there. The game has no save/load support.
 
 Press any key at the introduction, then choose a race (`a` for human).
@@ -27,6 +28,8 @@ In normal input mode, use `w`/`s` to move forward/backward, `a`/`d` to turn, and
 `q`/`e` to sidestep. `.` waits, `,` picks up an item, `I` opens inventory,
 `?` shows help, and F2 toggles Vi-style controls.
 To exit, press Escape, then `y` to confirm.
+If your terminal has fewer than 60 columns or 24 rows, the game pauses and asks
+you to resize it. Press Escape at this prompt to exit without confirmation.
 
 ## Develop
 
@@ -51,11 +54,16 @@ The flake exposes the game as the default package. Run individual checks with
 The `treefmt` package checks Rust, Nix, and TOML formatting.
 Clippy reports existing legacy-code warnings without treating them as errors.
 
-Without Nix, install a current Rust toolchain, a C compiler, pkg-config, and
-the wide-character ncurses development library, then run
-`cargo run --release --locked`. The ncurses Rust build script initializes a
-terminal while generating constants; in a headless build, set
-`TERM=xterm-256color` and install the corresponding terminfo entry.
+Without Nix, install a current Rust toolchain and a platform linker, then run
+`cargo run --release --locked`. Builds do not need a terminal. The PTY integration
+tests require Python 3 on Unix.
+
+At the time of the terminal migration, we updated all direct dependencies to
+their latest available stable release or upstream revision. The in-house `hex2d-dpcext`
+extension still declares an unused `rand` 0.8 dependency, so its older random-number
+dependency chain remains in the lockfile alongside the game's `rand` 0.10.
+We retain the upstream algorithms rather than vendor them to remove that
+dependency.
 
 ## Contributing
 

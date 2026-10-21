@@ -59,10 +59,6 @@
             craneLib = craneLib'.overrideArgs {
               pname = projectName;
               src = buildSrc;
-              nativeBuildInputs = [ pkgs.pkg-config ];
-              buildInputs = [ pkgs.ncurses ];
-              # ncurses-rs runs a constants generator which initializes curses.
-              env.TERM = "xterm-256color";
               env.RUSTDOCFLAGS = "-D warnings";
             };
           in
@@ -113,12 +109,9 @@
         devShells = flakeboxLib.mkShells {
           packages = [
             pkgs.taplo
-            pkgs.pkg-config
-            pkgs.ncurses
             pkgs.python3
             pkgs.vale
           ];
-          buildInputs = [ pkgs.ncurses ];
         };
       }
     );

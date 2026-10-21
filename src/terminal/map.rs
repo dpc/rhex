@@ -1,4 +1,3 @@
-use std::cell::RefCell;
 use std::collections::HashMap;
 
 use super::Window;
@@ -10,9 +9,9 @@ use crate::game::actor::{self, Race};
 use crate::game::{Location, item, tile};
 use hex2d::{Coordinate, Direction, Position};
 
-use ncurses as nc;
 use rand::prelude::{IndexedRandom, SliceRandom};
 use rand::rng;
+use ratatui::style::Modifier;
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
 struct DisplayCharacter {
@@ -590,8 +589,8 @@ impl MapRenderer {
         }
     }
 
-    pub fn draw_into(&self, window: &Window, calloc: &RefCell<color::Allocator>) {
-        window.clear(calloc);
+    pub fn draw_into(&self, window: &Window) {
+        window.clear();
 
         let (max_x, max_y) = (self.base.width, self.base.height);
         for vx in 0..max_x {
@@ -608,30 +607,13 @@ impl MapRenderer {
                         }
                     }
                 };
-                let cpair = nc::COLOR_PAIR(calloc.borrow_mut().get(ch.fg, ch.bg));
-                if ch.glyph <= (127u8 as char) {
-                    let c = (ch.glyph as nc::chtype) | cpair;
-                    nc::mvwaddch(
-                        window.window,
-                        vy as i32,
-                        vx as i32,
-                        if ch.bold { c | nc::A_BOLD } else { c },
-                    );
-                } else {
-                    let attrflag = if ch.bold { cpair | nc::A_BOLD } else { cpair };
-                    nc::wattron(window.window, attrflag);
-                    nc::mvwaddstr(
-                        window.window,
-                        vy as i32,
-                        vx as i32,
-                        &format!("{}", ch.glyph),
-                    )
-                    .expect("UI text must not contain NUL");
-                    nc::wattroff(window.window, attrflag);
+                let mut style = color::style(ch.fg, ch.bg);
+                if ch.bold {
+                    style = style.add_modifier(Modifier::BOLD);
                 }
+                window.put(vy as i32, vx as i32, ch.glyph, style);
             }
         }
-        nc::wrefresh(window.window);
     }
 
     fn coord_to_glyph_xy(&mut self, coord: Coordinate) -> Option<(usize, usize)> {
