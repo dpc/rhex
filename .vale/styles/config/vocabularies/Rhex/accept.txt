@@ -1,0 +1,15 @@
+[Rr]hex
+[Rr]oguelike
+[Rr]oguelikes
+ncurses
+hex2d
+flakebox
+selfci
+treefmt
+direnv
+Nix
+LLMs
+gameplay
+toolchain
+Clippy
+terminfo

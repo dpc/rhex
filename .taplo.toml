@@ -1,0 +1,10 @@
+exclude = [".rustfmt.toml"]
+
+[formatting]
+reorder_arrays = true
+reorder_keys = true
+
+[[rule]]
+formatting.reorder_keys = false
+include = ["**/Cargo.toml"]
+keys = ["bench", "bin", "example", "lib", "package", "test"]

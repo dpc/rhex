@@ -1,2 +1,5 @@
 target/
 debug.log
+/.direnv
+/result
+/result-*

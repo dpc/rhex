@@ -1,14 +1,14 @@
 use super::actor::{self, Actor, Slot};
-use rand::prelude::SliceRandom;
-use rand::{self, Rng};
-use rand::distributions::{Distribution, Standard};
+use rand::distr::{Distribution, StandardUniform};
+use rand::prelude::IndexedRandom;
+use rand::{self, RngExt};
 
 use std::cmp;
 use std::fmt::{self, Write};
 
 use self::Category::*;
-use self::Type::*;
 use self::Feature::*;
+use self::Type::*;
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub enum Category {
@@ -78,7 +78,6 @@ impl Feature {
         }
     }
 
-
     pub fn stats(&self) -> actor::EffectiveStats {
         let mut s: actor::EffectiveStats = Default::default();
 
@@ -98,9 +97,9 @@ impl fmt::Display for Feature {
     }
 }
 
-impl Distribution<Feature> for Standard {
-    fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> Feature {
-        match rng.gen_range(0..3) {
+impl Distribution<Feature> for StandardUniform {
+    fn sample<R: rand::Rng + ?Sized>(&self, rng: &mut R) -> Feature {
+        match rng.random_range(0..3) {
             0 => Infravision,
             1 => Light,
             2 => Regeneration,
@@ -243,34 +242,33 @@ impl fmt::Display for Item {
     }
 }
 
-
 pub fn random(level: i32) -> Box<Item> {
-
     let a = -(level / 2);
     let b = level + 2;
-    let mut rng = rand::thread_rng();
-    let lvrange = rand::distributions::Uniform::new(a, b);
-    let r = lvrange.sample(&mut rng) + lvrange.sample(&mut rng) +
-            lvrange.sample(&mut rng);
+    let mut rng = rand::rng();
+    let lvrange = rand::distr::Uniform::new(a, b).expect("nonempty item level range");
+    let r = lvrange.sample(&mut rng) + lvrange.sample(&mut rng) + lvrange.sample(&mut rng);
 
     let mut features = vec![];
     let mut chance = level;
     const PER_LOOP: i32 = 30;
-    let looprange = rand::distributions::Uniform::new(0, PER_LOOP);
+    let looprange = rand::distr::Uniform::new(0, PER_LOOP).expect("positive item feature range");
     while looprange.sample(&mut rng) < chance {
         features.push(rand::random());
         chance = cmp::max(0, chance - PER_LOOP);
     }
 
-    Box::new(Item::new(match r {
-                           1 => *[Knife, Pickaxe].choose(&mut rng).unwrap(),
-                           2 => HealthPotion,
-                           3 => *[Bow, Cloak].choose(&mut rng).unwrap(),
-                           5 => *[Helmet, Sword].choose(&mut rng).unwrap(),
-                           6 => Leather,
-                           8 => *[Boots, Buckler].choose(&mut rng).unwrap(),
-                           10 => *[Plate, Axe].choose(&mut rng).unwrap(),
-                           _ => Junk,
-                       },
-                       features))
+    Box::new(Item::new(
+        match r {
+            1 => *[Knife, Pickaxe].choose(&mut rng).unwrap(),
+            2 => HealthPotion,
+            3 => *[Bow, Cloak].choose(&mut rng).unwrap(),
+            5 => *[Helmet, Sword].choose(&mut rng).unwrap(),
+            6 => Leather,
+            8 => *[Boots, Buckler].choose(&mut rng).unwrap(),
+            10 => *[Plate, Axe].choose(&mut rng).unwrap(),
+            _ => Junk,
+        },
+        features,
+    ))
 }

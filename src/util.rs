@@ -1,25 +1,22 @@
+use rand::{self, RngExt};
 use std::cmp;
-use rand::{self, Rng};
 
-use hex2d::{Position, Direction, Coordinate, Angle};
+use hex2d::{Angle, Coordinate, Direction, Position};
 
 pub fn random_pos(x: i32, y: i32) -> Position {
-
-    let dir = Direction::from_int(rand::thread_rng().gen_range(0..6));
+    let dir = Direction::from_int(rand::rng().random_range(0..6));
 
     Position::new(Coordinate::new(x, y), dir)
 }
 
-
 /// Roll a against b
 pub fn roll(a: i32, b: i32) -> bool {
-
     let base = cmp::max(a, b) / 4;
 
     let a = cmp::max(a - base, 1);
     let b = cmp::max(b - base, 1);
 
-    rand::thread_rng().gen_range(0..(a + b)) < a
+    rand::rng().random_range(0..(a + b)) < a
 }
 
 pub fn circular_move(center: Position, cur: Position, angle: Angle) -> Position {

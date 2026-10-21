@@ -1,31 +1,30 @@
 use std::cell::RefCell;
-use std::collections::{VecDeque};
+use std::collections::VecDeque;
 use std::env;
-use std::{thread, cmp, fmt};
 use std::fmt::Write as FmtWrite;
-use std::process::Command;
-use std::time::{Instant, Duration};
+use std::time::{Duration, Instant};
+use std::{cmp, fmt, thread};
 
 use num::integer::Integer;
 
-use game::Action::*;
+use crate::game::Action::*;
 
+use hex2d::{Angle, Back, Coordinate, Forward, Left, Position, Right};
 use ncurses as nc;
-use hex2d::{Position, Coordinate, Angle, Left, Right, Forward, Back};
 
-use hex2dext::algo::bfs;
+use crate::hex2dext::algo::bfs;
 
 use super::consts::*;
-use super::{color, Window};
-use super::{LogEntry, AutoMoveType, AutoMoveAction, LogEvent, Event, GoToType};
-use super::{Error, Result};
 use super::map::MapRenderer;
+use super::{AutoMoveAction, AutoMoveType, Event, GoToType, LogEntry, LogEvent};
+use super::{Error, Result};
+use super::{Window, color};
 
-use game::{actor, Location, Actor, area};
-use game;
-use game::actor::{Race, Slot};
-use game::tile;
-use util;
+use crate::game;
+use crate::game::actor::{Race, Slot};
+use crate::game::tile;
+use crate::game::{Actor, Location, actor, area};
+use crate::util;
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
 enum InputMode {
@@ -46,7 +45,7 @@ impl fmt::Display for InputMode {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
             InputMode::Vi => write!(f, "Vi"),
-            InputMode::Normal => write!(f, "Normal")
+            InputMode::Normal => write!(f, "Normal"),
         }
     }
 }
@@ -77,7 +76,6 @@ impl Windows {
             full: fs_window,
         }
     }
-
 }
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
@@ -125,7 +123,7 @@ pub struct Ui {
     red_color: nc::attr_t,
     green_color: nc::attr_t,
 
-    input_mode : InputMode,
+    input_mode: InputMode,
 
     engine: game::Engine,
     exit: bool,
@@ -159,18 +157,17 @@ enum GlobalAction {
 
 impl Ui {
     pub fn new() -> Result<Self> {
-        if Ui::get_terminal_colors() != 256 {
-            return Err(Error::ColorCount);
-        }
-
-        if env::var_os("ESCDELAY").is_none() {
-            env::set_var("ESCDELAY", "25");
-        }
-
         nc::setlocale(nc::constants::LcCategory::all, "");
 
         nc::initscr();
         nc::start_color();
+        if !nc::has_colors() || nc::COLORS() < 256 {
+            nc::endwin();
+            return Err(Error::ColorCount);
+        }
+        if env::var_os("ESCDELAY").is_none() {
+            nc::set_escdelay(25);
+        }
         nc::keypad(nc::stdscr(), true);
         nc::noecho();
         nc::raw();
@@ -189,7 +186,6 @@ impl Ui {
 
         let engine = game::Engine::new();
 
-
         let cpair = nc::COLOR_PAIR(calloc.get(color::VISIBLE_FG, color::BACKGROUND_BG));
         nc::bkgd(cpair);
         nc::doupdate();
@@ -207,7 +203,7 @@ impl Ui {
             red_color: red_color,
             green_color: green_color,
 
-            input_mode : InputMode::Normal,
+            input_mode: InputMode::Normal,
 
             exit: false,
             spawned: false,
@@ -275,22 +271,20 @@ impl Ui {
 
                 self.draw_stats();
             }
-            Mode::FullScreen(fs_mode) => {
-                match fs_mode {
-                    FSMode::Help => {
-                        self.draw_help();
-                    }
-                    FSMode::Quit => {
-                        self.draw_quit();
-                    }
-                    FSMode::Intro => {
-                        self.draw_intro();
-                    }
-                    FSMode::PickRace => {
-                        self.draw_pickrace();
-                    }
+            Mode::FullScreen(fs_mode) => match fs_mode {
+                FSMode::Help => {
+                    self.draw_help();
                 }
-            }
+                FSMode::Quit => {
+                    self.draw_quit();
+                }
+                FSMode::Intro => {
+                    self.draw_intro();
+                }
+                FSMode::PickRace => {
+                    self.draw_pickrace();
+                }
+            },
         }
 
         let (max_y, max_x) = Ui::screen_size();
@@ -307,18 +301,19 @@ impl Ui {
         let player = self.player();
         let cur_loc = self.current_location();
 
-        !player.was_attacked_by.is_empty() || player.discovered_areas.iter().any(|_| true) ||
-        player.visible.iter().any(|&coord| {
-            cur_loc.at(coord)
-                   .actor_map_or(false, |a| a.race == actor::Race::Rat)
-        }) ||
-        player.discovered.iter().any(|&coord| {
-            cur_loc.at(coord)
-                   .item_map_or(false, |_| true)
-        }) ||
-        player.heard
-              .iter()
-              .any(|(c, _)| !player.sees(*c)) || player.discovered_stairs(cur_loc)
+        !player.was_attacked_by.is_empty()
+            || player.discovered_areas.iter().any(|_| true)
+            || player.visible.iter().any(|&coord| {
+                cur_loc
+                    .at(coord)
+                    .actor_map_or(false, |a| a.race == actor::Race::Rat)
+            })
+            || player
+                .discovered
+                .iter()
+                .any(|&coord| cur_loc.at(coord).item_map_or(false, |_| true))
+            || player.heard.iter().any(|(c, _)| !player.sees(*c))
+            || player.discovered_stairs(cur_loc)
     }
 
     pub fn automove_action(&self, movetype: AutoMoveType) -> AutoMoveAction {
@@ -343,20 +338,14 @@ impl Ui {
 
         let start = player.pos.coord;
 
-        let mut bfs = bfs::Traverser::new(|c| {
-                                              c == start ||
-                                              (cur_loc.at(c).tile().is_passable() &&
-                                               player.knows(c))
-                                          },
-                                          |c| {
-                                              cur_loc.at(c).tile().feature ==
-                                              Some(tile::Feature::Stairs)
-                                          },
-                                          start);
+        let mut bfs = bfs::Traverser::new(
+            |c| c == start || (cur_loc.at(c).tile().is_passable() && player.knows(c)),
+            |c| cur_loc.at(c).tile().feature == Some(tile::Feature::Stairs),
+            start,
+        );
 
         if let Some(dst) = bfs.find() {
             if let Some(neigh) = bfs.backtrace_last(dst) {
-
                 if let Some(ndir) = player.pos.coord.direction_to_cw(neigh) {
                     if ndir == player.pos.dir {
                         if cur_loc.at(neigh).is_occupied() {
@@ -384,14 +373,19 @@ impl Ui {
 
         let start = player.pos.coord;
 
-        let mut bfs = bfs::Traverser::new(|c| c == start || cur_loc.at(c).tile().is_passable(),
-                                          |c| !player.knows(c),
-                                          start);
+        let mut bfs = bfs::Traverser::new(
+            |c| c == start || cur_loc.at(c).tile().is_passable(),
+            |c| !player.knows(c),
+            start,
+        );
 
         if let Some(dst) = bfs.find() {
             if let Some(neigh) = bfs.backtrace_last(dst) {
-
-                let ndir = player.pos.coord.direction_to_cw(neigh).expect("bfs gave me trash");
+                let ndir = player
+                    .pos
+                    .coord
+                    .direction_to_cw(neigh)
+                    .expect("bfs gave me trash");
                 if ndir == player.pos.dir {
                     if cur_loc.at(neigh).is_occupied() {
                         AutoMoveAction::Blocked
@@ -415,10 +409,12 @@ impl Ui {
     }
 
     fn engine_change(&mut self, actor_id: actor::Id) {
-        if self.automoving.is_some() &&
-            self.automoving_stopped_turn != self.engine.turn() && self.should_stop_automoving() {
-                self.automoving_stop();
-            }
+        if self.automoving.is_some()
+            && self.automoving_stopped_turn != self.engine.turn()
+            && self.should_stop_automoving()
+        {
+            self.automoving_stop();
+        }
 
         let player_id = self.current_location().player_id();
 
@@ -558,7 +554,7 @@ impl Ui {
         self.action_push(game::Action::Ranged(coord))
     }
 
-    pub fn queue_action(&mut self, action : game::Action) {
+    pub fn queue_action(&mut self, action: game::Action) {
         self.action_push(action)
     }
 
@@ -574,35 +570,24 @@ impl Ui {
         self.input_mode == InputMode::Vi
     }
 
-    fn key_to_action_normal(&self, key : i32) -> Option<Action> {
+    fn key_to_action_normal(&self, key: i32) -> Option<Action> {
         let action = match (key, self.in_vi_input_mode()) {
-            (KEY_LOWH, true) |
-            (KEY_LOWA, false) |
-            (nc::KEY_LEFT, _) => Game(Turn(Left)),
-            (KEY_LOWL, true) |
-            (KEY_LOWD, false) |
-            (nc::KEY_RIGHT, _) => Game(Turn(Right)),
-            (KEY_LOWK, true) |
-            (KEY_LOWW, false) |
-            (nc::KEY_UP, _) => Game(Move(Forward)),
+            (KEY_LOWH, true) | (KEY_LOWA, false) | (nc::KEY_LEFT, _) => Game(Turn(Left)),
+            (KEY_LOWL, true) | (KEY_LOWD, false) | (nc::KEY_RIGHT, _) => Game(Turn(Right)),
+            (KEY_LOWK, true) | (KEY_LOWW, false) | (nc::KEY_UP, _) => Game(Move(Forward)),
             (KEY_LOWC, _) => Game(Charge),
             (KEY_LOWU, true) => Game(Spin(Left)),
             (KEY_LOWI, true) => Game(Spin(Right)),
-            (KEY_CAPH, true) |
-            (KEY_LOWQ, false) => Game(Move(Left)),
-            (KEY_CAPL, true) |
-            (KEY_LOWE, false) => Game(Move(Right)),
-            (KEY_LOWJ, true) |
-            (KEY_LOWS, false) |
-            (nc::KEY_DOWN, _) => Game(Move(Back)),
+            (KEY_CAPH, true) | (KEY_LOWQ, false) => Game(Move(Left)),
+            (KEY_CAPL, true) | (KEY_LOWE, false) => Game(Move(Right)),
+            (KEY_LOWJ, true) | (KEY_LOWS, false) | (nc::KEY_DOWN, _) => Game(Move(Back)),
             (KEY_DOT, _) => Game(Wait),
             (KEY_COMMA, _) => Game(Pick),
             (KEY_DESCEND, _) => Game(Descend),
             (KEY_LOWO, _) => AutoMove(AutoMoveType::Explore),
             (KEY_CAPK, true) => AutoMove(AutoMoveType::Walk),
             (KEY_CAPW, false) => AutoMove(AutoMoveType::Walk),
-            (KEY_LOWQ, true) |
-            (KEY_ESC, _) => ModeSwitch(Mode::FullScreen(FSMode::Quit)),
+            (KEY_LOWQ, true) | (KEY_ESC, _) => ModeSwitch(Mode::FullScreen(FSMode::Quit)),
             (KEY_CAPI, _) => ModeSwitch(Mode::Inventory(InvMode::View)),
             (KEY_CAPE, _) => ModeSwitch(Mode::Inventory(InvMode::Equip)),
             (KEY_CAPD, _) => ModeSwitch(Mode::Inventory(InvMode::Drop_)),
@@ -610,75 +595,67 @@ impl Ui {
             (KEY_LOWF, _) => ModeSwitch(Mode::Target(TargetMode::Ranged)),
             (KEY_HELP, _) => ModeSwitch(Mode::FullScreen(FSMode::Help)),
             (KEY_GOTO, _) => ModeSwitch(Mode::GoTo),
-            _ => { return None}
+            _ => return None,
         };
         Some(action)
     }
 
-    fn key_to_action_global(&self, key : i32) -> Option<GlobalAction> {
+    fn key_to_action_global(&self, key: i32) -> Option<GlobalAction> {
         let action = match key {
-            nc::KEY_F2 => ToggleInputMode,
+            key if key == nc::KEY_F(2) => ToggleInputMode,
             _ => return None,
         };
 
         Some(action)
     }
 
-    pub fn input_handle_key_mode_specific(&mut self, key : i32) {
+    pub fn input_handle_key_mode_specific(&mut self, key: i32) {
         match self.mode {
-            Mode::FullScreen(fs_mode) => {
-                match fs_mode {
-                    FSMode::Quit => {
-                        match key {
-                            KEY_LOWY | KEY_CAPY => self.exit = true,
-                            _ => self.mode_switch_to(Mode::Normal),
-                        }
+            Mode::FullScreen(fs_mode) => match fs_mode {
+                FSMode::Quit => match key {
+                    KEY_LOWY | KEY_CAPY => self.exit = true,
+                    _ => self.mode_switch_to(Mode::Normal),
+                },
+                FSMode::Intro => match key {
+                    _ => self.mode_switch_to(Mode::FullScreen(FSMode::PickRace)),
+                },
+                FSMode::PickRace => match key {
+                    KEY_LOWA => {
+                        self.initial_spawn(Race::Human);
+                        self.mode_switch_to(Mode::Normal);
                     }
-                    FSMode::Intro => {
-                        match key {
-                            _ => self.mode_switch_to(Mode::FullScreen(FSMode::PickRace)),
-                        }
+                    KEY_LOWB => {
+                        self.initial_spawn(Race::Elf);
+                        self.mode_switch_to(Mode::Normal);
                     }
-                    FSMode::PickRace => {
-                        match key {
-                            KEY_LOWA => {
-                                self.initial_spawn(Race::Human);
-                                self.mode_switch_to(Mode::Normal);
+                    KEY_LOWC => {
+                        self.initial_spawn(Race::Dwarf);
+                        self.mode_switch_to(Mode::Normal);
+                    }
+                    _ => {}
+                },
+                _ => match key {
+                    _ => self.mode_switch_to(Mode::Normal),
+                },
+            },
+            Mode::Normal => {
+                if let Some(action) = self.key_to_action_normal(key) {
+                    match action {
+                        Game(action) => self.queue_action(action),
+                        ModeSwitch(mode @ Mode::Target(TargetMode::Ranged)) => {
+                            if self.player().can_attack_ranged() {
+                                self.target_pos = None;
+                                self.mode_switch_to(mode);
                             }
-                            KEY_LOWB => {
-                                self.initial_spawn(Race::Elf);
-                                self.mode_switch_to(Mode::Normal);
-                            }
-                            KEY_LOWC => {
-                                self.initial_spawn(Race::Dwarf);
-                                self.mode_switch_to(Mode::Normal);
-                            }
-                            _ => {}
                         }
-                    }
-                    _ => {
-                        match key {
-                            _ => self.mode_switch_to(Mode::Normal),
-                        }
-                    }
-                }
-            }
-            Mode::Normal => if let Some(action) = self.key_to_action_normal(key) {
-                match action {
-                    Game(action) => self.queue_action(action),
-                    ModeSwitch(mode @ Mode::Target(TargetMode::Ranged)) => {
-                        if self.player().can_attack_ranged() {
+                        ModeSwitch(mode) => {
                             self.target_pos = None;
                             self.mode_switch_to(mode);
                         }
-                    },
-                    ModeSwitch(mode) => {
-                        self.target_pos = None;
-                        self.mode_switch_to(mode);
+                        AutoMove(automove_type) => self.automoving = Some(automove_type),
                     }
-                    AutoMove(automove_type) => self.automoving = Some(automove_type),
                 }
-            },
+            }
             Mode::Inventory(InvMode::Equip) => {
                 let ch = key as u8 as char;
                 match key {
@@ -690,7 +667,7 @@ impl Ui {
                             }
                         }
                         _ => {}
-                    }
+                    },
                 }
             }
             Mode::Inventory(InvMode::View) => {
@@ -700,7 +677,7 @@ impl Ui {
                     _ => match ch {
                         'a'..='z' | 'A'..='Z' => {}
                         _ => {}
-                    }
+                    },
                 }
             }
             Mode::Inventory(InvMode::Drop_) => {
@@ -714,7 +691,7 @@ impl Ui {
                             }
                         }
                         _ => {}
-                    }
+                    },
                 }
             }
             Mode::Examine => {
@@ -746,8 +723,8 @@ impl Ui {
                         self.redraw();
                     }
                     KEY_CAPJ => {
-                        self.target_pos = Some(pos + Coordinate::from(
-                                               pos.dir + Angle::Back).scale(5));
+                        self.target_pos =
+                            Some(pos + Coordinate::from(pos.dir + Angle::Back).scale(5));
                         self.redraw();
                     }
                     _ => {}
@@ -763,9 +740,10 @@ impl Ui {
                         self.mode_switch_to(Mode::Normal);
                     }
                     KEY_ENTER | KEY_LOWF => {
-                        match self.target_pos
-                        {
-                            Some(target) => { self.queue_ranged(target.coord); }
+                        match self.target_pos {
+                            Some(target) => {
+                                self.queue_ranged(target.coord);
+                            }
                             None => { /* Nothing */ }
                         }
                         self.target_pos = None;
@@ -799,7 +777,7 @@ impl Ui {
         }
     }
 
-    pub fn input_handle_key(&mut self, key : i32) {
+    pub fn input_handle_key(&mut self, key: i32) {
         if let Some(_) = self.key_to_action_global(key) {
             self.input_mode.toggle();
             self.redraw();
@@ -810,7 +788,6 @@ impl Ui {
 
     // Notice changed between start turn and it's end
     fn update_changes(&mut self) {
-
         let cur_loc = self.current_location();
         let player = self.player();
 
@@ -818,19 +795,23 @@ impl Ui {
             return;
         }
 
-        let discovered_areas = player.discovered_areas
-                                      .iter()
-                                      .filter_map(|coord| cur_loc.at(*coord).tile().area);
+        let discovered_areas = player
+            .discovered_areas
+            .iter()
+            .filter_map(|coord| cur_loc.at(*coord).tile().area);
 
         if let Some(s) = self.format_areas(discovered_areas.map(|area| area.type_)) {
             self.log(&s);
         }
 
-        for item_coord in player.discovered
-                                .iter()
-                                .filter(|&coord| cur_loc.at(*coord).item_map_or(false, |_| true)) {
-            let item_descr = cur_loc.at(*item_coord)
-                                    .item_map_or("".to_owned(), |i| i.description());
+        for item_coord in player
+            .discovered
+            .iter()
+            .filter(|&coord| cur_loc.at(*coord).item_map_or(false, |_| true))
+        {
+            let item_descr = cur_loc
+                .at(*item_coord)
+                .item_map_or("".to_owned(), |i| i.description());
             self.log(&format!("You've found {}.", item_descr));
         }
 
@@ -840,14 +821,12 @@ impl Ui {
 
         for res in &player.was_attacked_by {
             if res.success {
-                self.log(&format!("{} hit you {}for {} dmg.",
-                                  res.who,
-                                  if res.behind {
-                                      "from behind "
-                                  } else {
-                                      ""
-                                  },
-                                  res.dmg));
+                self.log(&format!(
+                    "{} hit you {}for {} dmg.",
+                    res.who,
+                    if res.behind { "from behind " } else { "" },
+                    res.dmg
+                ));
             } else {
                 self.log(&format!("{} missed you.", res.who));
             }
@@ -855,29 +834,27 @@ impl Ui {
 
         for res in &player.did_attack {
             if res.success {
-                self.log(&format!("You hit {} {}for {} dmg.",
-                                  res.who,
-                                  if res.behind {
-                                      "from behind "
-                                  } else {
-                                      ""
-                                  },
-                                  res.dmg));
+                self.log(&format!(
+                    "You hit {} {}for {} dmg.",
+                    res.who,
+                    if res.behind { "from behind " } else { "" },
+                    res.dmg
+                ));
             } else {
                 self.log(&format!("You missed {}.", res.who));
             }
         }
 
-        let noises = player.heard
-                           .iter()
-                           .filter(|&(c, _)| *c != player.pos.coord)
-                           .filter(|&(c, _)| !player.sees(*c));
+        let noises = player
+            .heard
+            .iter()
+            .filter(|&(c, _)| *c != player.pos.coord)
+            .filter(|&(c, _)| !player.sees(*c));
 
         for (_, &noise) in noises {
             self.log(&format!("You hear {}.", noise.description()));
         }
     }
-
 
     pub fn log(&self, s: &str) {
         let turn = self.engine.turn();
@@ -903,13 +880,25 @@ impl Ui {
             ..
         } = *self;
 
-        map_renderer.update(engine.current_location(), mode, target_pos, anim_frame_count);
+        map_renderer.update(
+            engine.current_location(),
+            mode,
+            target_pos,
+            anim_frame_count,
+        );
         map_renderer.draw_into(&windows.map, &calloc);
         nc::wnoutrefresh(windows.map.window);
     }
 
-    fn draw_stats_bar(&self, window: nc::WINDOW, y: i32, name: &str, cur: i32, prev: i32, max: i32) {
-
+    fn draw_stats_bar(
+        &self,
+        window: nc::WINDOW,
+        y: i32,
+        name: &str,
+        cur: i32,
+        prev: i32,
+        max: i32,
+    ) {
         let (max_y, max_x) = Ui::window_size(window);
 
         if max_x < 6 || max_y < 1 {
@@ -922,7 +911,7 @@ impl Ui {
         let max = cmp::max(max, 1) as u32;
 
         nc::wattron(window, self.label_color);
-        nc::mvwaddstr(window, y, 0, &format!("{}: ", name));
+        nc::mvwaddstr(window, y, 0, &format!("{}: ", name)).expect("UI text must not contain NUL");
 
         let width = max_x as u32 - 4 - name.chars().count() as u32;
         let cur_w = cur * width / max;
@@ -938,30 +927,32 @@ impl Ui {
             };
             nc::waddch(window, ch);
         }
-        nc::mvwaddch(window, y, max_x-1, self.text_color | (']' as nc::chtype));
+        nc::mvwaddch(window, y, max_x - 1, self.text_color | (']' as nc::chtype));
     }
 
     fn draw_turn<T>(&self, window: nc::WINDOW, label: &str, val: T)
-        where T: Integer + fmt::Display
+    where
+        T: Integer + fmt::Display,
     {
         self.draw_label(window, label);
 
         nc::wattron(window, self.text_color);
-        nc::waddstr(window, &format!(" {:<8}", val));
+        nc::waddstr(window, &format!(" {:<8}", val)).expect("UI text must not contain NUL");
     }
 
     fn draw_val<T>(&self, window: nc::WINDOW, label: &str, val: T)
-        where T: Integer + fmt::Display
+    where
+        T: Integer + fmt::Display,
     {
         self.draw_label(window, label);
 
         nc::wattron(window, self.text_color);
-        nc::waddstr(window, &format!("{:>2} ", val));
+        nc::waddstr(window, &format!("{:>2} ", val)).expect("UI text must not contain NUL");
     }
 
     fn draw_label(&self, window: nc::WINDOW, label: &str) {
         nc::wattron(window, self.label_color);
-        nc::waddstr(window, &format!("{}:", label));
+        nc::waddstr(window, &format!("{}:", label)).expect("UI text must not contain NUL");
     }
 
     fn draw_item(&self, window: nc::WINDOW, astate: &Actor, label: &str, slot: Slot) {
@@ -974,7 +965,8 @@ impl Ui {
         }
 
         if let Some(&(_, ref item)) = astate.items_equipped.get(&slot) {
-            nc::waddstr(window, &format!("{:^13}", item.description()));
+            nc::waddstr(window, &format!("{:^13}", item.description()))
+                .expect("UI text must not contain NUL");
         } else {
             nc::waddch(window, '-' as nc::chtype);
         }
@@ -989,22 +981,27 @@ impl Ui {
 
         nc::wattron(window, self.text_color);
         if !player.items_equipped.is_empty() {
-            nc::waddstr(window, &format!("Equipped: \n"));
+            nc::waddstr(window, &format!("Equipped: \n")).expect("UI text must not contain NUL");
             for (slot, &(ref ch, ref i)) in &player.items_equipped {
-                nc::waddstr(window,
-                            &format!(" {} - {} [{:?}]\n", ch, i.description(), slot));
+                nc::waddstr(
+                    window,
+                    &format!(" {} - {} [{:?}]\n", ch, i.description(), slot),
+                )
+                .expect("UI text must not contain NUL");
             }
-            nc::waddstr(window, &format!("\n"));
+            nc::waddstr(window, &format!("\n")).expect("UI text must not contain NUL");
         }
 
-        nc::waddstr(window, &format!("Inventory: \n"));
+        nc::waddstr(window, &format!("Inventory: \n")).expect("UI text must not contain NUL");
         if !player.items_backpack.is_empty() {
             for (ch, i) in &player.items_backpack {
-                nc::waddstr(window, &format!(" {} - {}\n", ch, i.description()));
+                nc::waddstr(window, &format!(" {} - {}\n", ch, i.description()))
+                    .expect("UI text must not contain NUL");
             }
         }
 
-        nc::waddstr(window, &format!("\n[ESC] to close...\n"));
+        nc::waddstr(window, &format!("\n[ESC] to close...\n"))
+            .expect("UI text must not contain NUL");
 
         nc::wnoutrefresh(window);
     }
@@ -1042,33 +1039,44 @@ impl Ui {
         self.draw_val(window, "Dex", player.stats.base.dex);
 
         y += 1;
-        self.draw_stats_bar(window, y,
-                            "HP",
-                            player.hp,
-                            player.saved_hp,
-                            player.stats.base.max_hp);
+        self.draw_stats_bar(
+            window,
+            y,
+            "HP",
+            player.hp,
+            player.saved_hp,
+            player.stats.base.max_hp,
+        );
 
         y += 1;
-        self.draw_stats_bar(window, y,
-                            "MP",
-                            player.mp,
-                            player.saved_mp,
-                            player.stats.base.max_mp);
+        self.draw_stats_bar(
+            window,
+            y,
+            "MP",
+            player.mp,
+            player.saved_mp,
+            player.stats.base.max_mp,
+        );
 
         y += 1;
-        self.draw_stats_bar(window, y,
-                            "SP",
-                            player.sp,
-                            player.saved_sp,
-                            player.stats.base.max_sp);
+        self.draw_stats_bar(
+            window,
+            y,
+            "SP",
+            player.sp,
+            player.saved_sp,
+            player.stats.base.max_sp,
+        );
 
-        let slots = [("R", Slot::RHand),
-                     ("L", Slot::LHand),
-                     ("F", Slot::Feet),
-                     ("B", Slot::Body),
-                     ("H", Slot::Head),
-                     ("C", Slot::Cloak),
-                     ("Q", Slot::Quick)];
+        let slots = [
+            ("R", Slot::RHand),
+            ("L", Slot::LHand),
+            ("F", Slot::Feet),
+            ("B", Slot::Body),
+            ("H", Slot::Head),
+            ("C", Slot::Cloak),
+            ("Q", Slot::Quick),
+        ];
 
         for (i, &(string, slot)) in slots.iter().enumerate() {
             if i & 1 == 0 {
@@ -1094,7 +1102,7 @@ impl Ui {
         let descr = self.tile_description(head, player, cur_loc);
         self.draw_label(window, "In front");
         nc::wattron(window, self.text_color);
-        nc::waddstr(window, &format!(" {}", descr));
+        nc::waddstr(window, &format!(" {}", descr)).expect("UI text must not contain NUL");
 
         y += 1;
         nc::wmove(window, y, 0);
@@ -1107,23 +1115,25 @@ impl Ui {
     // TODO: Consider the distance to the Item to print something
     // like "you see x in the distance", "you find yourself in x".
     fn format_areas<I>(&self, mut i: I) -> Option<String>
-        where I: Iterator,
-              <I as Iterator>::Item: fmt::Display
+    where
+        I: Iterator,
+        <I as Iterator>::Item: fmt::Display,
     {
-        if let Some(descr) = i.next() {
-            let mut s = String::new();
-            write!(&mut s, "{}", "You see: ").unwrap();
-            write!(&mut s, "{}", descr).unwrap();
-
-            for ref descr in i {
-                write!(&mut s, ", ").unwrap();
+        match i.next() {
+            Some(descr) => {
+                let mut s = String::new();
+                write!(&mut s, "{}", "You see: ").unwrap();
                 write!(&mut s, "{}", descr).unwrap();
-            }
 
-            write!(&mut s, ".").unwrap();
-            Some(s)
-        } else {
-            None
+                for ref descr in i {
+                    write!(&mut s, ", ").unwrap();
+                    write!(&mut s, "{}", descr).unwrap();
+                }
+
+                write!(&mut s, ".").unwrap();
+                Some(s)
+            }
+            _ => None,
         }
     }
 
@@ -1149,11 +1159,12 @@ impl Ui {
         fg.map(|fg| calloc.get(fg, color::BACKGROUND_BG))
     }
 
-    fn tile_description(&self,
-                        coord: Coordinate,
-                        astate: &Actor,
-                        gstate: &game::Location)
-                        -> String {
+    fn tile_description(
+        &self,
+        coord: Coordinate,
+        astate: &Actor,
+        gstate: &game::Location,
+    ) -> String {
         if !astate.knows(coord) {
             return "Unknown".to_owned();
         }
@@ -1161,37 +1172,38 @@ impl Ui {
         let tile_type = gstate.at(coord).tile().type_;
         let tile = gstate.at(coord).tile();
         let feature_descr = tile.feature.map(|f| f.description().to_owned());
-        let item_descr = gstate.at(coord).item_map_or(None, |i| Some(i.description().to_owned()));
+        let item_descr = gstate
+            .at(coord)
+            .item_map_or(None, |i| Some(i.description().to_owned()));
 
         let actor_descr = if astate.sees(coord) || astate.is_dead() {
             gstate.at(coord).actor_map_or(None, |a| {
-                Some(match a.race {
-                         // Race::Pony => "A Pony",
-                         Race::Rat => "A rat",
-                         Race::Goblin => "Goblin",
-                         Race::Troll => "Troll",
-                         Race::Human => "Human",
-                         Race::Elf => "Elf",
-                         Race::Dwarf => "Dwarf",
-                     }
-                     .to_owned())
+                Some(
+                    match a.race {
+                        // Race::Pony => "A Pony",
+                        Race::Rat => "A rat",
+                        Race::Goblin => "Goblin",
+                        Race::Troll => "Troll",
+                        Race::Human => "Human",
+                        Race::Elf => "Elf",
+                        Race::Dwarf => "Dwarf",
+                    }
+                    .to_owned(),
+                )
             })
         } else {
             None
         };
 
         match (tile_type, feature_descr, actor_descr, item_descr) {
-
             (_, _, Some(a_descr), _) => a_descr,
             (_, _, _, Some(i_descr)) => i_descr,
             (_, Some(f_descr), _, _) => f_descr.to_owned(),
             (tile::Wall, _, _, _) => "a wall".to_owned(),
-            (tile::Empty, _, _, _) => {
-                match tile.area.and_then(|a| Some(a.type_)) {
-                    Some(area::Room(_)) => "room".to_owned(),
-                    None => "nothing".to_owned(),
-                }
-            }
+            (tile::Empty, _, _, _) => match tile.area.and_then(|a| Some(a.type_)) {
+                Some(area::Room(_)) => "room".to_owned(),
+                None => "nothing".to_owned(),
+            },
             _ => tile.type_.description().to_owned(),
         }
     }
@@ -1204,13 +1216,16 @@ impl Ui {
 
         match self.mode {
             Mode::GoTo => {
-                nc::waddstr(window, &format!("Go to where?\n"));
+                nc::waddstr(window, &format!("Go to where?\n"))
+                    .expect("UI text must not contain NUL");
             }
             Mode::Inventory(InvMode::Drop_) => {
-                nc::waddstr(window, &format!("Drop what?\n"));
+                nc::waddstr(window, &format!("Drop what?\n"))
+                    .expect("UI text must not contain NUL");
             }
             Mode::Inventory(InvMode::Equip) => {
-                nc::waddstr(window, &format!("Equip/use what?\n"));
+                nc::waddstr(window, &format!("Equip/use what?\n"))
+                    .expect("UI text must not contain NUL");
             }
             _ => {}
         }
@@ -1226,7 +1241,7 @@ impl Ui {
                         let cpair = nc::COLOR_PAIR(color);
                         nc::wattron(window, cpair);
                     }
-                    nc::waddstr(window, &i.text);
+                    nc::waddstr(window, &i.text).expect("UI text must not contain NUL");
                 }
                 nc::waddch(window, '\n' as nc::chtype);
             }
@@ -1243,17 +1258,25 @@ impl Ui {
         nc::wmove(window, 0, 0);
 
         nc::waddstr(window,
-                    "This game is in very early development. We are looking for feedback and contributors!\n\n");
-        nc::waddstr(window,
-                    "See help: https://github.com/dpc/rhex/wiki/Help-How-to-Play\n");
-        nc::waddstr(window,
-                    "Join chat: https://gitter.im/dpc/rhex\n");
-        nc::waddstr(window,
-                    "Project page: https://github.com/dpc/rhex\n\n");
-        nc::waddstr(window,
-                    &format!("You can press {} in the game for offline help.\n\n",
-                             KEY_HELP as u8 as char));
-        nc::waddstr(window, "Press anything to start.");
+                    "This game is in very early development. We are looking for feedback and contributors!\n\n").expect("UI text must not contain NUL");
+        nc::waddstr(
+            window,
+            "See help: https://github.com/dpc/rhex/wiki/Help-How-to-Play\n",
+        )
+        .expect("UI text must not contain NUL");
+        nc::waddstr(window, "Join chat: https://gitter.im/dpc/rhex\n")
+            .expect("UI text must not contain NUL");
+        nc::waddstr(window, "Project page: https://github.com/dpc/rhex\n\n")
+            .expect("UI text must not contain NUL");
+        nc::waddstr(
+            window,
+            &format!(
+                "You can press {} in the game for offline help.\n\n",
+                KEY_HELP as u8 as char
+            ),
+        )
+        .expect("UI text must not contain NUL");
+        nc::waddstr(window, "Press anything to start.").expect("UI text must not contain NUL");
         nc::wnoutrefresh(window);
     }
 
@@ -1263,10 +1286,10 @@ impl Ui {
 
         nc::wmove(window, 0, 0);
 
-        nc::waddstr(window, "Pick your race\n\n");
-        nc::waddstr(window, "a) Human\n");
-        nc::waddstr(window, "b) Elf\n");
-        nc::waddstr(window, "c) Dwarf\n");
+        nc::waddstr(window, "Pick your race\n\n").expect("UI text must not contain NUL");
+        nc::waddstr(window, "a) Human\n").expect("UI text must not contain NUL");
+        nc::waddstr(window, "b) Elf\n").expect("UI text must not contain NUL");
+        nc::waddstr(window, "c) Dwarf\n").expect("UI text must not contain NUL");
 
         nc::wnoutrefresh(window);
     }
@@ -1276,27 +1299,34 @@ impl Ui {
         let window = self.windows.full.window;
         nc::wmove(window, 0, 0);
 
-        nc::waddstr(window, &format!("Current input mode: {} (F2 to change)\n\n", self.input_mode));
+        nc::waddstr(
+            window,
+            &format!("Current input mode: {} (F2 to change)\n\n", self.input_mode),
+        )
+        .expect("UI text must not contain NUL");
         if self.in_vi_input_mode() {
-            nc::waddstr(window, "Move/attack: hjklui\n");
-            nc::waddstr(window, "Strafe/attack: Shift + h/l\n");
-            nc::waddstr(window, "Automove: shift + k\n");
+            nc::waddstr(window, "Move/attack: hjklui\n").expect("UI text must not contain NUL");
+            nc::waddstr(window, "Strafe/attack: Shift + h/l\n")
+                .expect("UI text must not contain NUL");
+            nc::waddstr(window, "Automove: shift + k\n").expect("UI text must not contain NUL");
         } else {
-            nc::waddstr(window, "Move/attack: awsdqe\n");
-            nc::waddstr(window, "Automove: shift + w\n");
+            nc::waddstr(window, "Move/attack: awsdqe\n").expect("UI text must not contain NUL");
+            nc::waddstr(window, "Automove: shift + w\n").expect("UI text must not contain NUL");
         }
-        nc::waddstr(window, "Charge: c\n");
-        nc::waddstr(window, "Wait: .\n");
-        nc::waddstr(window, "Descend: >\n");
-        nc::waddstr(window, "Autoexplore: o\n");
-        nc::waddstr(window, "Go to: G (only '>' follow-up implemented)\n");
-        nc::waddstr(window, "Examine: x\n");
-        nc::waddstr(window, "Pick item in front: ,\n");
-        nc::waddstr(window, "Look at Inventory: I\n");
-        nc::waddstr(window, "Equip/Use: E\n");
-        nc::waddstr(window, "Drop: D\n");
-        nc::waddstr(window, "Ranged/Throw: f (not fully working)\n");
-        nc::waddstr(window, "Quit: ESC/q\n");
+        nc::waddstr(window, "Charge: c\n").expect("UI text must not contain NUL");
+        nc::waddstr(window, "Wait: .\n").expect("UI text must not contain NUL");
+        nc::waddstr(window, "Descend: >\n").expect("UI text must not contain NUL");
+        nc::waddstr(window, "Autoexplore: o\n").expect("UI text must not contain NUL");
+        nc::waddstr(window, "Go to: G (only '>' follow-up implemented)\n")
+            .expect("UI text must not contain NUL");
+        nc::waddstr(window, "Examine: x\n").expect("UI text must not contain NUL");
+        nc::waddstr(window, "Pick item in front: ,\n").expect("UI text must not contain NUL");
+        nc::waddstr(window, "Look at Inventory: I\n").expect("UI text must not contain NUL");
+        nc::waddstr(window, "Equip/Use: E\n").expect("UI text must not contain NUL");
+        nc::waddstr(window, "Drop: D\n").expect("UI text must not contain NUL");
+        nc::waddstr(window, "Ranged/Throw: f (not fully working)\n")
+            .expect("UI text must not contain NUL");
+        nc::waddstr(window, "Quit: ESC/q\n").expect("UI text must not contain NUL");
         nc::wnoutrefresh(window);
     }
 
@@ -1309,37 +1339,22 @@ impl Ui {
 
         nc::wmove(window, max_y / 2, (max_x - text.chars().count() as i32) / 2);
 
-        nc::waddstr(window, text);
+        nc::waddstr(window, text).expect("UI text must not contain NUL");
         nc::wnoutrefresh(window);
     }
 
     fn event(&mut self, event: Event) {
         match event {
-            Event::Log(logev) => {
-                match logev {
-                    LogEvent::AutoExploreDone => self.log("Nothing else to explore."),
-                    LogEvent::AutoExploreBlocked => self.log("Can't get there."),
-                }
-            }
+            Event::Log(logev) => match logev {
+                LogEvent::AutoExploreDone => self.log("Nothing else to explore."),
+                LogEvent::AutoExploreBlocked => self.log("Can't get there."),
+            },
         }
     }
-
-    fn get_terminal_colors() -> u16 {
-        let output = Command::new("tput")
-                             .arg("colors")
-                             .output()
-                             .unwrap();
-        let output_string = String::from_utf8(output.stdout)
-                                   .unwrap_or("0".to_string());
-        output_string.trim().parse().ok().unwrap_or(0)
-    }
 }
-
 
 impl Drop for Ui {
     fn drop(&mut self) {
         nc::endwin();
     }
 }
-
-

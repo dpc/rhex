@@ -1,23 +1,23 @@
+use std::cmp;
 use std::collections::{HashMap, HashSet};
 use std::ops::{Add, Sub};
-use std::cmp;
 
-use hex2d::{Coordinate, Angle, Position, Direction, Left, Right, Forward};
-use hex2dext::algo;
+use crate::hex2dext::algo;
+use hex2d::{Angle, Coordinate, Direction, Forward, Left, Position, Right};
 
-use game::{self, Action, tile};
-use game::tile::Feature;
-use util;
 use super::item::Item;
+use crate::game::tile::Feature;
+use crate::game::{self, Action, tile};
+use crate::util;
 
 use self::Race::*;
 use std::iter::Iterator;
 
 use rand;
-use rand::Rng;
+use rand::RngExt;
 
 use super::consts::*;
-use super::{Visibility, NoiseMap};
+use super::{NoiseMap, Visibility};
 
 use super::{Location, Noise};
 
@@ -169,7 +169,7 @@ impl Sub for Stats {
             ev: self.ev - s.ev,
             infravision: self.infravision - s.infravision,
             vision: self.vision - s.vision,
-            regeneration: self.regeneration - self.regeneration,
+            regeneration: self.regeneration - s.regeneration,
         }
     }
 }
@@ -273,9 +273,9 @@ impl Actor {
             pos: pos,
             pre_pos: None,
             pre_head: None,
-            base_stats: stats, // base stats
+            base_stats: stats,             // base stats
             mod_stats: Default::default(), // from items etc.
-            stats: Default::default(), // effective stats
+            stats: Default::default(),     // effective stats
             in_los: Default::default(),
             temporary_los: Default::default(),
             visible: Default::default(),
@@ -330,36 +330,40 @@ impl Actor {
 
     /// relating to "head" - The coordinate that is next to actor, relative
     /// to head by a given angle.
-    pub fn head_rel(&self, angle : Angle) -> Coordinate {
+    pub fn head_rel(&self, angle: Angle) -> Coordinate {
         self.pos.coord + Coordinate::from(self.pos.dir + angle)
     }
 
     pub fn pos_after_action(&self, action: Action) -> Vec<Position> {
         let pos = self.pos;
         match action {
-            Action::Wait |
-            Action::Pick |
-            Action::Equip(_) |
-            Action::Descend |
-            Action::Ranged(_) |
-            Action::Drop_(_) => vec![pos],
+            Action::Wait
+            | Action::Pick
+            | Action::Equip(_)
+            | Action::Descend
+            | Action::Ranged(_)
+            | Action::Drop_(_) => vec![pos],
             Action::Turn(a) => vec![pos + a],
             Action::Move(a) => vec![pos + Coordinate::from(pos.dir + a)],
             Action::Charge => {
                 if self.can_charge_sp() {
-                    vec![pos + Coordinate::from(pos.dir),
-                         pos + Coordinate::from(pos.dir) + Coordinate::from(pos.dir)]
+                    vec![
+                        pos + Coordinate::from(pos.dir),
+                        pos + Coordinate::from(pos.dir) + Coordinate::from(pos.dir),
+                    ]
                 } else {
                     vec![pos + Coordinate::from(pos.dir)]
                 }
             }
             Action::Spin(a) => {
-                vec![pos + Coordinate::from(pos.dir + a) +
-                     match a {
-                         Angle::Right => Angle::Left,
-                         Angle::Left => Angle::Right,
-                         _ => return vec![pos],
-                     }]
+                vec![
+                    pos + Coordinate::from(pos.dir + a)
+                        + match a {
+                            Angle::Right => Angle::Left,
+                            Angle::Left => Angle::Right,
+                            _ => return vec![pos],
+                        },
+                ]
             }
         }
     }
@@ -368,16 +372,13 @@ impl Actor {
         self.sp = cmp::max(0, self.sp - self.melee_sp_cost());
     }
 
-    pub fn attack_ranged(&mut self,
-                         loc : &mut Location,
-                         target_coord : Coordinate) {
-
+    pub fn attack_ranged(&mut self, loc: &mut Location, target_coord: Coordinate) {
         let target_id = match loc.actors_coord_to_id.get(&target_coord) {
             None => return,
-            Some(id) => id
+            Some(id) => id,
         };
 
-        let mut target= match loc.actors_byid.remove(&target_id) {
+        let mut target = match loc.actors_byid.remove(&target_id) {
             None => return,
             Some(target) => target,
         };
@@ -406,8 +407,10 @@ impl Actor {
 
         let success = util::roll(acc, ev);
 
-        let rand_ac = cmp::max(rand::thread_rng().gen_range(0..(ac + 1)),
-                rand::thread_rng().gen_range(0..(ac + 1)));
+        let rand_ac = cmp::max(
+            rand::rng().random_range(0..(ac + 1)),
+            rand::rng().random_range(0..(ac + 1)),
+        );
 
         let dmg = cmp::max(0, dmg - rand_ac);
 
@@ -433,10 +436,7 @@ impl Actor {
         loc.actors_byid.insert(*target_id, target);
     }
 
-    pub fn try_attack_ranged(&mut self,
-                         loc : &mut Location,
-                         target_coord : Coordinate) {
-
+    pub fn try_attack_ranged(&mut self, loc: &mut Location, target_coord: Coordinate) {
         if self.can_attack_ranged() {
             self.attack_ranged(loc, target_coord);
         }
@@ -454,16 +454,16 @@ impl Actor {
         }
     }
 
-    pub fn can_attack_at_angle(&self, angle : Angle) -> bool {
+    pub fn can_attack_at_angle(&self, angle: Angle) -> bool {
         match angle {
-            Forward|Left|Right => true,
+            Forward | Left | Right => true,
             _ => false,
         }
     }
 
-    pub fn can_dig_at_angle(&self, angle : Angle) -> bool {
+    pub fn can_dig_at_angle(&self, angle: Angle) -> bool {
         match angle {
-            Forward|Left|Right => true,
+            Forward | Left | Right => true,
             _ => false,
         }
     }
@@ -535,14 +535,13 @@ impl Actor {
         self.saved_sp = self.sp;
     }
 
-
     pub fn noise_makes(&mut self, noise: i32) {
         if self.noise_emision < noise {
             self.noise_emision = noise;
         }
     }
 
-    pub fn open_door(&mut self, loc : &Location) {
+    pub fn open_door(&mut self, loc: &Location) {
         self.opened_door = true;
         self.add_current_los_to_temporary_los(loc);
         self.noise_makes(3);
@@ -552,7 +551,7 @@ impl Actor {
         self.heard.insert(coord, type_);
     }
 
-    pub fn pre_any_tick(&mut self) { }
+    pub fn pre_any_tick(&mut self) {}
 
     pub fn pre_own_tick(&mut self) {
         self.opened_door = false;
@@ -581,14 +580,14 @@ impl Actor {
 
     pub fn post_own_tick(&mut self, loc: &Location) {
         if !self.is_dead() {
-            if self.sp < self.stats.base.max_sp &&
-                rand::thread_rng().gen_bool(1.0 / 10.0) {
-                    self.sp += 1
-                }
+            if self.sp < self.stats.base.max_sp && rand::rng().random_bool(1.0 / 10.0) {
+                self.sp += 1
+            }
 
-            if self.hp < self.stats.base.max_hp && rand::thread_rng()
-                .gen_range(0..50) < self.stats.base.regeneration {
-                    self.hp += 1
+            if self.hp < self.stats.base.max_hp
+                && rand::rng().random_range(0..50) < self.stats.base.regeneration
+            {
+                self.hp += 1
             }
 
             if self.pre_pos != Some(self.pos) || self.opened_door {
@@ -652,7 +651,6 @@ impl Actor {
                     self.equip(item, ch);
                 }
             }
-
         } else {
             self.unequip(ch);
         }
@@ -668,11 +666,7 @@ impl Actor {
             self.unequip_slot(slot);
             self.mod_stats = self.mod_stats + item.stats();
             self.items_equipped.insert(slot, (ch, item));
-            self.action_cd += if slot == Slot::Body {
-                4
-            } else {
-                2
-            }
+            self.action_cd += if slot == Slot::Body { 4 } else { 2 }
         } else {
             self.items_backpack.insert(ch, item);
         }
@@ -682,24 +676,22 @@ impl Actor {
     fn add_current_los_to_temporary_los(&mut self, loc: &Location) {
         let pos = self.pos;
         let vision = self.stats.base.vision;
-        algo::los2::los(&|coord| loc.at(coord).tile().opaqueness(),
-                        &mut |coord, _| {
-                            let _ = self.temporary_los.insert(coord);
-                        },
-                        vision,
-                        pos.coord,
-                        &[pos.dir]);
+        algo::los2::los(
+            &|coord| loc.at(coord).tile().opaqueness(),
+            &mut |coord, _| {
+                let _ = self.temporary_los.insert(coord);
+            },
+            vision,
+            pos.coord,
+            &[pos.dir],
+        );
     }
 
     pub fn unequip_slot(&mut self, slot: Slot) {
         if let Some((ch, item)) = self.items_equipped.remove(&slot) {
             self.mod_stats = self.mod_stats - item.stats();
             self.items_backpack.insert(ch, item);
-            self.action_cd += if slot == Slot::Body {
-                4
-            } else {
-                2
-            }
+            self.action_cd += if slot == Slot::Body { 4 } else { 2 }
         }
     }
 
@@ -753,8 +745,10 @@ impl Actor {
         }
 
         let success = util::roll(acc, ev);
-        let rand_ac = cmp::max(rand::thread_rng().gen_range(0..(ac + 1)),
-                               rand::thread_rng().gen_range(0..(ac + 1)));
+        let rand_ac = cmp::max(
+            rand::rng().random_range(0..(ac + 1)),
+            rand::rng().random_range(0..(ac + 1)),
+        );
 
         let dmg = cmp::max(0, dmg - rand_ac);
 
@@ -779,7 +773,9 @@ impl Actor {
     }
 
     pub fn discovered_stairs(&self, loc: &Location) -> bool {
-        self.discovered.iter().any(|c| loc.at(*c).tile().feature == Some(Feature::Stairs))
+        self.discovered
+            .iter()
+            .any(|c| loc.at(*c).tile().feature == Some(Feature::Stairs))
     }
 
     pub fn set_player(&mut self) {
@@ -813,7 +809,7 @@ impl Actor {
     }
 
     pub fn can_attack_ranged(&self) -> bool {
-       self.can_act() && self.is_holding_ranged_weapon()
+        self.can_act() && self.is_holding_ranged_weapon()
     }
 
     pub fn is_holding_ranged_weapon(&self) -> bool {
@@ -858,7 +854,7 @@ impl Actor {
         self.stats.light_emision
     }
 
-    pub fn act(&mut self, loc : &mut Location, action: Action) {
+    pub fn act(&mut self, loc: &mut Location, action: Action) {
         let new_pos = self.pos_after_action(action);
 
         for &new_pos in &new_pos {
@@ -892,72 +888,76 @@ impl Actor {
                     }
                     Action::Ranged(target_coord) => {
                         self.try_attack_ranged(loc, target_coord);
-                    },
+                    }
                     _ => {}
                 }
-            } else if self.could_be_attack(action) &&
-                old_pos.coord != new_pos.coord &&
-                loc.actors_coord_to_id.contains_key(&new_pos.coord) {
-                    // we've tried to move into self; attack?
-                    if !self.can_attack() {
-                        break;
-                    }
-                    let dir = match action {
-                        Action::Move(dir) => old_pos.dir + dir,
-                        _ => old_pos.dir,
-                    };
-
-                    let target_id = loc.actors_coord_to_id[&new_pos.coord];
-
-                    let mut target = loc.actors_byid.remove(&target_id).unwrap();
-                    self.attacks(dir, &mut target);
-                    loc.actors_byid.insert(target_id, target);
-                    // Can't attack twice
+            } else if self.could_be_attack(action)
+                && old_pos.coord != new_pos.coord
+                && loc.actors_coord_to_id.contains_key(&new_pos.coord)
+            {
+                // we've tried to move into self; attack?
+                if !self.can_attack() {
                     break;
-                } else if loc.at(new_pos.coord).tile().feature == Some(tile::Door(false)) {
-                    // walked into door: open it
-                    loc.map[new_pos.coord].add_feature(tile::Door(true));
-                    self.open_door(loc);
-                    // Can't charge through the doors
-                    break;
-                } else if old_pos.coord == new_pos.coord && old_pos.dir != new_pos.dir {
-                    // we've rotated
-                    self.moved(loc, new_pos);
-                } else if old_pos.coord != new_pos.coord && loc.at(new_pos.coord).is_passable() &&
-                    !loc.actors_coord_to_id.contains_key(&new_pos.coord) {
-                        // for the rest of this turn this self can be found through both new
-                        // and old coor
-                        debug_assert!(!loc.actors_coord_to_id.contains_key(&new_pos.coord));
-                        let id = loc.actors_coord_to_id.remove(&self.pos.coord).unwrap();
-                        // we've moved
-                        self.moved(loc, new_pos);
-                        loc.actors_coord_to_id.insert(new_pos.coord, id);
-                    } else {
-                        // we hit the wall or something
-                        if let Action::Move(angle) = action {
-                            if self.can_dig() &&
-                                self.can_dig_at_angle(angle) &&
-                                    loc.at(new_pos.coord).tile().can_dig_through() {
-                                        self.dig(angle, loc)
-                                    }
-                        }
+                }
+                let dir = match action {
+                    Action::Move(dir) => old_pos.dir + dir,
+                    _ => old_pos.dir,
+                };
 
+                let target_id = loc.actors_coord_to_id[&new_pos.coord];
+
+                let mut target = loc.actors_byid.remove(&target_id).unwrap();
+                self.attacks(dir, &mut target);
+                loc.actors_byid.insert(target_id, target);
+                // Can't attack twice
+                break;
+            } else if loc.at(new_pos.coord).tile().feature == Some(tile::Door(false)) {
+                // walked into door: open it
+                loc.map[new_pos.coord].add_feature(tile::Door(true));
+                self.open_door(loc);
+                // Can't charge through the doors
+                break;
+            } else if old_pos.coord == new_pos.coord && old_pos.dir != new_pos.dir {
+                // we've rotated
+                self.moved(loc, new_pos);
+            } else if old_pos.coord != new_pos.coord
+                && loc.at(new_pos.coord).is_passable()
+                && !loc.actors_coord_to_id.contains_key(&new_pos.coord)
+            {
+                // for the rest of this turn this self can be found through both new
+                // and old coor
+                debug_assert!(!loc.actors_coord_to_id.contains_key(&new_pos.coord));
+                let id = loc.actors_coord_to_id.remove(&self.pos.coord).unwrap();
+                // we've moved
+                self.moved(loc, new_pos);
+                loc.actors_coord_to_id.insert(new_pos.coord, id);
+            } else {
+                // we hit the wall or something
+                if let Action::Move(angle) = action {
+                    if self.can_dig()
+                        && self.can_dig_at_angle(angle)
+                        && loc.at(new_pos.coord).tile().can_dig_through()
+                    {
+                        self.dig(angle, loc)
                     }
+                }
+            }
         }
     }
 
     // Item equipped in a given slot
-    pub fn equipped_in_slot(&self, slot : Slot) -> Option<&Item> {
+    pub fn equipped_in_slot(&self, slot: Slot) -> Option<&Item> {
         self.items_equipped.get(&slot).map(|&(_, ref item)| &**item)
     }
 
     pub fn can_dig(&self) -> bool {
-        self.can_attack_sp() &&
-            self.equipped_in_slot(Slot::RHand)
-            .map_or(false, |item| item.can_dig())
+        self.can_attack_sp()
+            && self
+                .equipped_in_slot(Slot::RHand)
+                .map_or(false, |item| item.can_dig())
     }
 
-    pub fn dig(&mut self, angle : Angle, loc : &mut Location) {
+    pub fn dig(&mut self, angle: Angle, loc: &mut Location) {
         assert!(self.can_dig_at_angle(angle));
         let target_coord = self.head_rel(angle);
         loc.at_mut(target_coord).tile().dig();
@@ -965,16 +965,13 @@ impl Actor {
         self.noise_makes(9);
     }
 
-
-    pub fn could_be_attack(&self, action : Action) -> bool {
+    pub fn could_be_attack(&self, action: Action) -> bool {
         match action {
             Action::Charge => true,
-            Action::Move(angle) => {
-                match angle {
-                    Left | Right | Forward => true,
-                    _ => false,
-                }
-            }
+            Action::Move(angle) => match angle {
+                Left | Right | Forward => true,
+                _ => false,
+            },
             _ => false,
         }
     }

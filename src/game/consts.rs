@@ -28,7 +28,6 @@ pub const HUMAN_STATS: actor::Stats = actor::Stats {
     regeneration: 0,
 };
 
-
 pub const DWARF_STATS: actor::Stats = actor::Stats {
     int: 3,
     dex: 2,
@@ -42,7 +41,6 @@ pub const DWARF_STATS: actor::Stats = actor::Stats {
     vision: 10,
     regeneration: 0,
 };
-
 
 pub const RAT_STATS: actor::Stats = actor::Stats {
     int: 1,

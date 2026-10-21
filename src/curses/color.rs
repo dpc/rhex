@@ -1,7 +1,6 @@
+use ncurses as nc;
 use std::collections::HashMap;
 use std::collections::hash_map::Entry;
-use ncurses as nc;
-
 
 /// One of 256 colors
 #[derive(Copy, Clone, Eq, PartialEq, Debug, Default, Hash)]
@@ -20,7 +19,7 @@ impl Color {
                 let g = c % 6;
                 let r = (c - g) / 6;
                 RGB::new(r, g, b)
-            },
+            }
             232..=255 => {
                 let c = (self.0 - 232) / 4;
                 RGB::new(c, c, c)
@@ -29,7 +28,7 @@ impl Color {
         }
     }
 
-    pub fn mix(&self, color : Color, s : u8) -> Color {
+    pub fn mix(&self, color: Color, s: u8) -> Color {
         assert!(s < 6);
         let s_rgb = self.to_rgb();
         let c_rgb = color.to_rgb();
@@ -37,18 +36,19 @@ impl Color {
             (s_rgb.0 * (5 - s) + c_rgb.0 * s) / 5,
             (s_rgb.1 * (5 - s) + c_rgb.1 * s) / 5,
             (s_rgb.2 * (5 - s) + c_rgb.2 * s) / 5,
-            ).into()
+        )
+        .into()
     }
 }
 
 impl From<RGB> for Color {
-    fn from(rgb : RGB) -> Self {
+    fn from(rgb: RGB) -> Self {
         Color(rgb.to_u8())
     }
 }
 
 impl From<u8> for Color {
-    fn from(u : u8) -> Self {
+    fn from(u: u8) -> Self {
         Color(u)
     }
 }
@@ -57,7 +57,7 @@ impl From<u8> for Color {
 pub struct RGB(u8, u8, u8);
 
 impl RGB {
-    pub fn new(r : u8, g : u8, b : u8) -> Self {
+    pub fn new(r: u8, g: u8, b: u8) -> Self {
         assert!(r < 6);
         assert!(g < 6);
         assert!(b < 6);
@@ -76,17 +76,26 @@ fn to_rgb_and_back() {
         for g in 0u8..6u8 {
             for b in 0u8..6u8 {
                 let rgb = RGB(r, g, b);
-                let color : Color = rgb.into();
+                let color: Color = rgb.into();
                 assert_eq!(rgb, color.to_rgb());
             }
         }
     }
 }
 
-pub const GRAY: [u8; 26] = [16, 232, 233, 234, 235, 236, 237, 238, 239, 240, 241, 242, 243, 244,
-                            245, 246, 247, 248, 249, 250, 251, 252, 253, 254, 255, 231];
+pub const GRAY: [u8; 26] = [
+    16, 232, 233, 234, 235, 236, 237, 238, 239, 240, 241, 242, 243, 244, 245, 246, 247, 248, 249,
+    250, 251, 252, 253, 254, 255, 231,
+];
 
-pub const RGB_GRAY : [RGB; 6] = [RGB(0, 0, 0), RGB(1, 1, 1), RGB(2, 2, 2), RGB(3, 3, 3), RGB(4, 4, 4), RGB(5, 5, 5)];
+pub const RGB_GRAY: [RGB; 6] = [
+    RGB(0, 0, 0),
+    RGB(1, 1, 1),
+    RGB(2, 2, 2),
+    RGB(3, 3, 3),
+    RGB(4, 4, 4),
+    RGB(5, 5, 5),
+];
 
 pub const BLACK: u8 = GRAY[0];
 pub const WHITE: u8 = GRAY[25];
@@ -94,8 +103,8 @@ pub const WHITE: u8 = GRAY[25];
 pub const YELLOW: RGB = RGB(5, 5, 0);
 pub const ORANGE: RGB = RGB(5, 3, 0);
 
-pub const BACKGROUND_BG : u8 = GRAY[1];
-pub const MAP_BACKGROUND_BG : u8 = BACKGROUND_BG;
+pub const BACKGROUND_BG: u8 = GRAY[1];
+pub const MAP_BACKGROUND_BG: u8 = BACKGROUND_BG;
 
 pub const VISIBLE_FG: u8 = WHITE;
 
@@ -129,9 +138,9 @@ pub const LOG_3_FG: RGB = RGB_GRAY[3];
 pub const LOG_4_FG: RGB = RGB_GRAY[2];
 pub const LOG_5_FG: RGB = RGB_GRAY[1];
 
-pub const SELF_HEAD_ACTOR_BG : RGB = RGB(0, 0, 5);
-pub const ENEMY_HEAD_ACTOR_BG : RGB = RGB(5, 0, 0);
-pub const ACTOR_HEAD_ACTOR_FG : RGB = RGB(5, 5, 5);
+pub const SELF_HEAD_ACTOR_BG: RGB = RGB(0, 0, 5);
+pub const ENEMY_HEAD_ACTOR_BG: RGB = RGB(5, 0, 0);
+pub const ACTOR_HEAD_ACTOR_FG: RGB = RGB(5, 5, 5);
 
 pub struct Allocator {
     map: HashMap<(Color, Color), i16>,
@@ -147,13 +156,17 @@ impl Allocator {
     }
 
     pub fn get<C1, C2>(&mut self, fg: C1, bg: C2) -> i16
-    where C1 : Into<Color>+Clone,
-          C2 : Into<Color>+Clone {
+    where
+        C1: Into<Color> + Clone,
+        C2: Into<Color> + Clone,
+    {
         match self.map.entry((fg.clone().into(), bg.clone().into())) {
             Entry::Occupied(i) => *i.get(),
             Entry::Vacant(i) => {
-                assert!((self.cur as i32) < nc::COLOR_PAIRS(),
-                        "curses run out of color pairs!");
+                assert!(
+                    (self.cur as i32) < nc::COLOR_PAIRS(),
+                    "curses run out of color pairs!"
+                );
                 let ret = self.cur;
                 i.insert(self.cur);
                 nc::init_pair(ret, fg.into().0 as i16, bg.into().0 as i16);

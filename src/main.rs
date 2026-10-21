@@ -1,24 +1,21 @@
-#![cfg_attr(feature="clippy", feature(plugin))]
-#![cfg_attr(feature="clippy", plugin(clippy))]
-
-extern crate simplemap;
-extern crate ncurses;
+extern crate chrono;
 extern crate hex2d;
 extern crate hex2d_dpcext as hex2dext;
-extern crate rand;
+extern crate ncurses;
 extern crate num;
-extern crate chrono;
+extern crate rand;
+extern crate simplemap;
 //#[macro_use]
-extern crate log;
 extern crate fern;
 extern crate fnv;
+extern crate log;
 
 mod ai;
 mod curses;
 mod game;
 mod generate;
-mod util;
 mod logging;
+mod util;
 
 fn main() {
     logging::init();
@@ -27,7 +24,9 @@ fn main() {
         Ok(res) => res,
         Err(err) => {
             match err {
-                curses::Error::ColorCount => println!("rhex requires a terminal with 256 color support. Exiting."),
+                curses::Error::ColorCount => {
+                    println!("rhex requires a terminal with 256 color support. Exiting.")
+                }
                 _ => println!("An error occurred while initialising the UI. Exiting."),
             };
             std::process::exit(1);

@@ -1,10 +1,10 @@
-use std::option::Option;
-pub use self::Type::*;
 pub use self::Feature::*;
+pub use self::Type::*;
 pub use super::area;
+use std::option::Option;
 
+use rand::{self, RngExt};
 use std::fmt;
-use rand::{Rng, self};
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug, Hash)]
 pub enum Type {
@@ -23,13 +23,11 @@ impl Type {
     }
 }
 
-
 impl fmt::Display for Type {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", self.description())
     }
 }
-
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug, Hash)]
 pub enum Feature {
@@ -48,7 +46,6 @@ impl Feature {
         }
     }
 }
-
 
 impl fmt::Display for Feature {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -110,13 +107,7 @@ impl Tile {
 
     pub fn ascii_expand(&self) -> i32 {
         match self.feature {
-            Some(Door(open)) => {
-                return if open {
-                    1
-                } else {
-                    0
-                }
-            }
+            Some(Door(open)) => return if open { 1 } else { 0 },
             Some(Statue) => return 8,
             _ => {}
         }
@@ -129,9 +120,13 @@ impl Tile {
     }
 
     pub fn dig(&mut self) {
-        let r = rand::thread_rng().gen_range(0..10);
+        let r = rand::rng().random_range(0..10);
         match self.type_ {
-            Wall => if r < 5 { self.type_ = Empty },
+            Wall => {
+                if r < 5 {
+                    self.type_ = Empty
+                }
+            }
             _ => {}
         }
     }

@@ -1,70 +1,68 @@
 # rhex
 
-<p align="center">
-  <a href="https://travis-ci.org/dpc/rhex">
-      <img src="https://img.shields.io/travis/dpc/rhex/master.svg?style=flat-square" alt="Build Status">
-  </a>
-  <a href="https://gitter.im/dpc/rhex">
-      <img src="https://img.shields.io/badge/GITTER-join%20chat-green.svg?style=flat-square" alt="Gitter Chat">
-  </a>
-</p>
-
-## Contributors welcome!
-
-Rhex is looking for contributors. See
-[Contributing page](https://github.com/dpc/rhex/wiki/Contributing)
-for details.
-
-## Introduction
-
-Simple ASCII terminal hexagonal map  roguelike written in [Rust][rust-home].
-
-You can try the game without installing anything. Check
-[rhex demo server](https://github.com/dpc/rhex/wiki/Demo-server) instructions.
-
-The core goal of the project:
-
-* ASCI/Unicode pure terminal UI first
-* hexagonal map with tactical positioning
-
-It's also intendent to exercise and practice my [Rust][rust-home] knowledge.
-
-Previous iteration of this idea was/is: [Rustyhex][rustyhex] . This two project
-might merge into whole at some point.
-
-Rhex is using [hex2d-rs - Hexagonal grid map utillity library][hex2d-rs].
-
-[rust-home]: http://rust-lang.org
-[rustyhex]: //github.com/dpc/rustyhex
-[hex2d-rs]: //github.com/dpc/hex2d-rs
-
-## Overview
+Rhex is an unfinished but playable ASCII/Unicode terminal roguelike with a
+hexagonal map and tactical positioning, written in Rust. It uses
+[hex2d](https://github.com/dpc/hex2d-rs).
 
 ![rhex v0.0.3 screenshot](http://i.imgur.com/M9fi1ri.png)
 
-Watch *rhex* gameplay video:
+[Watch the gameplay recording](https://asciinema.org/a/34224).
 
-[![asciicast](https://asciinema.org/a/34224.png)](https://asciinema.org/a/34224)
+## Run with Nix
 
-## Running
+Use a UTF-8 locale and a terminal with at least 256 colors and a Unicode font.
+For a comfortable layout, use at least 100 columns and 30 rows. Enable flakes and
+the `nix-command` feature in Nix.
 
-Game requires terminal with 256 colors support, and Unicode font.
+```console
+nix run .
+```
 
-	git clone https://github.com/dpc/rhex.git
-	cd rhex
-	cargo run --release
+The flake supplies the Rust toolchain and native ncurses library; you do not need
+a separate `tput` program. Run from a writable directory: the game writes
+`debug.log` there. The game has no save/load support.
 
-*Note that you must to have the ncurses library installed and linkable for ncurses-rs to work. On Linux, this should be trivial. On OS X, consider installing ncurses using Homebrew. (Note that you have to force Homebrew to link the library to /usr/local/lib: brew link --force ncurses and set that path to LIBRARY_PATH environmental variable.)*
+Press any key at the introduction, then choose a race (`a` for human).
+In normal input mode, use `w`/`s` to move forward/backward, `a`/`d` to turn, and
+`q`/`e` to sidestep. `.` waits, `,` picks up an item, `I` opens inventory,
+`?` shows help, and F2 toggles Vi-style controls.
+To exit, press Escape, then `y` to confirm.
 
-## Status
+## Develop
 
-The game is playable but not feature and gameplay wise complete.
+```console
+nix develop
+cargo run --release --locked
+```
 
-*rhex* is actively seeking collaborators. If you'd like to practice your Rust
-or/and find roguelikes interesting ping `@dpc` on [rhex gitter channel][rhex-gitter] and we
-can get your started.
+You can also activate the shell with `direnv allow`.
+The project uses flakebox, treefmt, Vale, and selfci:
 
-[Report problems and ideas][issues]
+```console
+treefmt
+just vale
+cargo clippy --all-targets --locked
+nix build -L .#ci.tests
+selfci check
+```
 
-[issues]: https://github.com/dpc/rhex/issues
-[rhex-gitter]: https://gitter.im/dpc/rhex
+The flake exposes the game as the default package. Run individual checks with
+`ci.workspace`, `ci.clippy`, `ci.tests`, and `ci.cargoFmt`.
+The `treefmt` package checks Rust, Nix, and TOML formatting.
+Clippy reports existing legacy-code warnings without treating them as errors.
+
+Without Nix, install a current Rust toolchain, a C compiler, pkg-config, and
+the wide-character ncurses development library, then run
+`cargo run --release --locked`. The ncurses Rust build script initializes a
+terminal while generating constants; in a headless build, set
+`TERM=xterm-256color` and install the corresponding terminfo entry.
+
+## Contributing
+
+The game is not feature-complete. To suggest improvements or report bugs,
+[open an issue](https://github.com/dpc/rhex/issues).
+This project uses the MPL-2.0 license; see [LICENSE](LICENSE).
+
+## AI usage disclosure
+
+[I use LLMs when working on my projects.](https://dpc.pw/posts/he-went-to-the-slop-side/)

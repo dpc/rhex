@@ -11,7 +11,6 @@ pub enum Type {
 
 impl fmt::Display for Type {
     fn fmt(&self, fmt: &mut fmt::Formatter) -> Result<(), fmt::Error> {
-
         match *self {
             Type::Room(r) => {
                 if r < 3 {

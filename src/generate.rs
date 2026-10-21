@@ -1,19 +1,18 @@
-
+use fnv::FnvHasher;
 use rand;
-use rand::{Rng, SeedableRng};
 use rand::rngs::SmallRng;
+use rand::{RngExt, SeedableRng};
 use std::collections::{HashMap, VecDeque};
 use std::hash::BuildHasherDefault;
-use fnv::FnvHasher;
 
+use crate::game::actor::{Actor, Race};
+use crate::game::area;
+use crate::game::item;
+use crate::game::tile;
+use crate::game::{Actors, Items, Map};
 use hex2d as h2d;
 use hex2d::Angle::*;
-use hex2d::{Direction, Position, Coordinate};
-use game::tile;
-use game::{Map, Actors, Items};
-use game::area;
-use game::item;
-use game::actor::{Race, Actor};
+use hex2d::{Coordinate, Direction, Position};
 
 type EndpointQueue = VecDeque<h2d::Position>;
 
@@ -26,7 +25,7 @@ pub struct DungeonGenerator {
     endpoints: EndpointQueue,
     actors: Actors,
     items: Items,
-    rng: SmallRng
+    rng: SmallRng,
 }
 
 impl DungeonGenerator {
@@ -40,7 +39,7 @@ impl DungeonGenerator {
             endpoints: VecDeque::new(),
             actors: Default::default(),
             items: Default::default(),
-            rng: SmallRng::from_seed(rand::thread_rng().gen::<[u8; 32]>()),
+            rng: SmallRng::from_seed(rand::rng().random::<[u8; 32]>()),
         }
     }
 }
@@ -48,9 +47,10 @@ impl DungeonGenerator {
 fn tile_is_deadend(map: &Map, coord: Coordinate) -> bool {
     let neighbors = coord.neighbors();
 
-    let passable: Vec<bool> = neighbors.iter()
-                                       .map(|n_coord| map[*n_coord].is_passable())
-                                       .collect();
+    let passable: Vec<bool> = neighbors
+        .iter()
+        .map(|n_coord| map[*n_coord].is_passable())
+        .collect();
 
     let len = passable.len();
 
@@ -72,24 +72,33 @@ fn tile_is_deadend(map: &Map, coord: Coordinate) -> bool {
 impl DungeonGenerator {
     // generate_map_feature
     fn generate_continue_corridor(&mut self, pos: h2d::Position) {
-
         let npos = pos + Coordinate::from(pos.dir);
 
         let somepos = if let Some(tile) = self.map.get(&npos.coord) {
-            Some(if tile.type_.is_passable() { npos } else { pos + Right })
-        } else { None };
+            Some(if tile.type_.is_passable() {
+                npos
+            } else {
+                pos + Right
+            })
+        } else {
+            None
+        };
         match somepos {
             Some(pos) => self.endpoint_push(pos),
             None => {
                 self.map.insert(npos.coord, tile::Tile::new(tile::Empty));
                 self.endpoint_push(npos);
-                match self.rng.gen_range(0..19) {
+                match self.rng.random_range(0..19) {
                     0 => {
                         let leftwall = pos + Coordinate::from(pos.dir + h2d::Angle::Left);
                         let rightwall = pos + Coordinate::from(pos.dir + h2d::Angle::Right);
 
-                        self.map.entry(leftwall.coord).or_insert(tile::Tile::new(tile::Wall));
-                        self.map.entry(rightwall.coord).or_insert(tile::Tile::new(tile::Wall));
+                        self.map
+                            .entry(leftwall.coord)
+                            .or_insert(tile::Tile::new(tile::Wall));
+                        self.map
+                            .entry(rightwall.coord)
+                            .or_insert(tile::Tile::new(tile::Wall));
                     }
                     _ => {}
                 }
@@ -112,7 +121,6 @@ impl DungeonGenerator {
 
     /// Generate room in front of the iterator `(pos, dir)`
     fn generate_room(&mut self, pos: h2d::Position, r: u32) {
-
         self.endpoint_push(pos);
 
         let center_pos = pos + Coordinate::from(pos.dir).scale(r as i32);
@@ -121,7 +129,7 @@ impl DungeonGenerator {
         self.generate_room_inplace(center_pos, r);
 
         if tile_count_old == self.tile_count {
-            match self.rng.gen_range(0..8) {
+            match self.rng.random_range(0..8) {
                 0 => self.endpoint_push(pos + Left),
                 1 => self.endpoint_push(pos + LeftBack),
                 2 => self.endpoint_push(pos + Right),
@@ -133,7 +141,6 @@ impl DungeonGenerator {
 
     // generate_map at position `pos`; does not push back the iterator!
     fn generate_room_inplace(&mut self, center: h2d::Position, r: u32) {
-
         let coord = center.coord;
 
         let mut blocked = false;
@@ -150,22 +157,26 @@ impl DungeonGenerator {
         let area = area::Area::new(coord, area::Type::Room(r));
 
         if Some(coord) != self.start {
-            match self.rng.gen_range(0..6) {
+            match self.rng.random_range(0..6) {
                 2 => {
                     if self.stairs.is_none() {
-                        self.map.insert(coord,
-                                        *tile::Tile::new(tile::Empty)
-                                             .add_feature(tile::Stairs)
-                                             .add_area(area));
+                        self.map.insert(
+                            coord,
+                            *tile::Tile::new(tile::Empty)
+                                .add_feature(tile::Stairs)
+                                .add_area(area),
+                        );
                         self.stairs = Some(coord);
                         self.tile_count += 1;
                     }
                 }
                 3 => {
-                    self.map.insert(coord,
-                                    *tile::Tile::new(tile::Empty)
-                                         .add_feature(tile::Statue)
-                                         .add_area(area));
+                    self.map.insert(
+                        coord,
+                        *tile::Tile::new(tile::Empty)
+                            .add_feature(tile::Statue)
+                            .add_area(area),
+                    );
                     self.tile_count += 1;
                 }
                 _ => {}
@@ -175,7 +186,8 @@ impl DungeonGenerator {
         for c in coord.range_iter((r - 1) as i32) {
             if !self.map.contains_key(&c) {
                 self.tile_count += 1;
-                self.map.insert(c, *tile::Tile::new(tile::Empty).add_area(area));
+                self.map
+                    .insert(c, *tile::Tile::new(tile::Empty).add_area(area));
             }
         }
 
@@ -183,14 +195,16 @@ impl DungeonGenerator {
         for c in coord.ring_iter(r as i32, h2d::Spin::CW(h2d::Direction::XY)) {
             if !self.map.contains_key(&c) {
                 self.tile_count += 1;
-                self.map.insert(c,
-                                *tile::Tile::new(tile::Empty).add_feature(tile::Door(false)));
+                self.map.insert(
+                    c,
+                    *tile::Tile::new(tile::Empty).add_feature(tile::Door(false)),
+                );
             }
         }
 
         for c in coord.range_iter(r as i32 - 1) {
             if self.map.contains_key(&c) {
-                match self.rng.gen_range(0..15) {
+                match self.rng.random_range(0..15) {
                     0 => {
                         self.map.get_mut(&c).unwrap().add_light((r + 4) as i32);
                     }
@@ -200,13 +214,12 @@ impl DungeonGenerator {
             }
         }
 
-
         for c in coord.range_iter(r as i32 / 2) {
             if c != coord && self.map.get(&c).map_or(false, |t| t.is_passable()) {
-                match self.rng.gen_range(0..10) {
+                match self.rng.random_range(0..10) {
                     0 => {
                         let pos = Position::new(c, Direction::XY);
-                        let race = match self.rng.gen_range(0..(1 + self.level / 2)) {
+                        let race = match self.rng.random_range(0..(1 + self.level / 2)) {
                             0 => Race::Rat,
                             1 => Race::Goblin,
                             _ => Race::Troll,
@@ -218,7 +231,7 @@ impl DungeonGenerator {
             }
         }
 
-        if self.rng.gen_bool(1.0 / 2.0) {
+        if self.rng.random_bool(1.0 / 2.0) {
             self.items.insert(coord, item::random(self.level as i32));
         }
     }
@@ -231,7 +244,7 @@ impl DungeonGenerator {
     pub fn generate_map(mut self, start: h2d::Coordinate, size: u32) -> (Map, Actors, Items) {
         let start_dir = h2d::Direction::XY;
         let start_pos = Position::new(start, start_dir);
-        let first_room_r = self.rng.gen_range(2..4);
+        let first_room_r = self.rng.random_range(2..4);
         self.start = Some(start);
 
         self.generate_room_inplace(start_pos, first_room_r);
@@ -239,33 +252,33 @@ impl DungeonGenerator {
         self.endpoint_push(start_pos);
 
         while self.tile_count < size || self.stairs.is_none() {
-
-            let pos = self.endpoints.pop_front().expect("generator run out of endpoints");
+            let pos = self
+                .endpoints
+                .pop_front()
+                .expect("generator run out of endpoints");
 
             if self.endpoints.len() > 4 {
                 self.endpoints.pop_front();
             }
 
-            assert!(self.map
-                        .get(&pos.coord)
-                        .expect("map generator iterator on non-existing tile")
-                        .type_
-                        .is_passable());
+            assert!(
+                self.map
+                    .get(&pos.coord)
+                    .expect("map generator iterator on non-existing tile")
+                    .type_
+                    .is_passable()
+            );
 
-            match self.rng.gen_range(0..10) {
-                0 => {
-                    match self.rng.gen_range(0..4) {
-                        0 => self.generate_turn(pos, Left),
-                        1 => self.generate_turn(pos, Right),
-                        2 => self.generate_cross(pos, Left),
-                        3 => self.generate_cross(pos, Right),
-                        _ => panic!(),
-                    }
-                }
+            match self.rng.random_range(0..10) {
+                0 => match self.rng.random_range(0..4) {
+                    0 => self.generate_turn(pos, Left),
+                    1 => self.generate_turn(pos, Right),
+                    2 => self.generate_cross(pos, Left),
+                    3 => self.generate_cross(pos, Right),
+                    _ => panic!(),
+                },
                 1 => {
-                    let size = self.rng.gen_range(0..3) +
-                               self.rng.gen_range(0..2) +
-                               2;
+                    let size = self.rng.random_range(0..3) + self.rng.random_range(0..2) + 2;
                     self.generate_room(pos, size)
                 }
                 _ => self.generate_continue_corridor(pos),
@@ -280,10 +293,9 @@ impl DungeonGenerator {
 
         // eliminate dead ends
         for (&coord, tile) in &self.map {
-            if tile.feature == Some(tile::Door(false)) &&
-                tile_is_deadend(&map, coord) {
-                    map[coord] = tile::Tile::new(tile::Wall);
-                }
+            if tile.feature == Some(tile::Door(false)) && tile_is_deadend(&map, coord) {
+                map[coord] = tile::Tile::new(tile::Wall);
+            }
         }
 
         (map, self.actors, self.items)

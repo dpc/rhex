@@ -13,4 +13,3 @@ pub enum Action {
     Pick,
     Descend,
 }
-

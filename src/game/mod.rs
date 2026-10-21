@@ -1,26 +1,25 @@
+use fnv::FnvHasher;
+use simplemap::SimpleMap;
 use std::collections::{HashMap, HashSet};
 use std::hash::BuildHasherDefault;
-use simplemap::SimpleMap;
-use fnv::FnvHasher;
 
 use hex2d::Coordinate;
 
-use game::item::Item;
+use crate::game::item::Item;
 
-pub mod area;
 pub mod actor;
+pub mod area;
 pub use self::actor::Actor;
 pub mod action;
 pub use self::action::Action;
 pub mod consts;
-pub mod item;
 pub mod engine;
+pub mod item;
 pub use self::engine::*;
 pub mod tile;
 pub use self::tile::Tile;
 pub mod location;
 pub use self::location::Location;
-
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub enum Noise {
@@ -34,7 +33,6 @@ impl Noise {
         }
     }
 }
-
 
 pub type Visibility = HashSet<Coordinate, BuildHasherDefault<FnvHasher>>;
 pub type NoiseMap = HashMap<Coordinate, Noise, BuildHasherDefault<FnvHasher>>;

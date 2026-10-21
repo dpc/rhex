@@ -1,19 +1,19 @@
 use std::collections::{HashMap, HashSet};
 use std::hash::BuildHasherDefault;
 
-use generate;
+use crate::generate;
 
-use hex2dext::algo;
-use simplemap::SimpleMap;
-use hex2d::{Coordinate, Direction};
+use crate::hex2dext::algo;
 use fnv::FnvHasher;
+use hex2d::{Coordinate, Direction};
+use simplemap::SimpleMap;
 
-use super::tile;
-use super::item::Item;
 use super::Action;
-use super::actor::{self, Actor};
-use super::{LightMap, Map, Items};
 use super::Noise;
+use super::actor::{self, Actor};
+use super::item::Item;
+use super::tile;
+use super::{Items, LightMap, Map};
 
 #[derive(Clone, Debug)]
 pub struct Location {
@@ -22,7 +22,7 @@ pub struct Location {
     pub actors_dead: HashSet<actor::Id>,
     pub actors_counter: u32,
     pub map: Map,
-    pub items: Items, // items on the floor
+    pub items: Items,        // items on the floor
     pub light_map: LightMap, // light intensity at a given coordinate
     pub level: i32,
     player_id: Option<actor::Id>,
@@ -30,7 +30,6 @@ pub struct Location {
 
 impl Location {
     pub fn new(level: u32) -> Location {
-
         let (map, gen_actors, items) = generate::gen_level(level);
 
         let mut actors: HashMap<u32, Actor> = Default::default();
@@ -88,30 +87,37 @@ impl Location {
     }
 
     pub fn actors_alive_ids(&self) -> Vec<u32> {
-        self.actors_byid.keys().filter(|&id| !self.actors_byid[id].is_dead()).cloned().collect()
+        self.actors_byid
+            .keys()
+            .filter(|&id| !self.actors_byid[id].is_dead())
+            .cloned()
+            .collect()
     }
 
     pub fn recalculate_light_map(&mut self) {
-        let mut light_map: SimpleMap<Coordinate, u32, BuildHasherDefault<FnvHasher>> = Default::default();
+        let mut light_map: SimpleMap<Coordinate, u32, BuildHasherDefault<FnvHasher>> =
+            Default::default();
 
         for (pos, tile) in self.map.iter() {
             let light = tile.light;
             if light > 0 {
-                algo::los::los(&|coord| {
-                                   if coord == *pos {
-                                       0
-                                   } else {
-                                       self.at(coord).tile().opaqueness()
-                                   }
-                               },
-                               &mut |coord, light| {
-                                   if light_map[coord] < light as u32 {
-                                       light_map[coord] = light as u32;
-                                   }
-                               },
-                               light,
-                               *pos,
-                               Direction::all());
+                algo::los::los(
+                    &|coord| {
+                        if coord == *pos {
+                            0
+                        } else {
+                            self.at(coord).tile().opaqueness()
+                        }
+                    },
+                    &mut |coord, light| {
+                        if light_map[coord] < light as u32 {
+                            light_map[coord] = light as u32;
+                        }
+                    },
+                    light,
+                    *pos,
+                    Direction::all(),
+                );
             }
         }
 
@@ -119,21 +125,23 @@ impl Location {
             let astate = &self.actors_byid[id];
             let pos = astate.pos.coord;
             if astate.light_emision() > 0 {
-                algo::los::los(&|coord| {
-                                   if coord == pos {
-                                       0
-                                   } else {
-                                       self.at(coord).tile().opaqueness()
-                                   }
-                               },
-                               &mut |coord, light| {
-                                   if light_map[coord] < light as u32 {
-                                       light_map[coord] = light as u32;
-                                   }
-                               },
-                               astate.light_emision() as i32,
-                               pos,
-                               Direction::all());
+                algo::los::los(
+                    &|coord| {
+                        if coord == pos {
+                            0
+                        } else {
+                            self.at(coord).tile().opaqueness()
+                        }
+                    },
+                    &mut |coord, light| {
+                        if light_map[coord] < light as u32 {
+                            light_map[coord] = light as u32;
+                        }
+                    },
+                    astate.light_emision() as i32,
+                    pos,
+                    Direction::all(),
+                );
             }
         }
 
@@ -246,15 +254,18 @@ impl Location {
             }
         }
 
-        self.actors_coord_to_id = self.actors_coord_to_id
-                                      .iter()
-                                      .filter(|&(_, id)| !self.actors_byid[id].is_dead())
-                                      .map(|(_, id)| (self.actors_byid[id].pos.coord, *id))
-                                      .collect();
-
-        debug_assert!(self.actors_coord_to_id
+        self.actors_coord_to_id = self
+            .actors_coord_to_id
             .iter()
-            .all(|(coord, ref id)| self.actors_byid[*id].coord() == *coord));
+            .filter(|&(_, id)| !self.actors_byid[id].is_dead())
+            .map(|(_, id)| (self.actors_byid[id].pos.coord, *id))
+            .collect();
+
+        debug_assert!(
+            self.actors_coord_to_id
+                .iter()
+                .all(|(coord, ref id)| self.actors_byid[*id].coord() == *coord)
+        );
 
         self.recalculate_light_map();
         self.recalculate_noise();
@@ -319,18 +330,19 @@ impl<'a> At<'a> {
         if self.state.map[self.coord].opaqueness() < 20 {
             ownlight
         } else {
-            pl_coord.directions_to(self.coord)
-                    .iter()
-                    .map(|&dir| self.coord - dir)
-                    .map(|d_coord| {
-                        if self.state.map[d_coord].opaqueness() < 20 {
-                            self.state.light_map[d_coord]
-                        } else {
-                            0
-                        }
-                    })
-                    .max()
-                    .unwrap_or(0)
+            pl_coord
+                .directions_to(self.coord)
+                .iter()
+                .map(|&dir| self.coord - dir)
+                .map(|d_coord| {
+                    if self.state.map[d_coord].opaqueness() < 20 {
+                        self.state.light_map[d_coord]
+                    } else {
+                        0
+                    }
+                })
+                .max()
+                .unwrap_or(0)
         }
     }
 
@@ -347,14 +359,14 @@ pub struct AtMut<'a> {
 impl<'a> AtMut<'a> {
     pub fn drop_item(&mut self, item: Box<Item>) {
         let coord = {
-            let mut bfs = algo::bfs::Traverser::new(|coord| {
-                                                        self.state.at(coord).tile().is_passable()
-                                                    },
-                                                    |coord| {
-                                                        self.state.at(coord).tile().is_passable() &&
-                                                        self.state.items.get(&coord).is_none()
-                                                    },
-                                                    self.coord);
+            let mut bfs = algo::bfs::Traverser::new(
+                |coord| self.state.at(coord).tile().is_passable(),
+                |coord| {
+                    self.state.at(coord).tile().is_passable()
+                        && self.state.items.get(&coord).is_none()
+                },
+                self.coord,
+            );
 
             bfs.find()
         };
@@ -380,5 +392,4 @@ impl<'a> AtMut<'a> {
     pub fn tile(&'a mut self) -> &'a mut tile::Tile {
         &mut self.state.map[self.coord]
     }
-
 }

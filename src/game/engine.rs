@@ -1,7 +1,7 @@
-use super::{Location, Action};
 use super::actor::{self, Actor};
-use util;
-use ai::{self, Ai};
+use super::{Action, Location};
+use crate::ai::{self, Ai};
+use crate::util;
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
 enum State {
@@ -10,14 +10,13 @@ enum State {
     TurnDone,
 }
 
-
 pub struct Engine {
     turn: u64,
     location_cur: usize,
     locations: Vec<Location>,
 
     ids_to_move: Vec<actor::Id>,
-    state : State,
+    state: State,
 }
 
 impl Engine {
@@ -62,8 +61,9 @@ impl Engine {
     }
 
     pub fn checks_after_act(&mut self, actor_id: actor::Id) {
-        if actor_id == self.current_location().player_id() &&
-           self.current_location().player().descended() {
+        if actor_id == self.current_location().player_id()
+            && self.current_location().player().descended()
+        {
             let mut player = self.current_location_mut().remove(actor_id).unwrap();
             self.location_cur += 1;
             self.locations.push(Location::new(self.location_cur as u32));
@@ -82,11 +82,13 @@ impl Engine {
     fn reload_actors_ids_to_move(&mut self) {
         let current_location = &self.locations[self.location_cur];
         let player_id = current_location.player_id();
-        self.ids_to_move.extend(current_location
-                                .actors_alive_ids()
-                                .iter()
-                                .filter(|&&id| id != player_id)
-                                .cloned());
+        self.ids_to_move.extend(
+            current_location
+                .actors_alive_ids()
+                .iter()
+                .filter(|&&id| id != player_id)
+                .cloned(),
+        );
     }
 
     // player first move
@@ -149,5 +151,4 @@ impl Engine {
         self.reload_actors_ids_to_move();
         self.state = State::PlayerMove;
     }
-
 }

@@ -1,12 +1,12 @@
 use rand;
-use rand::Rng;
+use rand::RngExt;
 
-use hex2dext::algo::bfs;
+use crate::hex2dext::algo::bfs;
 
+use crate::game;
+use crate::game::actor;
+use hex2d::Angle::{Back, Forward, Left, LeftBack, Right};
 use hex2d::Coordinate;
-use hex2d::Angle::{Left, Right, Forward, Back, LeftBack};
-use game;
-use game::actor;
 
 pub trait Ai {
     fn action(&mut self, id: actor::Id, engine: &game::Engine) -> game::Action;
@@ -16,13 +16,15 @@ pub struct Simple;
 
 impl Ai for Simple {
     fn action(&mut self, id: actor::Id, engine: &game::Engine) -> game::Action {
-        grue(&engine.current_location().actors_byid[&id],
-             engine.current_location())
+        grue(
+            &engine.current_location().actors_byid[&id],
+            engine.current_location(),
+        )
     }
 }
 
 fn roam() -> game::Action {
-    match rand::thread_rng().gen_range(0..10) {
+    match rand::rng().random_range(0..10) {
         0 => game::Action::Turn(Right),
         1 => game::Action::Turn(Left),
         2 => game::Action::Move(Forward),
@@ -30,28 +32,35 @@ fn roam() -> game::Action {
     }
 }
 
-fn closest_reachable<F>(gstate: &game::Location,
-                        start: Coordinate,
-                        max_distance: i32,
-                        cond: F)
-                        -> Option<(Coordinate, Coordinate)>
-    where F: Fn(Coordinate) -> bool
+fn closest_reachable<F>(
+    gstate: &game::Location,
+    start: Coordinate,
+    max_distance: i32,
+    cond: F,
+) -> Option<(Coordinate, Coordinate)>
+where
+    F: Fn(Coordinate) -> bool,
 {
-    let mut bfs = bfs::Traverser::new(|pos| {
-                                          pos == start ||
-                                          (gstate.at(pos).tile().is_passable() &&
-                                           pos.distance(start) < max_distance &&
-                                           !gstate.at(pos).is_occupied())
-                                      },
-                                      cond,
-                                      start);
-    bfs.find().map(|pos| (pos, bfs.backtrace_last(pos).unwrap()))
+    let mut bfs = bfs::Traverser::new(
+        |pos| {
+            pos == start
+                || (gstate.at(pos).tile().is_passable()
+                    && pos.distance(start) < max_distance
+                    && !gstate.at(pos).is_occupied())
+        },
+        cond,
+        start,
+    );
+    bfs.find()
+        .map(|pos| (pos, bfs.backtrace_last(pos).unwrap()))
 }
 
 fn grue(astate: &actor::Actor, gstate: &game::Location) -> game::Action {
-
     for &visible_pos in &astate.visible {
-        if gstate.at(visible_pos).actor_map_or(false, |a| a.is_player()) {
+        if gstate
+            .at(visible_pos)
+            .actor_map_or(false, |a| a.is_player())
+        {
             return go_to(visible_pos, astate, gstate);
         }
     }
@@ -76,7 +85,7 @@ fn grue(astate: &actor::Actor, gstate: &game::Location) -> game::Action {
         }
     }
 
-    match rand::thread_rng().gen_range(0..5) {
+    match rand::rng().random_range(0..5) {
         0 => roam(),
         _ => game::Action::Wait,
     }
@@ -121,18 +130,16 @@ fn go_to(c: Coordinate, astate: &actor::Actor, gstate: &game::Location) -> game:
 fn _pony_follow(astate: &actor::Actor, gstate: &game::Location) -> game::Action {
     let start = astate.pos.coord;
 
-    let player_pos = closest_reachable(gstate,
-                                       start,
-                                       10,
-                                       |pos| gstate.at(pos).actor_map_or(false, |a| a.is_player()));
+    let player_pos = closest_reachable(gstate, start, 10, |pos| {
+        gstate.at(pos).actor_map_or(false, |a| a.is_player())
+    });
 
     let player_pos = if let Some((dst, _)) = player_pos {
         let distance = dst.distance(start);
         if distance < 3 {
-            closest_reachable(gstate,
-                              start,
-                              10,
-                              |pos| pos.distance(dst) == 3 && gstate.at(pos).is_passable())
+            closest_reachable(gstate, start, 10, |pos| {
+                pos.distance(dst) == 3 && gstate.at(pos).is_passable()
+            })
         } else if distance < 5 {
             None
         } else {

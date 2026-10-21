@@ -1,7 +1,7 @@
 use ncurses as nc;
 
+use crate::game;
 use std::cell::RefCell;
-use game;
 
 /// Working with 256 color palette
 mod color;
@@ -13,7 +13,6 @@ mod map;
 mod error;
 pub use self::error::*;
 
-
 mod ui;
 pub use self::ui::*;
 
@@ -23,13 +22,14 @@ pub struct Window {
 
 impl Window {
     pub fn new(w: i32, h: i32, x: i32, y: i32) -> Window {
-        Window { window: nc::subwin(nc::stdscr(), h, w, y, x) }
+        Window {
+            window: nc::subwin(nc::stdscr(), h, w, y, x),
+        }
     }
 
-    pub fn clear(&self, calloc : &RefCell<color::Allocator>) {
+    pub fn clear(&self, calloc: &RefCell<color::Allocator>) {
         let color = color::BACKGROUND_BG;
-        let cpair = nc::COLOR_PAIR(calloc.borrow_mut()
-                                   .get(color::VISIBLE_FG, color));
+        let cpair = nc::COLOR_PAIR(calloc.borrow_mut().get(color::VISIBLE_FG, color));
         nc::wbkgd(self.window, cpair);
         nc::werase(self.window);
     }
@@ -57,7 +57,7 @@ pub struct LogEntry {
 
 pub enum AutoMoveAction {
     Action(game::Action),
-    Finish, // Reached destination
+    Finish,  // Reached destination
     Blocked, // Blocked by something
 }
 
