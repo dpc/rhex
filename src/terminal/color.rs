@@ -41,7 +41,7 @@ pub const REMEMBERED_TERRAIN_FG: u8 = GRAY[5];
 
 // Visible RGB ramps saturate at lantern strength, not at the old light=3 band.
 // Bright backgrounds use inverse neutral glyphs for contrast. Forest backgrounds
-// remain dark; their narrower cube range necessarily has fewer distinct steps.
+// use terminal-native background ramps where RGB interpolation loses steps.
 pub const EMPTY_FG: Shade = Shade::new(
     Rgb::new(168, 168, 168),
     Rgb::new(108, 108, 108),
@@ -62,7 +62,10 @@ pub const EMPTY_BG: Shade = Shade::new(
 )
 .with_unlit(235);
 pub const WATER_FG: Shade = EMPTY_FG;
-pub const WATER_BG: Shade = Shade::new(Rgb::new(0, 0, 135), Rgb::new(0, 0, 0), NOT_IN_LOS_BG);
+// Blue contributes little luminance. Add green at full light rather than using
+// pure blue255, which would hide the player's unchanged blue facing marker.
+pub const WATER_BG: Shade = Shade::new(Rgb::new(0, 95, 215), Rgb::new(0, 0, 0), NOT_IN_LOS_BG)
+    .with_indexed([16, 17, 18, 19, 20, 26]);
 pub const STONE_FG: Shade = Shade::new(
     Rgb::new(0, 0, 0),
     Rgb::new(48, 48, 48),
@@ -77,7 +80,11 @@ pub const GROUND_FG: Shade = Shade::new(
     Rgb::new(0, 55, 0),
     REMEMBERED_TERRAIN_FG,
 );
-pub const FOREST_BG: Shade = Shade::new(Rgb::new(0, 95, 0), Rgb::new(0, 0, 0), NOT_IN_LOS_BG);
+// The lowest nonzero cube green is 95: black->green95 yields only two colors.
+// Neutral near-dark steps bridge that gap, then three greens show brighter light.
+// Stop at green175 rather than neon green255 to keep pale glyphs readable.
+pub const FOREST_BG: Shade = Shade::new(Rgb::new(0, 175, 0), Rgb::new(0, 0, 0), NOT_IN_LOS_BG)
+    .with_indexed([16, 233, 235, 22, 28, 34]);
 pub const THICKET_FG: Shade = Shade::new(
     Rgb::new(135, 255, 95),
     Rgb::new(0, 90, 0),
@@ -122,4 +129,4 @@ pub fn style(fg: impl Into<Color>, bg: impl Into<Color>) -> Style {
 
 #[cfg(test)]
 #[path = "color_tests.rs"]
-mod tests;
+pub(super) mod tests;

@@ -2,7 +2,7 @@ use super::*;
 use ratatui::style::Modifier;
 
 /// Decode the fixed xterm palette independently of the production quantizer.
-pub(super) fn channels(index: u8) -> [u8; 3] {
+pub(crate) fn channels(index: u8) -> [u8; 3] {
     match index {
         16..=231 => {
             let levels = [0, 95, 135, 175, 215, 255];
@@ -80,7 +80,6 @@ fn representative_shades_are_monotonic_and_saturate_without_overflow() {
         THICKET_FG,
         TRUNK_FG,
         EMPTY_BG,
-        FOREST_BG,
         WATER_BG,
     ] {
         let mut previous = channels(shade.index(true, 0));

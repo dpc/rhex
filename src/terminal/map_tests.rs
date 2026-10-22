@@ -60,6 +60,7 @@ fn player_body_is_gray_but_facing_stays_blue_at_every_light_level() {
     for (terrain, backgrounds) in [
         (tile::Empty, color::EMPTY_BG),
         (tile::Ground, color::FOREST_BG),
+        (tile::Water, color::WATER_BG),
         (tile::ShallowWater, color::WATER_BG),
     ] {
         for (light, gray, dot_gray) in [
@@ -89,16 +90,26 @@ fn player_body_is_gray_but_facing_stays_blue_at_every_light_level() {
             cell(
                 &buffer,
                 (12, 6),
-                if terrain == tile::ShallowWater {
-                    ","
-                } else {
-                    "•"
+                match terrain {
+                    tile::Water => "~",
+                    tile::ShallowWater => ",",
+                    _ => "•",
                 },
                 21,
                 backgrounds.index(true, light),
                 true,
             );
-            if terrain != tile::ShallowWater {
+            // Check actual facing-cell colors, not just the palette's indices.
+            let facing = &buffer[(12, 6)];
+            let TerminalColor::Indexed(bg) = facing.bg else {
+                panic!("facing background must be indexed");
+            };
+            let [r, g, b] = color::tests::channels(bg).map(i32::from);
+            assert!(
+                r * r + g * g + (255 - b) * (255 - b) >= 40 * 40,
+                "{terrain:?}: blue facing marker disappears at light {light}"
+            );
+            if !matches!(terrain, tile::Water | tile::ShallowWater) {
                 cell(
                     &buffer,
                     (8, 4),
@@ -400,10 +411,24 @@ fn dark_forest_remembered_and_unknown_cells_share_true_black() {
 }
 
 #[test]
-fn terrain_has_graduated_rgb_shading_but_memory_ignores_live_light() {
+fn terrain_has_distinct_rendered_light_steps_but_memory_ignores_live_light() {
+    use std::fmt::Write as _;
+
+    use super::color::tests::channels;
+
+    // Integer Rec.709 luma measures the rendered palette, not pre-quantized RGB.
+    let luma = |rgb: [u8; 3]| {
+        2126 * u32::from(rgb[0]) + 7152 * u32::from(rgb[1]) + 722 * u32::from(rgb[2])
+    };
+    let mut svg = String::from(
+        "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"1000\" height=\"910\">\
+         <rect width=\"100%\" height=\"100%\" fill=\"#181818\"/>\
+         <g font-family=\"monospace\" font-size=\"18\" fill=\"white\">\
+         <text x=\"20\" y=\"25\">Rendered terrain: light 0 / 1 / 2 / 3 / 4 / 5</text>",
+    );
     // Literal indexed colors keep this independent of the production palette.
     // Each visible style covers every light unit from darkness to lantern strength.
-    for (terrain, feature, glyph, fg, bg, bold) in [
+    for (row, (terrain, feature, glyph, fg, bg, bold)) in [
         (
             tile::Empty,
             None,
@@ -425,7 +450,7 @@ fn terrain_has_graduated_rgb_shading_but_memory_ignores_live_light() {
             None,
             "~",
             [242, 243, 102, 246, 247, 248],
-            [16, 16, 17, 17, 17, 18],
+            [16, 17, 18, 19, 20, 26],
             false,
         ),
         (
@@ -433,7 +458,7 @@ fn terrain_has_graduated_rgb_shading_but_memory_ignores_live_light() {
             None,
             ",",
             [242, 243, 102, 246, 247, 248],
-            [16, 16, 17, 17, 17, 18],
+            [16, 17, 18, 19, 20, 26],
             false,
         ),
         (
@@ -441,7 +466,7 @@ fn terrain_has_graduated_rgb_shading_but_memory_ignores_live_light() {
             None,
             "•",
             [238, 59, 243, 245, 248, 250],
-            [16, 16, 16, 22, 22, 22],
+            [16, 233, 235, 22, 28, 34],
             false,
         ),
         (
@@ -449,7 +474,7 @@ fn terrain_has_graduated_rgb_shading_but_memory_ignores_live_light() {
             None,
             "γ",
             [22, 28, 70, 71, 77, 119],
-            [16, 16, 16, 22, 22, 22],
+            [16, 233, 235, 22, 28, 34],
             false,
         ),
         (
@@ -457,7 +482,7 @@ fn terrain_has_graduated_rgb_shading_but_memory_ignores_live_light() {
             None,
             "#",
             [59, 59, 95, 137, 138, 180],
-            [16, 16, 16, 22, 22, 22],
+            [16, 233, 235, 22, 28, 34],
             true,
         ),
         (
@@ -465,7 +490,7 @@ fn terrain_has_graduated_rgb_shading_but_memory_ignores_live_light() {
             Some(tile::ForestPath),
             ">",
             [22, 22, 64, 65, 107, 149],
-            [16, 16, 16, 22, 22, 22],
+            [16, 233, 235, 22, 28, 34],
             false,
         ),
         (
@@ -473,7 +498,7 @@ fn terrain_has_graduated_rgb_shading_but_memory_ignores_live_light() {
             Some(tile::Entrance),
             "<",
             [22, 22, 64, 65, 107, 149],
-            [16, 16, 16, 22, 22, 22],
+            [16, 233, 235, 22, 28, 34],
             false,
         ),
         (
@@ -508,13 +533,24 @@ fn terrain_has_graduated_rgb_shading_but_memory_ignores_live_light() {
             [235, 246, 145, 251, 188, 255],
             false,
         ),
-    ] {
+    ]
+    .into_iter()
+    .enumerate()
+    {
         let mut loc = scene();
         let coord = Coordinate::new(0, 2);
         loc.map[coord] = tile::Tile::new(terrain);
         loc.map[coord].feature = feature;
         let mut renderer = MapRenderer::new(UNICODE_DOT);
         renderer.resize(20, 12);
+        let mut rendered_backgrounds = std::collections::BTreeSet::new();
+        let mut previous_luma = None;
+        writeln!(
+            svg,
+            "<text x=\"10\" y=\"{}\">{terrain:?} {feature:?}</text>",
+            55 + row * 65
+        )
+        .unwrap();
         for (band, light) in (0..=5).enumerate() {
             // Opaque terrain takes its apparent light from neighboring cells.
             for lit_coord in Coordinate::new(0, 0).range_iter(8) {
@@ -522,7 +558,49 @@ fn terrain_has_graduated_rgb_shading_but_memory_ignores_live_light() {
             }
             let buffer = render(&mut renderer, &loc, Mode::Normal, None, 0, 20, 12);
             cell(&buffer, (8, 4), glyph, fg[band], bg[band], bold);
+            let rendered = &buffer[(8, 4)];
+            let TerminalColor::Indexed(background) = rendered.bg else {
+                panic!("terrain must use indexed backgrounds");
+            };
+            let TerminalColor::Indexed(foreground) = rendered.fg else {
+                panic!("terrain must use indexed foregrounds");
+            };
+            let rgb = channels(background);
+            let fg_rgb = channels(foreground);
+            assert!(
+                rendered_backgrounds.insert(rgb),
+                "{terrain:?}: light {light}"
+            );
+            let brightness = luma(rgb);
+            if let Some(previous) = previous_luma {
+                assert!(brightness > previous, "{terrain:?}: light {light}");
+            }
+            previous_luma = Some(brightness);
+            assert!(
+                brightness.abs_diff(luma(fg_rgb)) >= 28 * 10000,
+                "{terrain:?}: unreadable glyph at light {light}"
+            );
+            let [r, g, b] = rgb;
+            let [fr, fg, fb] = fg_rgb;
+            let x = 310 + band * 110;
+            let y = 35 + row * 65;
+            let symbol = rendered.symbol().replace('&', "&amp;").replace('<', "&lt;");
+            writeln!(
+                svg,
+                "<rect x=\"{x}\" y=\"{y}\" width=\"105\" height=\"42\" fill=\"rgb({r},{g},{b})\"/>\
+                 <text x=\"{}\" y=\"{}\" fill=\"rgb({fr},{fg},{fb})\" font-weight=\"{}\">{symbol} {background}</text>",
+                x + 10,
+                y + 27,
+                if bold { "bold" } else { "normal" }
+            )
+            .unwrap();
         }
+        assert_eq!(rendered_backgrounds.len(), 6);
+        for lit_coord in Coordinate::new(0, 0).range_iter(8) {
+            loc.light_map[lit_coord] = 100;
+        }
+        let saturated = render(&mut renderer, &loc, Mode::Normal, None, 0, 20, 12);
+        cell(&saturated, (8, 4), glyph, fg[5], bg[5], bold);
         player_mut(&mut loc).visible.remove(&coord);
         // Current lighting must not brighten terrain outside sight.
         for light in [0, 1, 3, 5, u32::MAX / 2] {
@@ -533,6 +611,11 @@ fn terrain_has_graduated_rgb_shading_but_memory_ignores_live_light() {
             cell(&buffer, (8, 4), glyph, 236, 16, bold);
         }
     }
+    svg.push_str("</g></svg>");
+    // Optional visual evidence uses the same rendered cells as the assertions.
+    if let Some(path) = std::env::var_os("RHEX_PALETTE_SVG") {
+        std::fs::write(path, svg).unwrap();
+    }
 }
 
 #[test]
@@ -542,7 +625,7 @@ fn shoreline_glue_matches_ground_light_in_both_directions() {
     for water in [tile::Water, tile::ShallowWater] {
         for (ground, wet) in [(left, right), (right, left)] {
             for (ground_light, water_light, expected_bg) in
-                [(4, 0, 22), (3, 1, 22), (1, 4, 16), (0, 4, 16)]
+                [(4, 0, 28), (3, 1, 22), (1, 4, 233), (0, 4, 16)]
             {
                 let mut loc = scene();
                 loc.map[ground] = tile::Tile::new(tile::Ground);
@@ -580,7 +663,7 @@ fn adjacent_water_keeps_tile_glyphs_and_continuous_background_without_glue_glyph
     let right = left + Direction::XY;
     for (left_water, left_glyph) in [(tile::Water, "~"), (tile::ShallowWater, ",")] {
         for (right_water, right_glyph) in [(tile::Water, "~"), (tile::ShallowWater, ",")] {
-            for (light, fg, bg) in [(0, 242, 16), (1, 243, 16), (3, 246, 17), (5, 248, 18)] {
+            for (light, fg, bg) in [(0, 242, 16), (1, 243, 17), (3, 246, 19), (5, 248, 26)] {
                 for (left_seen, right_seen) in
                     [(true, true), (true, false), (false, true), (false, false)]
                 {
