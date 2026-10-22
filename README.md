@@ -107,8 +107,11 @@ swords and bucklers and leave that equipment behind when killed.
 
 ### Reading the sidebar
 
-Read current/maximum HP, MP and SP in one row. Red values indicate a decrease
-since the previous turn; green values indicate an increase.
+Read current/maximum HP, MP and SP in one row. A decrease since the previous turn
+colors only the current value red, unless it is strictly below 20% of a positive
+maximum. Below that threshold, the whole ratio stays red, even while steady or
+rising. Exactly 20% is not critical. Otherwise, increases color the whole ratio
+green.
 
 Below the equipment, tile readouts and turn counter, use the compact sight
 legend to identify entries by `X - name`. Each entry uses its ordinary map glyph

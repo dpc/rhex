@@ -138,6 +138,93 @@ fn resources_share_one_row_and_preserve_change_colors() {
 }
 
 #[test]
+fn resource_ratios_distinguish_decreases_from_critical_levels() {
+    let mut ui = fixture(fixtures::room());
+    // Each case applies to every resource, including recovery after a low frame.
+    for (current, previous, maximum, numerator, suffix) in [
+        (9, 10, 15, ui.red_color, ui.text_color),
+        (2, 3, 15, ui.red_color, ui.red_color),
+        (2, 2, 15, ui.red_color, ui.red_color),
+        (2, 2, 15, ui.red_color, ui.red_color),
+        (2, 1, 15, ui.red_color, ui.red_color),
+        (3, 2, 15, ui.green_color, ui.green_color),
+        (3, 3, 15, ui.text_color, ui.text_color),
+        (3, 4, 15, ui.red_color, ui.text_color),
+        (4, 4, 21, ui.red_color, ui.red_color),
+        (5, 5, 21, ui.text_color, ui.text_color),
+        (0, 0, 0, ui.text_color, ui.text_color),
+        (0, 1, 0, ui.red_color, ui.text_color),
+        (1, 0, 0, ui.green_color, ui.green_color),
+    ] {
+        let player = ui
+            .engine
+            .current_location_mut()
+            .actors_byid
+            .get_mut(&0)
+            .unwrap();
+        player.hp = current;
+        player.mp = current;
+        player.sp = current;
+        player.saved_hp = previous;
+        player.saved_mp = previous;
+        player.saved_sp = previous;
+        player.stats.base.max_hp = maximum;
+        player.stats.base.max_mp = maximum;
+        player.stats.base.max_sp = maximum;
+        let buffer = frame(&mut ui);
+        for (x, label) in [(30, "HP"), (40, "MP"), (50, "SP")] {
+            let ratio = format!("{current}/{maximum}");
+            let text: String = (x..x + 3 + ratio.len() as u16)
+                .map(|x| buffer[(x, 3)].symbol())
+                .collect();
+            assert_eq!(text, format!("{label}:{ratio}"));
+            for offset in 0..3 {
+                assert_eq!(buffer[(x + offset, 3)].fg, ui.label_color.fg.unwrap());
+            }
+            for offset in 0..ratio.len() {
+                let style = if offset < current.to_string().len() {
+                    numerator
+                } else {
+                    suffix
+                };
+                assert_eq!(
+                    buffer[(x + 3 + offset as u16, 3)].fg,
+                    style.fg.unwrap(),
+                    "{label}:{ratio}, previous={previous}, offset={offset}"
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn resource_threshold_handles_extreme_values_without_overflow() {
+    let mut ui = fixture(fixtures::room());
+    for (current, previous, maximum, expected) in [
+        (i32::MAX, i32::MAX, i32::MAX, ui.text_color),
+        (429_496_729, 429_496_729, i32::MAX, ui.red_color),
+        (429_496_730, 429_496_730, i32::MAX, ui.text_color),
+        (i32::MIN, i32::MIN, i32::MAX, ui.red_color),
+        (i32::MIN, i32::MIN, 0, ui.text_color),
+        (-123_456, 0, 0, ui.red_color),
+    ] {
+        let player = ui
+            .engine
+            .current_location_mut()
+            .actors_byid
+            .get_mut(&0)
+            .unwrap();
+        player.hp = current;
+        player.saved_hp = previous;
+        player.stats.base.max_hp = maximum;
+        let buffer = frame(&mut ui);
+        assert_eq!(buffer[(33, 3)].fg, expected.fg.unwrap());
+        assert_eq!(buffer[(39, 3)].symbol(), "…");
+        assert_eq!(buffer[(40, 3)].symbol(), "M");
+    }
+}
+
+#[test]
 fn pairs_prioritize_creatures_then_items_and_report_distinct_overflow() {
     let mut loc = fixtures::room();
     // Common surroundings must not consume a slot or inflate the overflow.

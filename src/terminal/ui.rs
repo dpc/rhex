@@ -976,7 +976,7 @@ impl Ui {
         map_renderer.draw_into(&windows.map);
     }
 
-    /// Keep exact resource values on one row; color changes as the old bars did.
+    /// Show resource changes and keep critically low ratios red on one row.
     fn draw_resources(&self, window: &Window, y: i32) {
         let player = self.player();
         for (index, (label, current, previous, maximum)) in [
@@ -990,12 +990,26 @@ impl Ui {
             let x = index as i32 * 10;
             window.move_to(y, x);
             self.draw_label(window, label);
+            // Widen before multiplying so even out-of-range values remain safe.
+            let critical = maximum > 0 && i64::from(current) * 5 < i64::from(maximum);
             let style = match current.cmp(&previous) {
+                _ if critical => self.red_color,
                 cmp::Ordering::Less => self.red_color,
                 cmp::Ordering::Greater => self.green_color,
                 cmp::Ordering::Equal => self.text_color,
             };
             Self::put_clipped(window, y, x + 3, 7, &format!("{current}/{maximum}"), style);
+            if !critical && current < previous {
+                let digits = current.to_string().len();
+                Self::put_clipped(
+                    window,
+                    y,
+                    x + 3 + digits as i32,
+                    7_usize.saturating_sub(digits),
+                    &format!("/{maximum}"),
+                    self.text_color,
+                );
+            }
         }
     }
 
