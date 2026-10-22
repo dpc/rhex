@@ -61,7 +61,9 @@ struct Windows {
 impl Windows {
     fn after_resize((max_y, max_x): (i32, i32)) -> Self {
         let mid_x = (max_x - 30).max(0);
-        let mid_y = 13.min(max_y);
+        // Eleven HUD rows and five sight rows; the map keeps its full height.
+        // At the 60x24 minimum this leaves eight rows for the log.
+        let mid_y = 16.min(max_y);
 
         let map_window = Window::new(mid_x, max_y, 0, 0);
         let stats_window = Window::new(max_x - mid_x, mid_y, mid_x, 0);
@@ -1043,7 +1045,7 @@ impl Ui {
                 rows.push(vec![entry]);
             }
         }
-        let available = (window.size().0 - first_y).max(0) as usize;
+        let available = (window.size().0 - first_y).clamp(0, 5) as usize;
         let mut displayed = 0;
         for (offset, row) in rows.iter().take(available).enumerate() {
             let y = first_y + offset as i32;

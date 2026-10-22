@@ -225,7 +225,7 @@ fn resource_threshold_handles_extreme_values_without_overflow() {
 }
 
 #[test]
-fn pairs_prioritize_creatures_then_items_and_report_distinct_overflow() {
+fn pairs_prioritize_creatures_then_items_without_premature_overflow() {
     let mut loc = fixtures::room();
     // Common surroundings must not consume a slot or inflate the overflow.
     for (x, terrain) in [
@@ -264,15 +264,79 @@ fn pairs_prioritize_creatures_then_items_and_report_distinct_overflow() {
     ui.engine.current_location_mut().map[Coordinate::new(-2, 0)].feature = Some(tile::Stairs);
     let crowded = frame(&mut ui);
     assert_eq!(row(&crowded, 11), row(&buffer, 11));
-    assert_eq!(
-        row(&crowded, 12),
-        format!("{:15}{:15}", "& - statue", "+2 more")
-    );
+    assert_eq!(row(&crowded, 12), row(&buffer, 12));
+    assert_eq!(row(&crowded, 13).trim(), "> - stairs down");
     ui.log("Log remains here.");
     assert_eq!(
-        row(&frame(&mut ui), 13),
+        row(&frame(&mut ui), 16),
         format!("{:30}", "Log remains here.")
     );
+}
+
+#[test]
+fn five_sight_rows_keep_long_entries_overflow_and_log_separate() {
+    for (width, height) in [(60, 24), (120, 36)] {
+        let mut loc = fixtures::room();
+        loc.spawn(Actor::new(
+            Race::CaveBeetle,
+            Position::new(Coordinate::new(0, 1), hex2d::XY),
+        ));
+        for (x, item) in [Type::Plate, Type::Knife, Type::Whistle, Type::HandLantern]
+            .into_iter()
+            .enumerate()
+        {
+            loc.items.insert(
+                Coordinate::new(x as i32 - 2, 2),
+                Box::new(Item::new(item, vec![Feature::Light])),
+            );
+        }
+        let mut ui = fixture(loc);
+        ui.resize((height, width));
+        ui.log("Log stays below sight.");
+        let render = |ui: &mut Ui| {
+            let mut buffer = Buffer::empty(Rect::new(0, 0, width as u16, height as u16));
+            ui.render_into(&mut buffer);
+            buffer
+        };
+        let text = |buffer: &Buffer, y| -> String {
+            ((width - 30) as u16..width as u16)
+                .map(|x| buffer[(x, y)].symbol())
+                .collect::<String>()
+                .trim_end()
+                .to_owned()
+        };
+        let full = render(&mut ui);
+        assert_eq!(ui.windows.map.size(), (height, width - 30));
+        assert_eq!(text(&full, 11), "b - cave beetle");
+        for y in 12..16 {
+            assert!(text(&full, y).contains(" of light"));
+        }
+        assert_eq!(text(&full, 16), "Log stays below sight.");
+        ui.engine.current_location_mut().map[Coordinate::new(0, 3)].feature = Some(tile::Stairs);
+        let crowded = render(&mut ui);
+        for y in 0..15 {
+            assert_eq!(text(&crowded, y), text(&full, y));
+        }
+        assert_eq!(text(&crowded, 15), "+2 more");
+        assert_eq!(text(&crowded, 16), text(&full, 16));
+        ui.handle_event(TerminalEvent::Resize(60, 23), Instant::now());
+        let mut short = Buffer::empty(Rect::new(0, 0, 60, 23));
+        ui.render_into(&mut short);
+        let short_text: String = short.content.iter().map(|cell| cell.symbol()).collect();
+        assert!(!short_text.contains("cave beetle"));
+        ui.handle_event(
+            TerminalEvent::Resize(width as u16, height as u16),
+            Instant::now(),
+        );
+        assert_eq!(render(&mut ui), crowded);
+        ui.engine.current_location_mut().items.clear();
+        ui.engine.current_location_mut().map[Coordinate::new(0, 3)].feature = None;
+        let cleared = render(&mut ui);
+        for y in 12..16 {
+            assert!(text(&cleared, y).is_empty());
+        }
+        assert_eq!(text(&cleared, 16), text(&full, 16));
+    }
 }
 
 #[test]

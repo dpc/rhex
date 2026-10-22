@@ -839,7 +839,7 @@ fn long_ground_readouts_clip_without_overwriting_stats_or_log() {
         assert_eq!(row(8), "In front: plate armor of infra");
         assert_eq!(row(9), "Below: plate armor of infravis");
         assert_eq!(row(10), format!("{:30}", "Turn: 0       Level: 0"));
-        assert_eq!(row(13), format!("{:30}", "A quiet room."));
+        assert_eq!(row(16), format!("{:30}", "A quiet room."));
         ui.engine.current_location_mut().items.clear();
         let cleared = frame(&mut ui, width as u16, height as u16);
         let row: String = ((width - 30) as u16..width as u16)
@@ -1911,7 +1911,7 @@ fn exact_width_log_entries_do_not_insert_blank_rows() {
     ui.log("tail");
     ui.log("123456789012345678901234567890\n\nnext");
     let buffer = frame(&mut ui, 60, 24);
-    let rows: Vec<String> = (13..18)
+    let rows: Vec<String> = (16..21)
         .map(|y| (30..60).map(|x| buffer[(x, y)].symbol()).collect())
         .collect();
     assert_eq!(
@@ -1962,12 +1962,12 @@ fn overflowing_inventory_and_multiline_log_stay_in_their_panels_and_clear() {
             assert!(row(&full, 2, 0, panel).starts_with("n of regeneration of light"));
         }
         assert_eq!(
-            row(&full, 13, panel, width as u16),
+            row(&full, 16, panel, width as u16),
             "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123"
         );
-        assert!(row(&full, 14, panel, width as u16).starts_with("456789"));
-        assert!(row(&full, 15, panel, width as u16).starts_with("second line"));
-        for y in 0..13 {
+        assert!(row(&full, 17, panel, width as u16).starts_with("456789"));
+        assert!(row(&full, 18, panel, width as u16).starts_with("second line"));
+        for y in 0..16 {
             for x in panel..width as u16 {
                 assert_eq!(
                     full[(x, y)],

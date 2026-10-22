@@ -11,10 +11,10 @@
 |                              Turn: 0       Level: 0|
 |                              > - stairs down|
 |                              × - closed door|
+||
+||
+||
 |                              A quiet room.|
-||
-||
-||
 ||
 ||
 ||
