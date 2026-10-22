@@ -262,29 +262,59 @@ fn shoreline_glue_matches_ground_light_in_both_directions() {
 }
 
 #[test]
-fn adjacent_shallows_keep_tile_commas_and_continuous_background_without_glue_comma() {
+fn adjacent_water_keeps_tile_glyphs_and_continuous_background_without_glue_glyphs() {
     let left = Coordinate::new(0, 2);
     let right = left + Direction::XY;
-    for (light, fg, bg) in [(0, 247, 67), (1, 241, 74), (3, 248, 4)] {
-        let mut loc = scene();
-        for coord in [left, right] {
-            loc.map[coord] = tile::Tile::new(tile::ShallowWater);
-            loc.light_map[coord] = light;
-        }
-        let mut renderer = MapRenderer::new(UNICODE_DOT);
-        renderer.resize(20, 12);
-        let buffer = render(&mut renderer, &loc, Mode::Normal, None, 0, 20, 12);
-        cell(&buffer, (8, 4), ",", fg, bg, false);
-        cell(&buffer, (9, 4), " ", fg, bg, false);
-        cell(&buffer, (10, 4), ",", fg, bg, false);
+    for (left_water, left_glyph) in [(tile::Water, "~"), (tile::ShallowWater, ",")] {
+        for (right_water, right_glyph) in [(tile::Water, "~"), (tile::ShallowWater, ",")] {
+            for (light, fg, bg) in [(0, 247, 67), (1, 241, 74), (3, 248, 4)] {
+                for (left_seen, right_seen) in
+                    [(true, true), (true, false), (false, true), (false, false)]
+                {
+                    let mut loc = scene();
+                    for (coord, water, seen) in [
+                        (left, left_water, left_seen),
+                        (right, right_water, right_seen),
+                    ] {
+                        loc.map[coord] = tile::Tile::new(water);
+                        loc.light_map[coord] = light;
+                        if !seen {
+                            player_mut(&mut loc).visible.remove(&coord);
+                        }
+                    }
+                    let mut renderer = MapRenderer::new(UNICODE_DOT);
+                    renderer.resize(20, 12);
+                    let buffer = render(&mut renderer, &loc, Mode::Normal, None, 0, 20, 12);
+                    for (xy, glyph, seen) in [
+                        ((8, 4), left_glyph, left_seen),
+                        ((9, 4), " ", left_seen || right_seen),
+                        ((10, 4), right_glyph, right_seen),
+                    ] {
+                        let (fg, bg) = if seen { (fg, bg) } else { (241, 232) };
+                        cell(&buffer, xy, glyph, fg, bg, false);
+                    }
 
-        for coord in [left, right] {
-            player_mut(&mut loc).visible.remove(&coord);
+                    // A hidden neighbor cannot change the water glue's lighting.
+                    for (coord, seen) in [(left, left_seen), (right, right_seen)] {
+                        if !seen {
+                            loc.light_map[coord] = 6;
+                        }
+                    }
+                    let relit = render(&mut renderer, &loc, Mode::Normal, None, 0, 20, 12);
+                    assert_eq!(buffer[(9, 4)], relit[(9, 4)]);
+
+                    if !left_seen && !right_seen {
+                        for coord in [left, right] {
+                            player_mut(&mut loc).known.remove(&coord);
+                        }
+                        let unknown = render(&mut renderer, &loc, Mode::Normal, None, 0, 20, 12);
+                        for xy in [(8, 4), (9, 4), (10, 4)] {
+                            cell(&unknown, xy, " ", 232, 232, false);
+                        }
+                    }
+                }
+            }
         }
-        let buffer = render(&mut renderer, &loc, Mode::Normal, None, 0, 20, 12);
-        cell(&buffer, (8, 4), ",", 241, 232, false);
-        cell(&buffer, (9, 4), " ", 241, 232, false);
-        cell(&buffer, (10, 4), ",", 241, 232, false);
     }
 }
 

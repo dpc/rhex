@@ -464,15 +464,18 @@ impl MapRenderer {
                 bold = true;
                 (color::WALL_FG, color::WALL_BG, WALL_CH)
             }
-            Some(tile::Water) => (color::WATER_FG, color::WATER_BG, WATER_CH),
-            Some(tile::ShallowWater) => {
-                // Keep commas on real shallows, but leave continuous water
-                // between two shallow hexes free of extra terrain glyphs.
+            Some(water @ (tile::Water | tile::ShallowWater)) => {
+                // Keep real water glyphs, but leave continuous water between
+                // hexes free of extra terrain glyphs, regardless of depth.
                 let glyph = if !is_proper_coord
-                    && cur_loc.at(c).tile().type_ == tile::ShallowWater
-                    && cur_loc.at(c + Direction::XY).tile().type_ == tile::ShallowWater
-                {
+                    && matches!(cur_loc.at(c).tile().type_, tile::Water | tile::ShallowWater)
+                    && matches!(
+                        cur_loc.at(c + Direction::XY).tile().type_,
+                        tile::Water | tile::ShallowWater
+                    ) {
                     ' '
+                } else if water == tile::Water {
+                    WATER_CH
                 } else {
                     ','
                 };
