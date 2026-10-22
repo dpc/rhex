@@ -382,6 +382,15 @@ impl Location {
         }
     }
 
+    /// Refresh cached perception for all living observers currently in the level.
+    pub(crate) fn refresh_sight(&mut self) {
+        for id in self.actors_alive_ids() {
+            let mut actor = self.actors_byid.remove(&id).unwrap();
+            actor.refresh_sight(self);
+            self.actors_byid.insert(id, actor);
+        }
+    }
+
     pub fn post_any_tick(&mut self) {
         for id in self.actors_alive_ids() {
             let mut actor = self.actors_byid.remove(&id).unwrap();

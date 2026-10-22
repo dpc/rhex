@@ -30,12 +30,23 @@ Press any key at the introduction, then choose a race (`a` for human).
 In either input mode, use `h`/`l` or the Left/Right arrows to turn left/right, and
 `k`/`j` or the Up/Down arrows to move forward/backward.
 In normal input mode, you can also use `w`/`s` to move forward/backward, `a`/`d`
-to turn, and `q`/`e` to sidestep. Press `.` to wait, `,` to pick up an item,
+to turn, and `q`/`e` to sidestep. Press `.` to wait, `,` to interact in front,
 `I` to open inventory, and `?` for help.
 Press F2 to toggle additional Vi-style controls (`u`/`i` spin,
 `H`/`L` sidestep, `K` walks automatically, and `q` quits instead of sidestepping).
 Use these movement aliases during gameplay; in menus and inventory, use letters
 to select entries.
+
+Press comma to interact with the tile in front of you without moving or turning.
+You pick up an item first; if there is no item, you open or close a door. This
+matches the item-first “In front” readout. A full inventory leaves the item and
+door unchanged; an actor in an open doorway prevents you from closing it.
+Each permitted attempt takes one normal action, even when there is nothing to
+do. Opening or closing a door makes the same noise as bump-opening it; pickup
+and unsuccessful interactions are silent.
+Moving into a closed door still opens it without entering. Comma does not clear
+thickets or use items, exits, or objects underfoot. Use `E` for inventory items
+and `<`/`>` for the passage you are standing on.
 
 ### Forests and returning to levels
 

@@ -264,7 +264,8 @@ fn action_capture_keeps_existing_levels_even_while_actor_is_removed() {
     player.act(&mut loc, Action::Turn(Angle::Right));
     assert_eq!(player.pending_noises[0].level, 2);
     player.pending_noises.clear();
-    player.open_door(&loc);
+    loc.map[player.head()].feature = Some(tile::Door(false));
+    player.act(&mut loc, Action::Interact);
     assert_eq!(player.pending_noises[0].level, 3);
     player.pending_noises.clear();
     player.equip(Box::new(item::Item::new(item::Type::Pickaxe, vec![])), 'p');

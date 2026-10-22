@@ -29,6 +29,8 @@ pub(crate) mod fixtures;
 #[cfg(test)]
 mod forest_tests;
 #[cfg(test)]
+mod interaction_tests;
+#[cfg(test)]
 mod property_tests;
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]

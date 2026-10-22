@@ -51,7 +51,7 @@ fn movement_and_commands_in_both_input_modes() {
             (KeyCode::Char('j'), Move(Back)),
             (KeyCode::Char('c'), Charge),
             (KeyCode::Char('.'), Wait),
-            (KeyCode::Char(','), Pick),
+            (KeyCode::Char(','), Interact),
             (KeyCode::Char('>'), Descend),
             (KeyCode::Char('<'), Descend),
         ];

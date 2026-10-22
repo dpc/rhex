@@ -41,6 +41,82 @@ fn frame(ui: &mut Ui, width: u16, height: u16) -> Buffer {
     buffer
 }
 
+#[test]
+fn comma_production_dispatch_picks_then_toggles_without_moving() {
+    for mode in [InputMode::Normal, InputMode::Vi] {
+        let now = Instant::now();
+        let mut ui = fixture(now);
+        ui.input_mode = mode;
+        let pos = ui.player().pos;
+        let target = ui.player().head();
+        ui.engine.current_location_mut().map[target].feature = Some(tile::Door(true));
+        ui.engine
+            .current_location_mut()
+            .items
+            .insert(target, Box::new(Item::new(Type::Cloak, vec![])));
+        for (turn, description, door) in [
+            (1, "open door", true),
+            (2, "closed door", false),
+            (3, "open door", true),
+        ] {
+            let time = now + Duration::from_secs(turn);
+            chars(&mut ui, ",", time);
+            assert_eq!(ui.game_action_queue.len(), 1);
+            assert_eq!(ui.game_action_queue[0], game::Action::Interact);
+            ui.advance((24, 60), time);
+            assert!(ui.game_action_queue.is_empty());
+            assert_eq!(ui.engine.turn(), turn);
+            assert_eq!(ui.player().pos, pos);
+            assert_eq!(ui.player().items_backpack.len(), 1);
+            assert!(!ui.current_location().items.contains_key(&target));
+            assert_eq!(
+                ui.current_location().map[target].feature,
+                Some(tile::Door(door))
+            );
+            let before = game::fixtures::outcome(ui.current_location());
+            let buffer = frame(&mut ui, 60, 24);
+            let front: String = (30..60).map(|x| buffer[(x, 10)].symbol()).collect();
+            assert_eq!(front, format!("{:30}", format!("In front: {description}")));
+            assert_eq!(before, game::fixtures::outcome(ui.current_location()));
+        }
+    }
+}
+
+#[test]
+fn comma_does_not_escape_modal_input_or_select_inventory_items() {
+    let now = Instant::now();
+    for input_mode in [InputMode::Normal, InputMode::Vi] {
+        for mode in [
+            Mode::Inventory(InvMode::View),
+            Mode::Inventory(InvMode::Equip),
+            Mode::Inventory(InvMode::Drop_),
+            Mode::Examine,
+            Mode::Target(TargetMode::Ranged),
+            Mode::GoTo,
+            Mode::FullScreen(FSMode::Help),
+            Mode::FullScreen(FSMode::Quit),
+            Mode::FullScreen(FSMode::PickRace),
+        ] {
+            let mut ui = fixture(now);
+            ui.input_mode = input_mode;
+            give_bow(&mut ui);
+            let target = ui.player().head();
+            ui.engine.current_location_mut().map[target].feature = Some(tile::Door(false));
+            ui.mode_switch_to(mode);
+            // Start the scheduler's waiting turn without supplying an action.
+            ui.advance((24, 60), now);
+            let turn = ui.engine.turn();
+            let before = game::fixtures::outcome(ui.current_location());
+            chars(&mut ui, ",", now);
+            assert!(ui.game_action_queue.is_empty(), "{input_mode:?} {mode:?}");
+            ui.advance((24, 60), now);
+            let _ = frame(&mut ui, 60, 24);
+            assert_eq!(ui.engine.turn(), turn, "{input_mode:?} {mode:?}");
+            assert_eq!(before, game::fixtures::outcome(ui.current_location()));
+        }
+    }
+}
+
 /// Build an unaware, visible enemy that cannot act during the tested turn.
 fn awareness_fixture(now: Instant, sight: bool) -> (Ui, actor::Id) {
     let mut loc = game::fixtures::room();

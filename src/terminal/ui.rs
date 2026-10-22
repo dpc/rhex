@@ -632,7 +632,7 @@ impl Ui {
             (KEY_CAPL, true) | (KEY_LOWE, false) => Game(Move(Right)),
             (KEY_LOWJ, _) | (KEY_LOWS, false) | (input::DOWN, _) => Game(Move(Back)),
             (KEY_DOT, _) => Game(Wait),
-            (KEY_COMMA, _) => Game(Pick),
+            (KEY_COMMA, _) => Game(Interact),
             (KEY_DESCEND | KEY_RETURN, _) => Game(Descend),
             (KEY_LOWO, _) => AutoMove(AutoMoveType::Explore),
             (KEY_CAPK, true) => AutoMove(AutoMoveType::Walk),
@@ -1348,7 +1348,7 @@ impl Ui {
         window.write("Autoexplore: o\n");
         window.write("Go to exit: G, then > or <\n");
         window.write("Examine: x\n");
-        window.write("Pick item in front: ,\n");
+        window.write("Interact in front (pick item, else open/close door): ,\n");
         window.write("Look at Inventory: I\n");
         window.write("Equip/Use: E\n");
         window.write("Drop: D\n");

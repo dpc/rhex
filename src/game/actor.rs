@@ -195,7 +195,7 @@ pub struct Actor {
     pub pos: Position,
     pub acted: bool,
     descended: bool,
-    opened_door: bool,
+    changed_door: bool,
 
     pub race: Race,
     pub base_stats: Stats,
@@ -278,7 +278,7 @@ impl Actor {
             saved_mp: stats.max_mp,
             saved_sp: stats.max_sp,
             acted: false,
-            opened_door: false,
+            changed_door: false,
             descended: false,
         }
     }
@@ -315,6 +315,7 @@ impl Actor {
         match action {
             Action::Wait
             | Action::Pick
+            | Action::Interact
             | Action::Equip(_)
             | Action::Descend
             | Action::Ranged(_)
@@ -453,7 +454,8 @@ impl Actor {
         visible
     }
 
-    fn postprocess_visibile(&mut self, loc: &game::Location) {
+    /// Refresh current sight and retain newly observed terrain in exploration.
+    pub(crate) fn refresh_sight(&mut self, loc: &game::Location) {
         let total_los = self.temporary_los.clone();
         let total_visible = self.los_to_visible(loc, &total_los);
 
@@ -511,8 +513,13 @@ impl Actor {
         }
     }
 
-    pub fn open_door(&mut self, loc: &Location) {
-        self.opened_door = true;
+    /// Refresh light and sight after a door toggle and emit the door's noise.
+    fn changed_door(&mut self, loc: &mut Location) {
+        self.changed_door = true;
+        loc.recalculate_light_with_actor(Some(self));
+        // Other observers must see the new obstruction before their AI acts.
+        // The acting actor is outside the location until its own tick ends.
+        loc.refresh_sight();
         self.add_current_los_to_temporary_los(loc);
         self.noise_makes(3);
     }
@@ -524,7 +531,7 @@ impl Actor {
     pub fn pre_any_tick(&mut self) {}
 
     pub fn pre_own_tick(&mut self) {
-        self.opened_door = false;
+        self.changed_door = false;
         self.pre_pos = Some(self.pos);
         self.pre_head = Some(self.head());
         self.did_attack = Vec::new();
@@ -559,8 +566,8 @@ impl Actor {
                 self.hp += 1
             }
 
-            if self.pre_pos != Some(self.pos) || self.opened_door {
-                self.postprocess_visibile(loc);
+            if self.pre_pos != Some(self.pos) || self.changed_door {
+                self.refresh_sight(loc);
             }
         }
     }
@@ -573,7 +580,7 @@ impl Actor {
         self.descended = false;
         self.pre_pos = None;
         self.pre_head = None;
-        self.opened_door = false;
+        self.changed_door = false;
         self.known = if self.is_player() {
             loc.explored.clone()
         } else {
@@ -599,7 +606,7 @@ impl Actor {
 
     pub fn post_spawn(&mut self, loc: &Location) {
         self.recalculate_stats();
-        self.postprocess_visibile(loc);
+        self.refresh_sight(loc);
     }
 
     pub fn pick_item(&mut self, item: Box<Item>) -> Option<Box<Item>> {
@@ -881,14 +888,22 @@ impl Actor {
             if old_pos == new_pos {
                 // no movement
                 match action {
-                    Action::Pick => {
+                    Action::Pick | Action::Interact => {
                         let head = self.head();
                         let item = loc.at_mut(head).pick_item();
-
-                        if let Some(item) = item
-                            && let Some(item) = self.pick_item(item)
+                        // Items take precedence, even when the backpack is full.
+                        if let Some(item) = item {
+                            if let Some(item) = self.pick_item(item) {
+                                // Restore exactly where it was, including on a
+                                // closed door; dropping searches for free floor.
+                                loc.items.insert(head, item);
+                            }
+                        } else if action == Action::Interact
+                            && let Some(tile::Door(open)) = loc.map[head].feature
+                            && (!open || !loc.actors_coord_to_id.contains_key(&head))
                         {
-                            loc.at_mut(head).drop_item(item);
+                            loc.map[head].add_feature(tile::Door(!open));
+                            self.changed_door(loc);
                         }
                     }
                     Action::Equip(ch) => {
@@ -924,7 +939,7 @@ impl Actor {
                     self.substract_melee_sp_cost();
                     self.noise_makes(self.attack_noise().max(5));
                     loc.recalculate_light_with_actor(Some(self));
-                    self.postprocess_visibile(loc);
+                    self.refresh_sight(loc);
                 }
                 break;
             } else if self.could_be_attack(action)
@@ -952,7 +967,7 @@ impl Actor {
             } else if loc.at(new_pos.coord).tile().feature == Some(tile::Door(false)) {
                 // walked into door: open it
                 loc.map[new_pos.coord].add_feature(tile::Door(true));
-                self.open_door(loc);
+                self.changed_door(loc);
                 // Can't charge through the doors
                 break;
             } else if old_pos.coord == new_pos.coord && old_pos.dir != new_pos.dir {

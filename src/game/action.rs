@@ -11,5 +11,7 @@ pub enum Action {
     Drop_(char),
     Ranged(Coordinate),
     Pick,
+    /// Pick up the front item, otherwise toggle the unoccupied door in front.
+    Interact,
     Descend,
 }

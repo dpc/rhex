@@ -187,3 +187,18 @@ ownership, inventory, exploration, awareness, inactive schedules and RNG.
 Composed UI tests use the normal event path to enter and return, verifying the
 exit readouts and presentation reset. These are automated checks, not a manual
 gameplay test.
+
+## Front interaction checks
+
+Run `cargo test --bin rhex interaction` to check front-cell pickup and door toggles,
+item-first priority with a full inventory, occupied-door refusal, readiness,
+one-action scheduling, exact door sound fields, and immediate light and sight
+changes. The checks cover cached line of sight and visibility for all living
+observers after a door change, before the next AI action, while preserving
+awareness, remembered actors, and discovery. They also check that comma does
+not clear thickets or use exits and that bump-opening doors still works.
+
+Run `cargo test --bin rhex comma` to exercise the production event dispatcher and
+composed renderer in normal and Vi modes. The tests pick up an item, close and
+reopen the door beneath it, verify the front readout, and check that modal input
+does not queue an interaction. Rendering must not change simulation or RNG state.
