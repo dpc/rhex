@@ -1245,11 +1245,11 @@ impl Ui {
 
         y += 1;
         window.move_to(y, 0);
-        // Describe the floor, not the player occupying it, even while examining.
+        // Describe the surface under the selected pose, never its occupant.
         self.draw_tile_readout(
             window,
             "Below",
-            &Self::tile_surface_description(player.pos.coord, cur_loc),
+            &Self::below_description(pos.coord, player, cur_loc),
         );
 
         y += 1;
@@ -1347,6 +1347,22 @@ impl Ui {
         };
 
         actor_descr.unwrap_or_else(|| Self::tile_surface_description(coord, gstate))
+    }
+
+    /// Describe the selected surface without reading live contents outside sight.
+    fn below_description(coord: Coordinate, player: &Actor, location: &game::Location) -> String {
+        if coord == player.pos.coord || player.sees(coord) {
+            return Self::tile_surface_description(coord, location);
+        }
+        if !player.knows(coord) {
+            return "Unknown".to_owned();
+        }
+        if location.remembered_chests.contains_key(&coord) {
+            return "chest".to_owned();
+        }
+        // Terrain, features and loose items have no last-seen snapshot. Do not
+        // substitute their current state for an observation of this hidden tile.
+        "Out of sight".to_owned()
     }
 
     /// Describe ground contents with the same item, feature, then terrain priority.

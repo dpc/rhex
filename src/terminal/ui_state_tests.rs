@@ -688,7 +688,13 @@ fn below_describes_ground_items_features_and_terrain_not_the_player() {
         }
         for mode in [Mode::Normal, Mode::Examine, Mode::Inventory(InvMode::View)] {
             ui.mode_switch_to(mode);
-            ui.target_pos = Some(Position::new(Coordinate::new(2, -2), hex2d::XY));
+            // Examine starts on the player; stale targets in other modes do not
+            // change the Below readout.
+            if mode == Mode::Examine {
+                ui.target_pos = Some(ui.player().pos);
+            } else {
+                ui.target_pos = Some(Position::new(Coordinate::new(2, -2), hex2d::XY));
+            }
             let buffer = frame(&mut ui, 60, 24);
             let row: String = (30..60).map(|x| buffer[(x, 9)].symbol()).collect();
             assert_eq!(row, format!("{:30}", format!("Below: {expected}")));
@@ -696,6 +702,89 @@ fn below_describes_ground_items_features_and_terrain_not_the_player() {
             assert_eq!(front, format!("{:30}", "In front: nothing"));
         }
     }
+}
+
+#[test]
+fn below_follows_examine_cursor_and_returns_to_player_on_exit() {
+    let now = Instant::now();
+    let mut ui = fixture(now);
+    let pose = ui.player().pos;
+    let cursor = ui.player().head();
+    let front = cursor + pose.dir;
+    let loc = ui.engine.current_location_mut();
+    loc.map[pose.coord].feature = Some(tile::Stairs);
+    loc.map[cursor].feature = Some(tile::Door(true));
+    loc.map[front] = tile::Tile::new(tile::Water);
+    loc.spawn(Actor::new(
+        actor::Race::Rat,
+        Position::new(cursor, hex2d::XY),
+    ));
+    let row =
+        |buffer: &Buffer, y| -> String { (30..60).map(|x| buffer[(x, y)].symbol()).collect() };
+    chars(&mut ui, "x", now);
+    assert_eq!(
+        row(&frame(&mut ui, 60, 24), 9),
+        format!("{:30}", "Below: to Dark Forest (>)")
+    );
+    chars(&mut ui, "k", now);
+    assert_eq!(ui.target_pos.unwrap().coord, cursor);
+    let buffer = frame(&mut ui, 60, 24);
+    assert_eq!(row(&buffer, 9), format!("{:30}", "Below: open door"));
+    assert_eq!(row(&buffer, 8), format!("{:30}", "In front: deep water"));
+    ui.engine
+        .current_location_mut()
+        .items
+        .insert(cursor, Box::new(Item::new(Type::Knife, vec![])));
+    assert_eq!(
+        row(&frame(&mut ui, 60, 24), 9),
+        format!("{:30}", "Below: knife")
+    );
+    key(&mut ui, KeyCode::Esc, now);
+    assert_eq!(ui.mode, Mode::Normal);
+    assert_eq!(
+        row(&frame(&mut ui, 60, 24), 9),
+        format!("{:30}", "Below: to Dark Forest (>)")
+    );
+    assert_eq!(ui.player().pos, pose);
+    assert!(ui.game_action_queue.is_empty());
+}
+
+#[test]
+fn below_examine_hidden_cells_use_only_known_observations() {
+    let now = Instant::now();
+    let mut ui = fixture(now);
+    let cursor = ui.player().head();
+    player_mut(&mut ui).visible.remove(&cursor);
+    chars(&mut ui, "xk", now);
+    let readout = |ui: &mut Ui| -> String {
+        let buffer = frame(ui, 60, 24);
+        (30..60).map(|x| buffer[(x, 9)].symbol()).collect()
+    };
+    assert_eq!(readout(&mut ui), format!("{:30}", "Below: Out of sight"));
+    let loc = ui.engine.current_location_mut();
+    loc.map[cursor] = tile::Tile::new(tile::Water);
+    loc.map[cursor].feature = Some(tile::Door(false));
+    loc.items
+        .insert(cursor, Box::new(Item::new(Type::Knife, vec![])));
+    loc.chests.insert(cursor, game::chest::Chest::new([]));
+    loc.spawn(Actor::new(
+        actor::Race::Rat,
+        Position::new(cursor, hex2d::XY),
+    ));
+    assert_eq!(readout(&mut ui), format!("{:30}", "Below: Out of sight"));
+    ui.engine
+        .current_location_mut()
+        .remembered_chests
+        .insert(cursor, '%');
+    assert_eq!(readout(&mut ui), format!("{:30}", "Below: chest"));
+    // A remembered chest remains an observation after its live removal.
+    ui.engine.current_location_mut().chests.remove(&cursor);
+    assert_eq!(readout(&mut ui), format!("{:30}", "Below: chest"));
+    player_mut(&mut ui).known.remove(&cursor);
+    assert_eq!(readout(&mut ui), format!("{:30}", "Below: Unknown"));
+    player_mut(&mut ui).known.insert(cursor);
+    player_mut(&mut ui).visible.insert(cursor);
+    assert_eq!(readout(&mut ui), format!("{:30}", "Below: knife"));
 }
 
 #[test]
