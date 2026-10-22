@@ -57,6 +57,11 @@ fn check(seed: u64) {
     assert!(cells.iter().filter(|&&c| loc.light_map[c] == 0).count() > 600);
     for &c in &cells {
         if map[c].light > 0 {
+            assert_eq!(map[c].type_, tile::Ground);
+            assert!(
+                matches!(map[c].feature, None | Some(tile::ForestPath)),
+                "canopy light is not a fixture"
+            );
             assert_eq!(loc.light_map[c], 5);
             assert!(c.neighbors().iter().all(|&n| loc.light_map[n] > 0));
         }

@@ -445,6 +445,7 @@ impl MapRenderer {
                         Some(tile::Stairs) => glyph = STAIRS_DOWN_CH,
                         Some(tile::ForestPath) => glyph = '>',
                         Some(tile::Entrance) => glyph = '<',
+                        Some(tile::Torch) => glyph = 'i',
                     }
                     // Hidden containers use observations, not live contents or presence.
                     let chest_glyph = if visible {
@@ -467,8 +468,8 @@ impl MapRenderer {
                         };
                         bg = color::FOREST_BG;
                     }
-                    if visible && cur_loc.at(c).tile().light > 0 {
-                        fg = color::LIGHTSOURCE;
+                    if t.is_some_and(|t| t.feature == Some(tile::Torch)) {
+                        fg = color::TORCH_FG;
                     }
                 }
 

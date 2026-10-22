@@ -105,7 +105,7 @@ pub const BLOCKED_BG: u8 = 124;
 pub const LABEL_FG: u8 = 94;
 pub const GREEN_FG: u8 = 34;
 pub const RED_FG: u8 = 124;
-pub const LIGHTSOURCE: Shade = Shade::new(YELLOW, YELLOW, REMEMBERED_TERRAIN_FG);
+pub const TORCH_FG: Shade = Shade::new(YELLOW, YELLOW, REMEMBERED_TERRAIN_FG);
 // Keep unrelated UI colors at their exact previous cube indices.
 pub const LOG_1_FG: u8 = 231;
 pub const LOG_2_FG: u8 = 188;

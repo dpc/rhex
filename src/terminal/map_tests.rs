@@ -16,6 +16,72 @@ fn scene() -> Location {
     loc
 }
 
+#[test]
+fn anonymous_light_sources_render_only_the_underlying_surface() {
+    for terrain in [tile::Ground, tile::Empty] {
+        for feature in [None, Some(tile::Statue)] {
+            let mut loc = scene();
+            let coord = Coordinate::new(2, 0);
+            loc.map[coord] = tile::Tile::new(terrain);
+            loc.map[coord].feature = feature;
+            let mut renderer = MapRenderer::new(UNICODE_DOT);
+            renderer.resize(20, 12);
+            // Hold incident illumination constant: an emitter must not add a
+            // marker or recolor grass, floor dots, or unrelated features.
+            let ordinary = render(&mut renderer, &loc, Mode::Normal, None, 0, 20, 12);
+            loc.map[coord].light = 5;
+            let emitting = render(&mut renderer, &loc, Mode::Normal, None, 0, 20, 12);
+            assert_eq!(ordinary, emitting);
+        }
+    }
+}
+
+#[test]
+fn torch_is_visible_remembered_and_not_revealed_on_unknown_tiles() {
+    use crate::game::Action;
+    use hex2d::Angle;
+
+    let mut loc = crate::game::fixtures::room();
+    let coord = Coordinate::new(2, 0);
+    loc.map[coord].add_feature(tile::Torch).add_light(6);
+    loc.post_any_tick();
+    assert!(loc.player().sees(coord));
+    let mut renderer = MapRenderer::new(UNICODE_DOT);
+    renderer.resize(20, 12);
+    let visible = render(&mut renderer, &loc, Mode::Normal, None, 0, 20, 12);
+    let (x, y) = renderer.coord_to_glyph_xy(coord).unwrap();
+    let xy = (x as u16, y as u16);
+    assert_eq!(visible[xy].symbol(), "i");
+    assert!(
+        renderer
+            .sight_entries(&loc)
+            .iter()
+            .any(|e| e.name == "torch" && e.glyph == 'i')
+    );
+
+    loc.act(0, Action::Turn(Angle::Back));
+    assert!(!loc.player().sees(coord));
+    let hidden = render(&mut renderer, &loc, Mode::Normal, None, 0, 20, 12);
+    cell(
+        &hidden,
+        xy,
+        "i",
+        color::REMEMBERED_TERRAIN_FG,
+        color::EMPTY_BG.index(false, 0),
+        false,
+    );
+    assert!(
+        !renderer
+            .sight_entries(&loc)
+            .iter()
+            .any(|e| e.name == "torch")
+    );
+
+    player_mut(&mut loc).known.remove(&coord);
+    let unknown = render(&mut renderer, &loc, Mode::Normal, None, 0, 20, 12);
+    assert_eq!(unknown[xy].symbol(), " ");
+}
+
 fn render(
     renderer: &mut MapRenderer,
     loc: &Location,

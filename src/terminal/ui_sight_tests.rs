@@ -22,6 +22,18 @@ fn row(buffer: &Buffer, y: u16) -> String {
 }
 
 #[test]
+fn torch_surface_readout_respects_discovery() {
+    let mut loc = fixtures::room();
+    let c = loc.player().head();
+    loc.map[c].add_feature(tile::Torch).add_light(6);
+    assert_eq!(Ui::below_description(c, loc.player(), &loc), "torch");
+    loc.actors_byid.get_mut(&0).unwrap().visible.remove(&c);
+    assert_eq!(Ui::below_description(c, loc.player(), &loc), "Out of sight");
+    loc.actors_byid.get_mut(&0).unwrap().known.remove(&c);
+    assert_eq!(Ui::below_description(c, loc.player(), &loc), "Unknown");
+}
+
+#[test]
 fn chest_map_legend_and_readout_reveal_only_open_visible_contents() {
     use crate::game::chest::Chest;
     let mut loc = fixtures::room();

@@ -45,6 +45,8 @@ pub enum Feature {
     ForestPath,
     Entrance,
     Statue,
+    /// A permanent, walkable wall-side light fixture.
+    Torch,
 }
 
 impl Feature {
@@ -56,6 +58,7 @@ impl Feature {
             ForestPath => "forest path onward",
             Entrance => "return passage",
             Statue => "statue",
+            Torch => "torch",
         }
     }
 

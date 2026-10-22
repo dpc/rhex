@@ -28,6 +28,8 @@ pub struct DungeonGenerator {
     endpoints: EndpointQueue,
     actors: Actors,
     items: Items,
+    /// Seeded room light requests, placed after walls and doors are finalized.
+    torches: Vec<(Coordinate, i32)>,
     rng: SmallRng,
 }
 
@@ -43,6 +45,7 @@ impl DungeonGenerator {
             endpoints: VecDeque::new(),
             actors: Default::default(),
             items: Default::default(),
+            torches: Vec::new(),
             rng: SmallRng::seed_from_u64(seed),
         }
     }
@@ -203,7 +206,7 @@ impl DungeonGenerator {
         for c in coord.range_iter(r as i32 - 1) {
             if self.map.contains_key(&c) {
                 if self.rng.random_range(0..15) == 0 {
-                    self.map.get_mut(&c).unwrap().add_light((r + 4) as i32);
+                    self.torches.push((c, (r + 4) as i32));
                 }
                 self.tile_count += 1;
             }
@@ -299,6 +302,34 @@ impl DungeonGenerator {
                 map[coord] = tile::Tile::new(tile::Wall);
             }
         }
+
+        // Keep the old room-light rolls and strengths, but move each source to
+        // the nearest free wall-side floor in its own room. Final geometry is
+        // needed: room borders begin as doors and only later become walls.
+        // Exhausted rooms simply omit surplus fixtures; no retries or carving.
+        for (source, strength) in self.torches {
+            // SimpleMap iteration otherwise includes an old entry alongside
+            // its pending replacement, which could reuse an occupied cell.
+            map.compact();
+            let area = map[source].area;
+            let destination = map
+                .iter()
+                .filter_map(|(&c, t)| {
+                    (t.type_ == tile::Empty
+                        && t.area == area
+                        && t.feature.is_none()
+                        && Some(c) != self.start
+                        && !self.actors.contains_key(&c)
+                        && !self.items.contains_key(&c)
+                        && c.neighbors().iter().any(|&n| map[n].type_ == tile::Wall))
+                    .then_some(c)
+                })
+                .min_by_key(|c| (source.distance(*c), c.x, c.y));
+            if let Some(c) = destination {
+                map[c].add_feature(tile::Torch).add_light(strength);
+            }
+        }
+        map.compact();
 
         (map, self.actors, self.items)
     }
