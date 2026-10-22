@@ -115,9 +115,12 @@ green.
 
 Below the equipment, tile readouts and turn counter, use the compact sight
 legend to identify entries by `X - name`. Each entry uses its ordinary map glyph
-and lighting colors, without transient facing, targeting or animation effects.
+and fully lit colors, without transient facing, targeting or animation effects.
 The legend lists visible creatures, items, chests, doors, passages, statues and
 torches.
+Enemy creature bodies keep their full-light red at every light level; the player
+stays blue. Terrain backgrounds still follow local lighting, and transient
+facing, targeting and animation effects can override the base colors.
 You will not see bare common terrain (water, walls, trees, thickets and ground),
 the player, or remembered or hidden contents in the legend. Creatures and items
 on common terrain still appear.

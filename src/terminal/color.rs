@@ -96,8 +96,9 @@ pub const TRUNK_FG: Shade = Shade::new(
 );
 pub const CHAR_HUMANOID_FG: Shade =
     Shade::new(Rgb::new(0, 0, 175), Rgb::new(158, 158, 158), NOT_IN_LOS_FG);
+// Enemy bodies and unoccupied facing cues retain their full-light red.
 pub const CHAR_ENEMY_FG: Shade =
-    Shade::new(Rgb::new(175, 0, 0), Rgb::new(158, 158, 158), NOT_IN_LOS_FG);
+    Shade::new(Rgb::new(175, 0, 0), Rgb::new(175, 0, 0), NOT_IN_LOS_FG);
 pub const CHAR_GRAY_FG: u8 = GRAY[17];
 
 pub const BLOCKED_BG: u8 = 124;

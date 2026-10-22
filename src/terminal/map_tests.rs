@@ -200,18 +200,103 @@ fn player_body_and_facing_stay_blue_at_every_light_level() {
 
             // Fixed blue is player-specific, not a recolor of humanoids.
             let coord = Coordinate::new(0, 2);
-            loc.actors_byid
-                .insert(1, Actor::new(Race::Human, Position::new(coord, XY)));
-            loc.actors_coord_to_id.insert(coord, 1);
-            let buffer = render(&mut renderer, &loc, Mode::Normal, None, 0, 20, 12);
-            cell(
-                &buffer,
-                (8, 4),
-                "@",
-                color::CHAR_HUMANOID_FG.index(true, light),
-                backgrounds.index(true, light),
-                false,
-            );
+            for race in [Race::Human, Race::Elf, Race::Dwarf] {
+                loc.actors_byid
+                    .insert(1, Actor::new(race, Position::new(coord, XY)));
+                loc.actors_coord_to_id.insert(coord, 1);
+                let buffer = render(&mut renderer, &loc, Mode::Normal, None, 0, 20, 12);
+                cell(
+                    &buffer,
+                    (8, 4),
+                    "@",
+                    color::CHAR_HUMANOID_FG.index(true, light),
+                    backgrounds.index(true, light),
+                    false,
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn enemy_bodies_and_facing_stay_red_at_every_light_level() {
+    for (race, glyph) in [
+        (Race::Rat, "r"),
+        (Race::Goblin, "g"),
+        (Race::Troll, "T"),
+        (Race::Wolf, "w"),
+        (Race::CaveBeetle, "b"),
+        (Race::Skeleton, "s"),
+    ] {
+        for (terrain, backgrounds, head_glyph) in [
+            (tile::Empty, color::EMPTY_BG, "•"),
+            (tile::Ground, color::FOREST_BG, "•"),
+            (tile::Water, color::WATER_BG, "~"),
+            (tile::ShallowWater, color::WATER_BG, ","),
+        ] {
+            for light in [0, 1, 2, 3, 4, 5, 6, u32::MAX / 2] {
+                let mut loc = scene();
+                for coord in loc.player().coord().range_iter(8) {
+                    loc.map[coord] = tile::Tile::new(terrain);
+                    loc.light_map[coord] = light;
+                }
+                let coord = Coordinate::new(0, 2);
+                let actor = Actor::new(race, Position::new(coord, XY));
+                let head = actor.head();
+                loc.actors_byid.insert(1, actor);
+                loc.actors_coord_to_id.insert(coord, 1);
+                let mut renderer = MapRenderer::new(UNICODE_DOT);
+                renderer.resize(20, 12);
+                let buffer = render(&mut renderer, &loc, Mode::Normal, None, 0, 20, 12);
+                let (x, y) = renderer.coord_to_glyph_xy(coord).unwrap();
+                cell(
+                    &buffer,
+                    (x as u16, y as u16),
+                    glyph,
+                    124,
+                    backgrounds.index(true, light),
+                    false,
+                );
+                let (x, y) = renderer.coord_to_glyph_xy(head).unwrap();
+                cell(
+                    &buffer,
+                    (x as u16, y as u16),
+                    head_glyph,
+                    124,
+                    backgrounds.index(true, light),
+                    true,
+                );
+                cell(
+                    &buffer,
+                    (10, 6),
+                    "@",
+                    21,
+                    backgrounds.index(true, light),
+                    false,
+                );
+                let entry = renderer
+                    .sight_entries(&loc)
+                    .into_iter()
+                    .find(|entry| entry.name == race.description())
+                    .unwrap();
+                assert_eq!(entry.style.fg, Some(TerminalColor::Indexed(124)));
+
+                // Fixed red must not leak bodies or facing cues outside sight,
+                // whether the terrain is remembered or completely unknown.
+                for known in [true, false] {
+                    player_mut(&mut loc).visible.remove(&coord);
+                    if !known {
+                        player_mut(&mut loc).known.remove(&coord);
+                    }
+                    let hidden = render(&mut renderer, &loc, Mode::Normal, None, 0, 20, 12);
+                    let actor = loc.actors_byid.remove(&1).unwrap();
+                    loc.actors_coord_to_id.remove(&coord);
+                    let absent = render(&mut renderer, &loc, Mode::Normal, None, 0, 20, 12);
+                    assert_eq!(hidden, absent, "{race:?}, {terrain:?}, light {light}");
+                    loc.actors_byid.insert(1, actor);
+                    loc.actors_coord_to_id.insert(coord, 1);
+                }
+            }
         }
     }
 }
