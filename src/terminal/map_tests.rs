@@ -56,20 +56,21 @@ fn cell(buffer: &Buffer, xy: (u16, u16), glyph: &str, fg: u8, bg: u8, bold: bool
 }
 
 #[test]
-fn player_body_is_gray_but_facing_stays_blue_at_every_light_level() {
+fn player_body_and_facing_stay_blue_at_every_light_level() {
     for (terrain, backgrounds) in [
         (tile::Empty, color::EMPTY_BG),
         (tile::Ground, color::FOREST_BG),
         (tile::Water, color::WATER_BG),
         (tile::ShallowWater, color::WATER_BG),
     ] {
-        for (light, gray, dot_gray) in [
-            (0, 240, 238),
-            (1, 242, 59),
-            (2, 244, 243),
-            (3, 246, 245),
-            (4, 248, 248),
-            (5, 250, 250),
+        for (light, dot_gray) in [
+            (0, 238),
+            (1, 59),
+            (2, 243),
+            (3, 245),
+            (4, 248),
+            (5, 250),
+            (6, 250),
         ] {
             let mut loc = scene();
             for coord in loc.player().coord().range_iter(8) {
@@ -83,7 +84,7 @@ fn player_body_is_gray_but_facing_stays_blue_at_every_light_level() {
                 &buffer,
                 (10, 6),
                 "@",
-                gray,
+                21,
                 backgrounds.index(true, light),
                 false,
             );
@@ -131,7 +132,7 @@ fn player_body_is_gray_but_facing_stays_blue_at_every_light_level() {
                 player_mut(&mut loc).visible.insert(Coordinate::new(0, 2));
             }
 
-            // The body palette is player-specific, not a recolor of humanoids.
+            // Fixed blue is player-specific, not a recolor of humanoids.
             let coord = Coordinate::new(0, 2);
             loc.actors_byid
                 .insert(1, Actor::new(Race::Human, Position::new(coord, XY)));
@@ -777,7 +778,7 @@ fn projected_terrain_visibility_light_and_glue_have_exact_cells() {
             &buffer,
             (cx, cy),
             "@",
-            color::CHAR_SELF_FG.index(true, FULL_LIGHT),
+            21,
             color::EMPTY_BG.index(true, FULL_LIGHT),
             false,
         );

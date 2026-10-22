@@ -582,12 +582,12 @@ impl MapRenderer {
             if let Some((vx, vy)) = self.coord_to_glyph_xy(actor_coord) {
                 let base = self.base.at(vx, vy);
                 debug_assert!(base.known);
-                let fg_palete = if actor.is_player() {
-                    color::CHAR_SELF_FG
+                let fg = if actor.is_player() {
+                    // The body shares the facing cue's fixed blue, independent of light.
+                    color::SELF_HEAD_ACTOR_FG.into()
                 } else {
-                    race_to_palete(race)
+                    color_by_visibility(race_to_palete(race), base.visible, base.light)
                 };
-                let fg = color_by_visibility(fg_palete, base.visible, base.light);
                 let bg = base.base.bg;
                 *self.actors.at_mut(vx, vy) = Some(DisplayCharacter {
                     fg,

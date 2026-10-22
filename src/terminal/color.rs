@@ -47,13 +47,13 @@ pub const EMPTY_FG: Shade = Shade::new(
     Rgb::new(108, 108, 108),
     REMEMBERED_TERRAIN_FG,
 );
-/// Unlit floor dots stay subdued below shaded dots and the readable player body.
+/// Unlit floor dots stay subdued below shaded dots.
 pub const EMPTY_DOT_FG: Shade = Shade::new(
     Rgb::new(188, 188, 188),
     Rgb::new(68, 68, 68),
     REMEMBERED_TERRAIN_FG,
 );
-// Once lit, dungeon backgrounds must stay brighter than player/dot grays.
+// Once lit, dungeon backgrounds must stay brighter than floor-dot grays.
 // A straight ramp from the unlit background would erase dots at light=2.
 pub const EMPTY_BG: Shade = Shade::new(
     Rgb::new(238, 238, 238),
@@ -96,8 +96,6 @@ pub const TRUNK_FG: Shade = Shade::new(
     Rgb::new(78, 68, 58),
     REMEMBERED_TERRAIN_FG,
 );
-/// The player remains a readable gray even without a light source.
-pub const CHAR_SELF_FG: Shade = Shade::new(Rgb::new(188, 188, 188), Rgb::new(88, 88, 88), 240);
 pub const CHAR_HUMANOID_FG: Shade =
     Shade::new(Rgb::new(0, 0, 175), Rgb::new(158, 158, 158), NOT_IN_LOS_FG);
 pub const CHAR_ENEMY_FG: Shade =

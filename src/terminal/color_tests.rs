@@ -75,7 +75,6 @@ fn neutral_colors_use_nearest_gray_with_monotonic_brightness() {
 fn representative_shades_are_monotonic_and_saturate_without_overflow() {
     for shade in [
         EMPTY_DOT_FG,
-        CHAR_SELF_FG,
         GROUND_FG,
         THICKET_FG,
         TRUNK_FG,
@@ -92,14 +91,13 @@ fn representative_shades_are_monotonic_and_saturate_without_overflow() {
         assert_eq!(shade.index(false, 0), shade.index(false, u32::MAX));
     }
     assert_eq!(EMPTY_DOT_FG.index(true, 0), 238);
-    assert_eq!(CHAR_SELF_FG.index(true, 0), 240);
     assert_eq!(EMPTY_DOT_FG.index(false, 5), 236);
     assert_eq!(FOREST_BG.index(false, 5), 16);
 }
 
 #[test]
 fn dungeon_foregrounds_keep_contrast_through_the_whole_ramp() {
-    for foreground in [EMPTY_DOT_FG, CHAR_SELF_FG, EMPTY_FG, STONE_FG] {
+    for foreground in [EMPTY_DOT_FG, EMPTY_FG, STONE_FG] {
         for light in 0..=5 {
             let fg = channels(foreground.index(true, light))[0];
             let bg = channels(EMPTY_BG.index(true, light))[0];
