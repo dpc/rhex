@@ -128,6 +128,18 @@ fn resources_share_one_row_and_preserve_change_colors() {
 #[test]
 fn pairs_prioritize_creatures_then_items_and_report_distinct_overflow() {
     let mut loc = fixtures::room();
+    // Common surroundings must not consume a slot or inflate the overflow.
+    for (x, terrain) in [
+        tile::Water,
+        tile::ShallowWater,
+        tile::TreeTrunk,
+        tile::Thicket,
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        loc.map[Coordinate::new(x as i32 - 2, -2)] = tile::Tile::new(terrain);
+    }
     loc.spawn(Actor::new(
         Race::Rat,
         Position::new(Coordinate::new(0, 2), hex2d::XY),
@@ -191,12 +203,8 @@ fn legend_symbols_share_map_lighting_glyphs_and_styles() {
             "return passage",
         ),
         (tile::Empty, Some(tile::Statue), None, None, "statue"),
-        (tile::Water, None, None, None, "deep water"),
-        (tile::ShallowWater, None, None, None, "shallow water"),
-        (tile::TreeTrunk, None, None, None, "tree trunk"),
-        (tile::Thicket, None, None, None, "thicket"),
-        (tile::Empty, None, Some(Type::Knife), None, "knife"),
-        (tile::Empty, None, None, Some(Race::Rat), "rat"),
+        (tile::ShallowWater, None, Some(Type::Knife), None, "knife"),
+        (tile::Ground, None, None, Some(Race::Rat), "rat"),
     ] {
         for light in [0, 1, 4] {
             let c = Coordinate::new(0, 2);
@@ -222,6 +230,39 @@ fn legend_symbols_share_map_lighting_glyphs_and_styles() {
                 format!("{} - {name}", map_cell.symbol())
             );
         }
+    }
+}
+
+#[test]
+fn common_terrain_stays_on_the_map_but_not_in_the_legend() {
+    for (terrain, glyph) in [
+        (tile::Empty, UNICODE_DOT),
+        (tile::Ground, UNICODE_DOT),
+        (tile::Wall, '#'),
+        (tile::Water, '~'),
+        (tile::ShallowWater, ','),
+        (tile::TreeTrunk, '#'),
+        (tile::Thicket, '%'),
+    ] {
+        let c = Coordinate::new(0, 2);
+        let mut loc = fixtures::room();
+        loc.map[c] = tile::Tile::new(terrain);
+        let mut ui = fixture(loc);
+        let buffer = frame(&mut ui);
+        let (dx, dy) = c.to_pixel_integer(SPACING);
+        assert_eq!(
+            buffer[((15 + dx) as u16, (12 + dy) as u16)].symbol(),
+            glyph.to_string(),
+            "{terrain:?}"
+        );
+        assert!(row(&buffer, 11).trim().is_empty(), "{terrain:?}");
+        assert!(row(&buffer, 12).trim().is_empty(), "{terrain:?}");
+        assert!(
+            ui.map_renderer
+                .sight_entries(ui.current_location())
+                .is_empty(),
+            "{terrain:?}"
+        );
     }
 }
 

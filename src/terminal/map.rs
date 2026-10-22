@@ -120,7 +120,8 @@ impl MapRenderer {
     /// Describe current sight, never remembered cells or transient overlays.
     ///
     /// Like the map, show only the topmost occupant. Prefer creatures, then
-    /// items, features and unusual terrain; deduplicate equal glyph/name pairs.
+    /// items, then notable features; deduplicate equal glyph/name pairs.
+    /// Omit bare terrain: common surroundings should not crowd out discoveries.
     /// Sample ordinary terrain/item rendering in a one-cell scratch buffer so
     /// lighting and glyph rules stay shared even outside the map viewport.
     pub(super) fn sight_entries(&self, loc: &Location) -> Vec<SightEntry> {
@@ -162,11 +163,6 @@ impl MapRenderer {
                 (2, chest.description(), base.base)
             } else if let Some(feature) = at.tile().feature {
                 (2, feature.description().to_owned(), base.base)
-            } else if matches!(
-                at.tile().type_,
-                tile::Water | tile::ShallowWater | tile::TreeTrunk | tile::Thicket
-            ) {
-                (3, at.tile().type_.description().to_owned(), base.base)
             } else {
                 continue;
             };

@@ -102,15 +102,15 @@ since the previous turn; green values indicate an increase.
 Below the equipment, tile readouts and turn counter, use the compact sight
 legend to identify entries by `X - name`. Each entry uses its ordinary map glyph
 and lighting colors, without transient facing, targeting or animation effects.
-The legend lists visible creatures, items, chests, doors, passages, statues,
-water and forest obstacles. It excludes the player and remembered or hidden
-contents.
-It follows the map's topmost-occupant priority: an actor or item can obscure a
-feature.
+The legend lists visible creatures, items, chests, doors, passages and statues.
+You will not see bare common terrain (water, walls, trees, thickets and ground),
+the player, or remembered or hidden contents in the legend. Creatures and items
+on common terrain still appear.
+The map's topmost-occupant priority applies: an actor or item can obscure a feature.
 
 Entries with the same symbol and name share one legend entry, using the nearest
-example's colors. Creatures come first, followed by items, features and unusual
-terrain; within each group, nearer entries come first. Short names share a row.
+example's colors. Creatures come first, followed by items and notable features;
+within each group, nearer entries come first. Short names share a row.
 Long names use the full width and clip with an ellipsis. `+N more` counts
 additional distinct entries that do not fit. The map and log keep
 their space, including at the minimum supported size of 60 columns by 24 rows.
