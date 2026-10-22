@@ -1006,6 +1006,78 @@ fn stochastic_world_trace_is_independent_of_zero_one_or_many_renders() {
 }
 
 #[test]
+fn autoexplore_dispatch_stops_on_new_chests_and_items_then_resumes() {
+    for find in ["closed", "open", "empty", "item"] {
+        let now = Instant::now();
+        let mut ui = fixture(now);
+        let target = ui.player().head();
+        let distant = Coordinate::new(7, 0);
+        let loc = ui.engine.current_location_mut();
+        if find == "item" {
+            loc.items
+                .insert(target, Box::new(Item::new(Type::Knife, vec![])));
+        } else {
+            let mut chest = game::chest::Chest::new([Box::new(Item::new(Type::Knife, vec![]))]);
+            chest.opened = find != "closed";
+            if find == "empty" {
+                chest.contents.clear();
+            }
+            loc.chests.insert(target, chest);
+        }
+        let player = player_mut(&mut ui);
+        player.known.remove(&target);
+        player.known.remove(&distant);
+        player.visible.remove(&target);
+        player.discovered.clear();
+        player.discovered_areas.clear();
+
+        chars(&mut ui, "o", now);
+        assert!(ui.is_automoving());
+        ui.advance((24, 60), now);
+        assert!(ui.player().knows(target), "{find}");
+        assert!(!ui.is_automoving(), "new {find} must stop exploration");
+        let stopped = ui.player().pos;
+        ui.advance((24, 60), now + Duration::from_secs(1));
+        assert_eq!(ui.player().pos, stopped);
+
+        chars(&mut ui, "o", now + Duration::from_secs(2));
+        ui.advance((24, 60), now + Duration::from_secs(2));
+        assert!(ui.is_automoving(), "known {find} must allow resume");
+        ui.advance((24, 60), now + Duration::from_secs(3));
+        assert!(ui.is_automoving(), "known {find} must not stop again");
+        assert_ne!(ui.player().pos, stopped);
+    }
+}
+
+#[test]
+fn autoexplore_dispatch_does_not_stop_for_an_unseen_chest() {
+    let now = Instant::now();
+    let mut ui = fixture(now);
+    let hidden = Coordinate::new(-7, 0);
+    let target = ui.player().head();
+    ui.engine.current_location_mut().chests.insert(
+        hidden,
+        game::chest::Chest::new([Box::new(Item::new(Type::Knife, vec![]))]),
+    );
+    let player = player_mut(&mut ui);
+    player.known.remove(&hidden);
+    player.visible.remove(&hidden);
+    player.known.remove(&target);
+    player.discovered.clear();
+    player.discovered_areas.clear();
+
+    chars(&mut ui, "o", now);
+    ui.advance((24, 60), now);
+    assert!(ui.is_automoving());
+    assert!(!ui.player().knows(hidden));
+    assert!(
+        !ui.current_location()
+            .remembered_chests
+            .contains_key(&hidden)
+    );
+}
+
+#[test]
 fn automove_stairs_occupancy_and_perception_interruptions() {
     let now = Instant::now();
     let mut ui = fixture(now);

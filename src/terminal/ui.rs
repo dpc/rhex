@@ -314,10 +314,11 @@ impl Ui {
                     .at(coord)
                     .actor_map_or(false, |a| a.race == actor::Race::Rat)
             })
-            || player
-                .discovered
-                .iter()
-                .any(|&coord| cur_loc.at(coord).item_map_or(false, |_| true))
+            || player.discovered.iter().any(|&coord| {
+                cur_loc.at(coord).item_map_or(false, |_| true)
+                    // Use observed containers, not hidden live chest state.
+                    || cur_loc.remembered_chests.contains_key(&coord)
+            })
             || player.heard.iter().any(|(c, _)| !player.sees(*c))
             || player.discovered_stairs(cur_loc)
     }
