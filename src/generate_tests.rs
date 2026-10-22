@@ -1,4 +1,5 @@
 use super::*;
+use crate::game::level::{Biome, LevelId};
 use crate::game::{Location, fixtures};
 use proptest::prelude::*;
 use std::collections::HashSet;
@@ -14,7 +15,7 @@ fn seeded_levels_have_free_spawn_reachable_stairs_and_valid_placements() {
 }
 
 fn check_level(level: u32, seed: u64) {
-    let mut loc = Location::new(level, seed);
+    let mut loc = Location::generated(LevelId(0), level, Biome::Dungeon, seed);
     let origin = Coordinate::new(0, 0);
     assert!(loc.at(origin).is_passable(), "level {level}, seed {seed}");
     for actor in loc.actors_byid.values() {
@@ -52,7 +53,7 @@ fn check_level(level: u32, seed: u64) {
     player.set_player();
     loc.spawn_player(player.clone());
     fixtures::occupancy(&loc);
-    let mut duplicate = Location::new(level, seed);
+    let mut duplicate = Location::generated(LevelId(0), level, Biome::Dungeon, seed);
     duplicate.spawn_player(player);
     assert_eq!(
         fixtures::outcome(&duplicate),

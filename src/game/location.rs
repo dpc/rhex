@@ -96,8 +96,9 @@ impl Location {
             awareness_events: Vec::new(),
         }
     }
+    /// Generate the starting Dark Forest.
     pub fn new(level: u32, seed: u64) -> Location {
-        Self::generated(LevelId(0), level, Biome::Dungeon, seed)
+        Self::generated(LevelId(0), level, Biome::DarkForest, seed)
     }
 
     /// Generate a location with identity and environment separate from difficulty.

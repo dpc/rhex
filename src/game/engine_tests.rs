@@ -167,6 +167,60 @@ fn place_on_exit(engine: &mut Engine, coord: Coordinate) {
 }
 
 #[test]
+fn new_games_start_in_dark_forest_and_alternate_with_reversible_passages() {
+    use super::super::level::Biome;
+
+    for seed in [0, 42, 2026] {
+        let mut engine = Engine::seeded(seed);
+        engine.initial_spawn(actor::Race::Human);
+        let origin = Coordinate::new(0, 0);
+        assert_eq!(engine.player().coord(), origin);
+        assert_eq!(engine.current_location().id, LevelId(0));
+        assert_eq!(engine.current_location().level, 0);
+        assert_eq!(engine.current_location().biome, Biome::DarkForest);
+        assert_eq!(engine.current_location().map[origin].feature, None);
+        fixtures::occupancy(engine.current_location());
+
+        let mut passages = Vec::new();
+        for (feature, destination) in [
+            (tile::ForestPath, Biome::Dungeon),
+            (tile::Stairs, Biome::DarkForest),
+        ] {
+            let exit = engine
+                .current_location()
+                .map
+                .iter()
+                .find(|(_, tile)| tile.feature == Some(feature))
+                .map(|(&coord, _)| coord)
+                .unwrap();
+            passages.push(exit);
+            place_on_exit(&mut engine, exit);
+            traverse(&mut engine);
+            assert_eq!(engine.current_location().biome, destination);
+            assert_eq!(engine.current_location().level, passages.len() as i32);
+            assert_eq!(engine.player().coord(), origin);
+            assert_eq!(
+                engine.current_location().map[origin].feature,
+                Some(tile::Entrance)
+            );
+        }
+        assert_eq!(engine.locations.len(), 3);
+        for (level, exit) in passages.into_iter().enumerate().rev() {
+            traverse(&mut engine);
+            assert_eq!(engine.current_location().id, LevelId(level));
+            assert_eq!(engine.player().coord(), exit);
+            assert_eq!(engine.locations.len(), 3);
+            // The onward passage still returns to the same retained level.
+            traverse(&mut engine);
+            assert_eq!(engine.current_location().id, LevelId(level + 1));
+            traverse(&mut engine);
+            assert_eq!(engine.current_location().id, LevelId(level));
+            place_on_exit(&mut engine, origin);
+        }
+    }
+}
+
+#[test]
 fn reciprocal_links_preserve_three_levels_and_rng_across_repeated_roundtrips() {
     let mut loc = fixtures::room();
     let origin = Coordinate::new(0, 0);

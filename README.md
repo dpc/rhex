@@ -50,11 +50,11 @@ and `<`/`>` for the passage you are standing on.
 
 ### Forests and returning to levels
 
-The game starts in a Dungeon. Stand on its `>` exit and press `>` to enter a
-Dark Forest; onward exits alternate the two environments. A `<` marks the
-return passage. Press either `<` or `>` while standing on a passage to use it.
-The tile readouts name the passage's destination. Press `G`, then `>` or `<`,
-to route to the nearest known passage without using it automatically.
+You start in a Dark Forest. Stand on its `>` exit and press `>` to enter a
+Dungeon. Continue through onward exits to alternate between the two environments,
+or use the `<` return passages to revisit previous levels. Press either `<` or `>`
+while standing on a passage to use it. Check the tile readout for its destination.
+Press `G`, then `>` or `<`, to route to the nearest known passage without using it.
 
 Dark Forests have narrow paths through dense undergrowth and large brown tree
 trunks, with small lit canopy openings, a winding creek and a pond. Green `%`
