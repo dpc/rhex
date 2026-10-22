@@ -1493,6 +1493,28 @@ fn dead_player_turns_are_paced_but_live_cooldown_is_not_idle() {
 }
 
 #[test]
+fn exact_width_log_entries_do_not_insert_blank_rows() {
+    let mut ui = fixture(Instant::now());
+    ui.resize((24, 60));
+    ui.log("tail");
+    ui.log("123456789012345678901234567890\n\nnext");
+    let buffer = frame(&mut ui, 60, 24);
+    let rows: Vec<String> = (13..18)
+        .map(|y| (30..60).map(|x| buffer[(x, y)].symbol()).collect())
+        .collect();
+    assert_eq!(
+        rows,
+        [
+            "123456789012345678901234567890",
+            "                              ",
+            "next                          ",
+            "tail                          ",
+            "                              ",
+        ]
+    );
+}
+
+#[test]
 fn overflowing_inventory_and_multiline_log_stay_in_their_panels_and_clear() {
     use crate::game::item::Feature;
     let now = Instant::now();

@@ -113,3 +113,46 @@ fn empty_and_disjoint_regions_are_safe_no_ops() {
         assert_eq!(frame, expected);
     }
 }
+
+#[test]
+fn full_lines_consume_one_newline_and_preserve_explicit_blank_lines() {
+    for (text, expected) in [
+        ("abc\nZ", ["abc ", "Z   ", "    ", "    "]),
+        ("abcd\nZ", ["abcd", "Z   ", "    ", "    "]),
+        ("abcde\nZ", ["abcd", "e   ", "Z   ", "    "]),
+        ("abcdZ", ["abcd", "Z   ", "    ", "    "]),
+        ("abcd\n\nZ", ["abcd", "    ", "Z   ", "    "]),
+        ("abcd\n\n\nZ", ["abcd", "    ", "    ", "Z   "]),
+        ("•é@b\nZ", ["•é@b", "Z   ", "    ", "    "]),
+        ("界界\nZ", ["界 界 ", "Z   ", "    ", "    "]),
+    ] {
+        let window = Window::new(4, 4, 0, 0);
+        // Exercise separate write calls, as the log appends its newline separately.
+        for ch in text.chars() {
+            window.write(&ch.to_string());
+        }
+        let mut frame = Buffer::empty(Rect::new(0, 0, 4, 4));
+        window.render(&mut frame);
+        let rows: Vec<String> = (0..4)
+            .map(|y| (0..4).map(|x| frame[(x, y)].symbol()).collect())
+            .collect();
+        assert_eq!(rows, expected, "{text:?}");
+    }
+}
+
+#[test]
+fn moving_or_clearing_after_a_full_line_resets_newline_handling() {
+    for clear in [false, true] {
+        let window = Window::new(4, 3, 0, 0);
+        window.write("abcd");
+        if clear {
+            window.clear();
+        } else {
+            window.move_to(0, 0);
+        }
+        window.write("\nZ");
+        let mut frame = Buffer::empty(Rect::new(0, 0, 4, 3));
+        window.render(&mut frame);
+        assert_eq!(frame[(0, 1)].symbol(), "Z");
+    }
+}

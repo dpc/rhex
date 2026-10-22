@@ -14,6 +14,8 @@ pub struct Window {
     buffer: RefCell<Buffer>,
     /// Local cursor used by the text panels.
     cursor: Cell<(i32, i32)>,
+    /// The last glyph already advanced the cursor across the right edge.
+    wrapped: Cell<bool>,
     /// Style applied to subsequent text.
     style: Cell<Style>,
 }
@@ -35,6 +37,7 @@ impl Window {
             area,
             buffer: RefCell::new(Buffer::empty(area)),
             cursor: Cell::new((0, 0)),
+            wrapped: Cell::new(false),
             style: Cell::new(color::style(color::VISIBLE_FG, color::BACKGROUND_BG)),
         }
     }
@@ -51,12 +54,14 @@ impl Window {
         buffer.reset();
         buffer.set_style(self.area, style);
         self.cursor.set((0, 0));
+        self.wrapped.set(false);
         self.style.set(style);
     }
 
     /// Move the text cursor within the region; out-of-range writes are clipped.
     pub fn move_to(&self, y: i32, x: i32) {
         self.cursor.set((x, y));
+        self.wrapped.set(false);
     }
 
     /// Select the style for subsequent text.
@@ -80,8 +85,10 @@ impl Window {
     pub fn write_char(&self, ch: char) {
         let (mut x, mut y) = self.cursor.get();
         let (height, width) = self.size();
+        let wrapped = self.wrapped.replace(false);
         if ch == '\n' {
-            self.cursor.set((0, y + 1));
+            // An explicit newline terminates the full line, not an extra empty one.
+            self.cursor.set((0, y + i32::from(!wrapped)));
             return;
         }
         if x < 0 || y < 0 || x >= width || y >= height {
@@ -99,6 +106,7 @@ impl Window {
         if x >= width {
             x = 0;
             y += 1;
+            self.wrapped.set(true);
         }
         self.cursor.set((x, y));
     }

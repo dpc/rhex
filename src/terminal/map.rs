@@ -152,7 +152,7 @@ impl MapRenderer {
                     DisplayCharacter {
                         glyph: race_to_char(race),
                         fg: color_by_visibility(race_to_palete(race), true, base.light),
-                        bg: color_by_visibility(color::CHAR_BG, true, base.light),
+                        bg: base.base.bg,
                         bold: base.base.bold,
                     },
                 )
@@ -572,7 +572,7 @@ impl MapRenderer {
                 debug_assert!(base.known);
                 let fg_palete = race_to_palete(race);
                 let fg = color_by_visibility(fg_palete, base.visible, base.light);
-                let bg = color_by_visibility(color::CHAR_BG, base.visible, base.light);
+                let bg = base.base.bg;
                 *self.actors.at_mut(vx, vy) = Some(DisplayCharacter {
                     fg,
                     bg,

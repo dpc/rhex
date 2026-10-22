@@ -56,6 +56,61 @@ fn cell(buffer: &Buffer, xy: (u16, u16), glyph: &str, fg: u8, bg: u8, bold: bool
 }
 
 #[test]
+fn actor_bodies_inherit_terrain_background_through_facing_and_overlays() {
+    for terrain in [tile::Empty, tile::Ground, tile::ShallowWater] {
+        for light in [1, 4] {
+            let mut loc = scene();
+            let origin = loc.player().coord();
+            let enemy_coord = loc.player().head();
+            loc.actors_byid.insert(
+                1,
+                Actor::new(Race::CaveBeetle, Position::new(enemy_coord, hex2d::YX)),
+            );
+            loc.actors_coord_to_id.insert(enemy_coord, 1);
+            for coord in origin.range_iter(8) {
+                loc.map[coord] = tile::Tile::new(terrain);
+                loc.light_map[coord] = light;
+            }
+            let mut renderer = MapRenderer::new(UNICODE_DOT);
+            renderer.resize(20, 12);
+            let palette = match terrain {
+                tile::Empty => color::EMPTY_BG,
+                tile::Ground => color::FOREST_BG,
+                tile::ShallowWater => color::WATER_BG,
+                _ => unreachable!(),
+            };
+            let bg = palette[usize::from(light < 3)];
+            for frame in [0, 1, 6] {
+                let buffer = render(&mut renderer, &loc, Mode::Normal, None, frame, 20, 12);
+                // Both actors face occupied cells: facing changes foreground only.
+                cell(&buffer, (10, 6), "@", 196, bg, false);
+                cell(&buffer, (12, 6), "b", 21, bg, false);
+            }
+            let entry = renderer
+                .sight_entries(&loc)
+                .into_iter()
+                .find(|entry| entry.name == "cave beetle")
+                .unwrap();
+            assert_eq!(entry.style.bg, Some(TerminalColor::Indexed(bg)));
+            let target = Some(Position::new(enemy_coord, XY));
+            let buffer = render(
+                &mut renderer,
+                &loc,
+                Mode::Target(TargetMode::Ranged),
+                target,
+                0,
+                20,
+                12,
+            );
+            assert_eq!(buffer[(12, 6)].symbol(), "*");
+            assert_eq!(buffer[(12, 6)].bg, TerminalColor::Indexed(bg));
+            let buffer = render(&mut renderer, &loc, Mode::Examine, target, 0, 20, 12);
+            cell(&buffer, (10, 6), "@", color::CHAR_GRAY_FG, bg, false);
+        }
+    }
+}
+
+#[test]
 fn heard_only_enemy_and_previously_seen_movement_leave_no_trail() {
     let mut loc = scene();
     let coord = Coordinate::new(0, 2);
@@ -382,7 +437,7 @@ fn projected_terrain_visibility_light_and_glue_have_exact_cells() {
             (cx, cy),
             "@",
             color::CHAR_SELF_FG[0],
-            color::CHAR_BG[0],
+            color::EMPTY_BG[0],
             false,
         );
         cell(
@@ -494,7 +549,7 @@ fn layers_target_blockage_and_attribute_reset_are_exact() {
         (14, 6),
         "r",
         color::CHAR_ENEMY_FG[0],
-        color::CHAR_BG[0],
+        color::EMPTY_BG[0],
         false,
     );
     let target = Some(Position::new(Coordinate::new(4, -4), XY));
@@ -568,7 +623,7 @@ fn occupied_heads_use_distinct_colors_then_reset_when_the_head_turns_away() {
     let mut renderer = MapRenderer::new(UNICODE_DOT);
     renderer.resize(20, 12);
     let occupied = render(&mut renderer, &loc, Mode::Normal, None, 0, 20, 12);
-    cell(&occupied, (12, 6), "r", 21, color::CHAR_BG[0], false);
+    cell(&occupied, (12, 6), "r", 21, color::EMPTY_BG[0], false);
     // A different enemy's head now overlaps the same rat.
     player_mut(&mut loc).pos.dir = hex2d::YX;
     let other = Coordinate::new(2, -2);
@@ -576,7 +631,7 @@ fn occupied_heads_use_distinct_colors_then_reset_when_the_head_turns_away() {
         .insert(2, Actor::new(Race::Rat, Position::new(other, hex2d::YX)));
     loc.actors_coord_to_id.insert(other, 2);
     let occupied = render(&mut renderer, &loc, Mode::Normal, None, 0, 20, 12);
-    cell(&occupied, (12, 6), "r", 196, color::CHAR_BG[0], false);
+    cell(&occupied, (12, 6), "r", 196, color::EMPTY_BG[0], false);
     loc.actors_byid.get_mut(&2).unwrap().pos.dir = XY;
     let clear = render(&mut renderer, &loc, Mode::Normal, None, 0, 20, 12);
     cell(
@@ -584,13 +639,13 @@ fn occupied_heads_use_distinct_colors_then_reset_when_the_head_turns_away() {
         (12, 6),
         "r",
         color::CHAR_ENEMY_FG[0],
-        color::CHAR_BG[0],
+        color::EMPTY_BG[0],
         false,
     );
     // An enemy pointing at the player changes only the player's foreground too.
     loc.actors_byid.get_mut(&1).unwrap().pos.dir = hex2d::YX;
     let player_head = render(&mut renderer, &loc, Mode::Normal, None, 0, 20, 12);
-    cell(&player_head, (10, 6), "@", 196, color::CHAR_BG[0], false);
+    cell(&player_head, (10, 6), "@", 196, color::EMPTY_BG[0], false);
 }
 
 #[test]
@@ -685,11 +740,7 @@ fn shared_heads_blink_on_elapsed_seconds_independent_of_order_and_occupancy() {
                         (12, 6),
                         if occupied { "r" } else { "•" },
                         fg,
-                        if occupied {
-                            color::CHAR_BG[0]
-                        } else {
-                            color::EMPTY_BG[0]
-                        },
+                        color::EMPTY_BG[0],
                         !occupied,
                     );
                 }
@@ -704,11 +755,7 @@ fn shared_heads_blink_on_elapsed_seconds_independent_of_order_and_occupancy() {
                 (12, 6),
                 if occupied { "r" } else { "•" },
                 if occupied { 21 } else { color::CHAR_SELF_FG[0] },
-                if occupied {
-                    color::CHAR_BG[0]
-                } else {
-                    color::EMPTY_BG[0]
-                },
+                color::EMPTY_BG[0],
                 !occupied,
             );
 
