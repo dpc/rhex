@@ -111,7 +111,8 @@ pub const WALL_BG: [u8; 4] = EMPTY_BG;
 pub const GROUND_FG: [u8; 4] = [65, 58, 22, REMEMBERED_TERRAIN_FG];
 pub const FOREST_BG: [u8; 4] = [22, 16, 16, NOT_IN_LOS_BG];
 pub const THICKET_FG: [u8; 4] = [28, 22, 22, REMEMBERED_TERRAIN_FG];
-pub const TRUNK_FG: [u8; 4] = [94, 58, 52, REMEMBERED_TERRAIN_FG];
+// Use neutral dark bark when unlit; cube index 52 is saturated dark red.
+pub const TRUNK_FG: [u8; 4] = [94, 58, GRAY[8], REMEMBERED_TERRAIN_FG];
 pub const CHAR_SELF_FG: [u8; 4] = [19, 18, NOT_IN_LOS_FG, NOT_IN_LOS_FG];
 pub const _CHAR_ALLY_FG: [u8; 4] = [28, 22, NOT_IN_LOS_FG, NOT_IN_LOS_FG];
 pub const CHAR_ENEMY_FG: [u8; 4] = [124, 88, NOT_IN_LOS_FG, NOT_IN_LOS_FG];

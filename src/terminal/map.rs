@@ -273,7 +273,8 @@ impl MapRenderer {
                 cur_loc.at(c2).tile().ascii_expand(),
             );
 
-            let c = Some(if e1 > e2 { c1 } else { c2 });
+            let expanded = if e1 > e2 { c1 } else { c2 };
+            let c = Some(expanded);
 
             let tt = c.map(|c| cur_loc.at(c).tile().type_);
 
@@ -293,7 +294,19 @@ impl MapRenderer {
                     cur_loc.at(c2).light_as_seen_by(player),
                 );
 
-                if player.is_dead() {
+                // Shoreline glue extends the ground, not the water. Averaging
+                // in the water's light can turn a lit grass bank black.
+                let shoreline = tt == Some(tile::Ground)
+                    && matches!(
+                        cur_loc
+                            .at(if expanded == c1 { c2 } else { c1 })
+                            .tile()
+                            .type_,
+                        tile::Water | tile::ShallowWater
+                    );
+                if shoreline && (player.sees(expanded) || player.is_dead()) {
+                    cur_loc.at(expanded).light_as_seen_by(player)
+                } else if player.is_dead() {
                     (light1 + light2) / 2
                 } else {
                     match (player.sees(c1), player.sees(c2)) {
@@ -369,7 +382,19 @@ impl MapRenderer {
                 (color::WALL_FG, color::WALL_BG, WALL_CH)
             }
             Some(tile::Water) => (color::WATER_FG, color::WATER_BG, WATER_CH),
-            Some(tile::ShallowWater) => (color::WATER_FG, color::WATER_BG, ','),
+            Some(tile::ShallowWater) => {
+                // Keep commas on real shallows, but leave continuous water
+                // between two shallow hexes free of extra terrain glyphs.
+                let glyph = if !is_proper_coord
+                    && cur_loc.at(c).tile().type_ == tile::ShallowWater
+                    && cur_loc.at(c + Direction::XY).tile().type_ == tile::ShallowWater
+                {
+                    ' '
+                } else {
+                    ','
+                };
+                (color::WATER_FG, color::WATER_BG, glyph)
+            }
             Some(tile::TreeTrunk) => {
                 bold = true;
                 (color::TRUNK_FG, color::FOREST_BG, WALL_CH)

@@ -145,7 +145,14 @@ fn remembered_terrain_is_darker_without_changing_visible_styles_or_backgrounds()
         ),
         (tile::Ground, None, "•", [22, 58, 65], [16, 16, 22], false),
         (tile::Thicket, None, "%", [22, 22, 28], [16, 16, 22], false),
-        (tile::TreeTrunk, None, "#", [52, 58, 94], [16, 16, 22], true),
+        (
+            tile::TreeTrunk,
+            None,
+            "#",
+            [239, 58, 94],
+            [16, 16, 22],
+            true,
+        ),
         (
             tile::Ground,
             Some(tile::ForestPath),
@@ -212,6 +219,72 @@ fn remembered_terrain_is_darker_without_changing_visible_styles_or_backgrounds()
         player_mut(&mut loc).visible.remove(&coord);
         let buffer = render(&mut renderer, &loc, Mode::Normal, None, 0, 20, 12);
         cell(&buffer, (8, 4), glyph, 241, 232, bold);
+    }
+}
+
+#[test]
+fn shoreline_glue_matches_ground_light_in_both_directions() {
+    let left = Coordinate::new(0, 2);
+    let right = left + Direction::XY;
+    for water in [tile::Water, tile::ShallowWater] {
+        for (ground, wet) in [(left, right), (right, left)] {
+            for (ground_light, water_light, expected_bg) in
+                [(4, 0, 22), (3, 1, 22), (1, 4, 16), (0, 4, 16)]
+            {
+                let mut loc = scene();
+                loc.map[ground] = tile::Tile::new(tile::Ground);
+                loc.map[wet] = tile::Tile::new(water);
+                loc.light_map[ground] = ground_light;
+                loc.light_map[wet] = water_light;
+                let mut renderer = MapRenderer::new(UNICODE_DOT);
+                renderer.resize(20, 12);
+                let buffer = render(&mut renderer, &loc, Mode::Normal, None, 0, 20, 12);
+                assert_eq!(buffer[(9, 4)].symbol(), " ");
+                assert_eq!(buffer[(9, 4)].bg, TerminalColor::Indexed(expected_bg));
+
+                // Hidden ground must not lend its current lighting to visible water.
+                player_mut(&mut loc).visible.remove(&ground);
+                let before = render(&mut renderer, &loc, Mode::Normal, None, 0, 20, 12);
+                loc.light_map[ground] = 6;
+                let after = render(&mut renderer, &loc, Mode::Normal, None, 0, 20, 12);
+                assert_eq!(before[(9, 4)], after[(9, 4)]);
+
+                player_mut(&mut loc).visible.remove(&wet);
+                let remembered = render(&mut renderer, &loc, Mode::Normal, None, 0, 20, 12);
+                cell(&remembered, (9, 4), " ", 241, 232, false);
+                player_mut(&mut loc).known.remove(&ground);
+                player_mut(&mut loc).known.remove(&wet);
+                let unknown = render(&mut renderer, &loc, Mode::Normal, None, 0, 20, 12);
+                cell(&unknown, (9, 4), " ", 232, 232, false);
+            }
+        }
+    }
+}
+
+#[test]
+fn adjacent_shallows_keep_tile_commas_and_continuous_background_without_glue_comma() {
+    let left = Coordinate::new(0, 2);
+    let right = left + Direction::XY;
+    for (light, fg, bg) in [(0, 247, 67), (1, 241, 74), (3, 248, 4)] {
+        let mut loc = scene();
+        for coord in [left, right] {
+            loc.map[coord] = tile::Tile::new(tile::ShallowWater);
+            loc.light_map[coord] = light;
+        }
+        let mut renderer = MapRenderer::new(UNICODE_DOT);
+        renderer.resize(20, 12);
+        let buffer = render(&mut renderer, &loc, Mode::Normal, None, 0, 20, 12);
+        cell(&buffer, (8, 4), ",", fg, bg, false);
+        cell(&buffer, (9, 4), " ", fg, bg, false);
+        cell(&buffer, (10, 4), ",", fg, bg, false);
+
+        for coord in [left, right] {
+            player_mut(&mut loc).visible.remove(&coord);
+        }
+        let buffer = render(&mut renderer, &loc, Mode::Normal, None, 0, 20, 12);
+        cell(&buffer, (8, 4), ",", 241, 232, false);
+        cell(&buffer, (9, 4), " ", 241, 232, false);
+        cell(&buffer, (10, 4), ",", 241, 232, false);
     }
 }
 
