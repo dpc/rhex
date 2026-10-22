@@ -11,7 +11,7 @@ fn player_mut(loc: &mut Location) -> &mut Actor {
 fn scene() -> Location {
     let mut loc = fixtures::room();
     for coord in Coordinate::new(0, 0).range_iter(8) {
-        loc.light_map[coord] = 4;
+        loc.light_map[coord] = FULL_LIGHT;
     }
     loc
 }
@@ -56,18 +56,19 @@ fn cell(buffer: &Buffer, xy: (u16, u16), glyph: &str, fg: u8, bg: u8, bold: bool
 }
 
 #[test]
-fn player_body_is_gray_but_facing_stays_blue_in_every_light_band() {
+fn player_body_is_gray_but_facing_stays_blue_at_every_light_level() {
     for (terrain, backgrounds) in [
         (tile::Empty, color::EMPTY_BG),
         (tile::Ground, color::FOREST_BG),
         (tile::ShallowWater, color::WATER_BG),
     ] {
-        for (light, band, gray) in [
-            (0, 2, 240),
-            (1, 1, 243),
-            (2, 1, 243),
-            (3, 0, 250),
-            (4, 0, 250),
+        for (light, gray, dot_gray) in [
+            (0, 240, 238),
+            (1, 242, 59),
+            (2, 244, 243),
+            (3, 246, 245),
+            (4, 248, 248),
+            (5, 250, 250),
         ] {
             let mut loc = scene();
             for coord in loc.player().coord().range_iter(8) {
@@ -77,7 +78,14 @@ fn player_body_is_gray_but_facing_stays_blue_in_every_light_band() {
             let mut renderer = MapRenderer::new(UNICODE_DOT);
             renderer.resize(20, 12);
             let buffer = render(&mut renderer, &loc, Mode::Normal, None, 0, 20, 12);
-            cell(&buffer, (10, 6), "@", gray, backgrounds[band], false);
+            cell(
+                &buffer,
+                (10, 6),
+                "@",
+                gray,
+                backgrounds.index(true, light),
+                false,
+            );
             cell(
                 &buffer,
                 (12, 6),
@@ -87,7 +95,7 @@ fn player_body_is_gray_but_facing_stays_blue_in_every_light_band() {
                     "•"
                 },
                 21,
-                backgrounds[band],
+                backgrounds.index(true, light),
                 true,
             );
             if terrain != tile::ShallowWater {
@@ -95,8 +103,8 @@ fn player_body_is_gray_but_facing_stays_blue_in_every_light_band() {
                     &buffer,
                     (8, 4),
                     "•",
-                    [250, 243, 238][band],
-                    backgrounds[band],
+                    dot_gray,
+                    backgrounds.index(true, light),
                     false,
                 );
                 player_mut(&mut loc).visible.remove(&Coordinate::new(0, 2));
@@ -106,7 +114,7 @@ fn player_body_is_gray_but_facing_stays_blue_in_every_light_band() {
                     (8, 4),
                     "•",
                     color::REMEMBERED_TERRAIN_FG,
-                    backgrounds[3],
+                    backgrounds.index(false, light),
                     false,
                 );
                 player_mut(&mut loc).visible.insert(Coordinate::new(0, 2));
@@ -122,8 +130,8 @@ fn player_body_is_gray_but_facing_stays_blue_in_every_light_band() {
                 &buffer,
                 (8, 4),
                 "@",
-                [19, 18, 247][band],
-                backgrounds[band],
+                color::CHAR_HUMANOID_FG.index(true, light),
+                backgrounds.index(true, light),
                 false,
             );
         }
@@ -131,11 +139,11 @@ fn player_body_is_gray_but_facing_stays_blue_in_every_light_band() {
 }
 
 #[test]
-fn empty_tile_chests_keep_their_palette_in_every_light_band() {
+fn empty_tile_chests_are_shaded_but_the_legend_is_fully_lit() {
     use crate::game::chest::Chest;
 
     for (opened, has_item, glyph) in [(false, true, "%"), (true, true, "["), (true, false, "_")] {
-        for (light, band, fg) in [(0, 2, 247), (1, 1, 241), (2, 1, 241), (3, 0, 248)] {
+        for (light, fg) in [(0, 242), (1, 243), (2, 102), (3, 246), (4, 247), (5, 248)] {
             let mut loc = scene();
             let coord = Coordinate::new(0, 2);
             loc.light_map[coord] = light;
@@ -147,7 +155,14 @@ fn empty_tile_chests_keep_their_palette_in_every_light_band() {
             let mut renderer = MapRenderer::new(UNICODE_DOT);
             renderer.resize(20, 12);
             let buffer = render(&mut renderer, &loc, Mode::Normal, None, 0, 20, 12);
-            cell(&buffer, (8, 4), glyph, fg, color::EMPTY_BG[band], false);
+            cell(
+                &buffer,
+                (8, 4),
+                glyph,
+                fg,
+                color::EMPTY_BG.index(true, light),
+                false,
+            );
             let entry = renderer
                 .sight_entries(&loc)
                 .into_iter()
@@ -187,7 +202,7 @@ fn chest_memory_survives_turning_without_observing_hidden_mutations() {
             xy,
             glyph,
             color::REMEMBERED_TERRAIN_FG,
-            color::EMPTY_BG[3],
+            color::EMPTY_BG.index(false, 0),
             false,
         );
         assert!(
@@ -265,7 +280,7 @@ fn actor_bodies_inherit_terrain_background_through_facing_and_overlays() {
                 tile::ShallowWater => color::WATER_BG,
                 _ => unreachable!(),
             };
-            let bg = palette[usize::from(light < 3)];
+            let bg = palette.index(true, light);
             for frame in [0, 1, 6] {
                 let buffer = render(&mut renderer, &loc, Mode::Normal, None, frame, 20, 12);
                 // Both actors face occupied cells: facing changes foreground only.
@@ -278,7 +293,10 @@ fn actor_bodies_inherit_terrain_background_through_facing_and_overlays() {
                 .find(|entry| entry.name == "cave beetle")
                 .unwrap();
             // The legend retains the terrain category, without map shading.
-            assert_eq!(entry.style.bg, Some(TerminalColor::Indexed(palette[0])));
+            assert_eq!(
+                entry.style.bg,
+                Some(TerminalColor::Indexed(palette.index(true, FULL_LIGHT)))
+            );
             let target = Some(Position::new(enemy_coord, XY));
             let buffer = render(
                 &mut renderer,
@@ -348,8 +366,8 @@ fn death_lights_remembered_terrain_without_revealing_unknown_cells() {
         &buffer,
         (8, 4),
         "#",
-        color::WALL_FG[0],
-        color::WALL_BG[0],
+        color::WALL_FG.index(true, FULL_LIGHT),
+        color::WALL_BG.index(true, FULL_LIGHT),
         true,
     );
     cell(
@@ -382,91 +400,112 @@ fn dark_forest_remembered_and_unknown_cells_share_true_black() {
 }
 
 #[test]
-fn unlit_dots_and_remembered_terrain_are_subdued_without_recoloring_other_terrain() {
+fn terrain_has_graduated_rgb_shading_but_memory_ignores_live_light() {
     // Literal indexed colors keep this independent of the production palette.
-    // Each visible style is ordered: unlit, shaded, fully lit.
+    // Each visible style covers every light unit from darkness to lantern strength.
     for (terrain, feature, glyph, fg, bg, bold) in [
         (
             tile::Empty,
             None,
             "•",
-            [238, 243, 250],
-            [235, 247, 255],
+            [238, 59, 243, 245, 248, 250],
+            [235, 246, 145, 251, 188, 255],
             false,
         ),
-        (tile::Wall, None, "#", [247, 232, 16], [235, 247, 255], true),
-        (tile::Water, None, "~", [247, 241, 248], [67, 74, 4], false),
+        (
+            tile::Wall,
+            None,
+            "#",
+            [247, 235, 234, 233, 232, 16],
+            [235, 246, 145, 251, 188, 255],
+            true,
+        ),
+        (
+            tile::Water,
+            None,
+            "~",
+            [242, 243, 102, 246, 247, 248],
+            [16, 16, 17, 17, 17, 18],
+            false,
+        ),
         (
             tile::ShallowWater,
             None,
             ",",
-            [247, 241, 248],
-            [67, 74, 4],
+            [242, 243, 102, 246, 247, 248],
+            [16, 16, 17, 17, 17, 18],
             false,
         ),
         (
             tile::Ground,
             None,
             "•",
-            [238, 243, 250],
-            [16, 16, 22],
+            [238, 59, 243, 245, 248, 250],
+            [16, 16, 16, 22, 22, 22],
             false,
         ),
-        (tile::Thicket, None, "+", [22, 22, 28], [16, 16, 22], false),
+        (
+            tile::Thicket,
+            None,
+            "+",
+            [22, 28, 70, 71, 77, 119],
+            [16, 16, 16, 22, 22, 22],
+            false,
+        ),
         (
             tile::TreeTrunk,
             None,
             "#",
-            [239, 58, 94],
-            [16, 16, 22],
+            [59, 59, 95, 137, 138, 180],
+            [16, 16, 16, 22, 22, 22],
             true,
         ),
         (
             tile::Ground,
             Some(tile::ForestPath),
             ">",
-            [22, 58, 65],
-            [16, 16, 22],
+            [22, 22, 64, 65, 107, 149],
+            [16, 16, 16, 22, 22, 22],
             false,
         ),
         (
             tile::Ground,
             Some(tile::Entrance),
             "<",
-            [22, 58, 65],
-            [16, 16, 22],
+            [22, 22, 64, 65, 107, 149],
+            [16, 16, 16, 22, 22, 22],
             false,
         ),
         (
             tile::Empty,
             Some(tile::Door(false)),
             "×",
-            [247, 232, 16],
-            [235, 247, 255],
+            [247, 235, 234, 233, 232, 16],
+            [235, 246, 145, 251, 188, 255],
             false,
         ),
         (
             tile::Empty,
             Some(tile::Door(true)),
             "_",
-            [247, 232, 16],
-            [235, 247, 255],
+            [247, 235, 234, 233, 232, 16],
+            [235, 246, 145, 251, 188, 255],
             false,
         ),
         (
             tile::Empty,
             Some(tile::Statue),
             "&",
-            [247, 232, 16],
-            [235, 247, 255],
+            [247, 235, 234, 233, 232, 16],
+            [235, 246, 145, 251, 188, 255],
             false,
         ),
         (
             tile::Empty,
             Some(tile::Stairs),
             ">",
-            [247, 232, 16],
-            [235, 247, 255],
+            [247, 235, 234, 233, 232, 16],
+            [235, 246, 145, 251, 188, 255],
             false,
         ),
     ] {
@@ -476,7 +515,7 @@ fn unlit_dots_and_remembered_terrain_are_subdued_without_recoloring_other_terrai
         loc.map[coord].feature = feature;
         let mut renderer = MapRenderer::new(UNICODE_DOT);
         renderer.resize(20, 12);
-        for (band, light) in [0, 1, 3].into_iter().enumerate() {
+        for (band, light) in (0..=5).enumerate() {
             // Opaque terrain takes its apparent light from neighboring cells.
             for lit_coord in Coordinate::new(0, 0).range_iter(8) {
                 loc.light_map[lit_coord] = light;
@@ -486,7 +525,7 @@ fn unlit_dots_and_remembered_terrain_are_subdued_without_recoloring_other_terrai
         }
         player_mut(&mut loc).visible.remove(&coord);
         // Current lighting must not brighten terrain outside sight.
-        for light in [0, 1, 3] {
+        for light in [0, 1, 3, 5, u32::MAX / 2] {
             for lit_coord in Coordinate::new(0, 0).range_iter(8) {
                 loc.light_map[lit_coord] = light;
             }
@@ -541,7 +580,7 @@ fn adjacent_water_keeps_tile_glyphs_and_continuous_background_without_glue_glyph
     let right = left + Direction::XY;
     for (left_water, left_glyph) in [(tile::Water, "~"), (tile::ShallowWater, ",")] {
         for (right_water, right_glyph) in [(tile::Water, "~"), (tile::ShallowWater, ",")] {
-            for (light, fg, bg) in [(0, 247, 67), (1, 241, 74), (3, 248, 4)] {
+            for (light, fg, bg) in [(0, 242, 16), (1, 243, 16), (3, 246, 17), (5, 248, 18)] {
                 for (left_seen, right_seen) in
                     [(true, true), (true, false), (false, true), (false, false)]
                 {
@@ -623,55 +662,62 @@ fn projected_terrain_visibility_light_and_glue_have_exact_cells() {
             &buffer,
             (cx - 2, cy - 2),
             "#",
-            color::WALL_FG[3],
-            color::WALL_BG[3],
+            color::WALL_FG.index(false, 0),
+            color::WALL_BG.index(false, 0),
             true,
         );
         cell(
             &buffer,
             (cx + 2, cy - 2),
             "~",
-            color::WATER_FG[0],
-            color::WATER_BG[0],
+            color::WATER_FG.index(true, FULL_LIGHT),
+            color::WATER_BG.index(true, FULL_LIGHT),
             false,
         );
         cell(
             &buffer,
             (cx + 2, cy + 2),
             "×",
-            color::STONE_FG[0],
-            color::WALL_BG[0],
+            color::STONE_FG.index(true, FULL_LIGHT),
+            color::WALL_BG.index(true, FULL_LIGHT),
             false,
         );
         cell(
             &buffer,
             (cx - 1, cy),
             " ",
-            color::STONE_FG[0],
-            color::EMPTY_BG[0],
+            color::STONE_FG.index(true, FULL_LIGHT),
+            color::EMPTY_BG.index(true, FULL_LIGHT),
             false,
         );
         cell(
             &buffer,
             (cx, cy),
             "@",
-            color::CHAR_SELF_FG[0],
-            color::EMPTY_BG[0],
+            color::CHAR_SELF_FG.index(true, FULL_LIGHT),
+            color::EMPTY_BG.index(true, FULL_LIGHT),
             false,
         );
-        cell(&buffer, (cx + 2, cy), "•", 21, color::EMPTY_BG[0], true);
+        cell(
+            &buffer,
+            (cx + 2, cy),
+            "•",
+            21,
+            color::EMPTY_BG.index(true, FULL_LIGHT),
+            true,
+        );
     }
     let mut renderer = MapRenderer::new(UNICODE_DOT);
     renderer.resize(20, 12);
-    for (light, band) in [(0, 2), (1, 1), (2, 1), (3, 0)] {
+    for light in 0..=5 {
         loc.light_map[water] = light;
         let buffer = render(&mut renderer, &loc, Mode::Normal, None, 0, 20, 12);
         cell(
             &buffer,
             (12, 4),
             "~",
-            color::WATER_FG[band],
-            color::WATER_BG[band],
+            color::WATER_FG.index(true, light),
+            color::WATER_BG.index(true, light),
             false,
         );
     }
@@ -681,8 +727,8 @@ fn projected_terrain_visibility_light_and_glue_have_exact_cells() {
         &buffer,
         (12, 8),
         "_",
-        color::STONE_FG[0],
-        color::EMPTY_BG[0],
+        color::STONE_FG.index(true, FULL_LIGHT),
+        color::EMPTY_BG.index(true, FULL_LIGHT),
         false,
     );
 }
@@ -714,8 +760,8 @@ fn concealed_entities_do_not_change_ordinary_output_but_visible_heads_can_mark_u
         &buffer,
         (4, 6),
         ">",
-        color::STONE_FG[3],
-        color::EMPTY_BG[3],
+        color::STONE_FG.index(false, 0),
+        color::EMPTY_BG.index(false, 0),
         false,
     );
 
@@ -741,8 +787,8 @@ fn layers_target_blockage_and_attribute_reset_are_exact() {
         &buffer,
         (14, 6),
         ")",
-        color::WALL_FG[0],
-        color::EMPTY_BG[0],
+        color::WALL_FG.index(true, FULL_LIGHT),
+        color::EMPTY_BG.index(true, FULL_LIGHT),
         true,
     );
     loc.actors_byid
@@ -753,8 +799,8 @@ fn layers_target_blockage_and_attribute_reset_are_exact() {
         &buffer,
         (14, 6),
         "r",
-        color::CHAR_ENEMY_FG[0],
-        color::EMPTY_BG[0],
+        color::CHAR_ENEMY_FG.index(true, FULL_LIGHT),
+        color::EMPTY_BG.index(true, FULL_LIGHT),
         false,
     );
     let target = Some(Position::new(Coordinate::new(4, -4), XY));
@@ -774,15 +820,15 @@ fn layers_target_blockage_and_attribute_reset_are_exact() {
         &buffer,
         (14, 6),
         "*",
-        color::CHAR_HUMANOID_FG[0],
-        color::EMPTY_BG[0],
+        color::CHAR_HUMANOID_FG.index(true, FULL_LIGHT),
+        color::EMPTY_BG.index(true, FULL_LIGHT),
         false,
     );
     cell(
         &buffer,
         (16, 6),
         "#",
-        color::WALL_FG[0],
+        color::WALL_FG.index(true, FULL_LIGHT),
         color::BLOCKED_BG,
         true,
     );
@@ -804,16 +850,16 @@ fn layers_target_blockage_and_attribute_reset_are_exact() {
         &buffer,
         (14, 6),
         "•",
-        color::EMPTY_DOT_FG[0],
-        color::EMPTY_BG[0],
+        color::EMPTY_DOT_FG.index(true, FULL_LIGHT),
+        color::EMPTY_BG.index(true, FULL_LIGHT),
         false,
     );
     cell(
         &buffer,
         (16, 6),
         "•",
-        color::EMPTY_DOT_FG[0],
-        color::EMPTY_BG[0],
+        color::EMPTY_DOT_FG.index(true, FULL_LIGHT),
+        color::EMPTY_BG.index(true, FULL_LIGHT),
         false,
     );
 }
@@ -828,7 +874,14 @@ fn occupied_heads_use_distinct_colors_then_reset_when_the_head_turns_away() {
     let mut renderer = MapRenderer::new(UNICODE_DOT);
     renderer.resize(20, 12);
     let occupied = render(&mut renderer, &loc, Mode::Normal, None, 0, 20, 12);
-    cell(&occupied, (12, 6), "r", 21, color::EMPTY_BG[0], false);
+    cell(
+        &occupied,
+        (12, 6),
+        "r",
+        21,
+        color::EMPTY_BG.index(true, FULL_LIGHT),
+        false,
+    );
     // A different enemy's head now overlaps the same rat.
     player_mut(&mut loc).pos.dir = hex2d::YX;
     let other = Coordinate::new(2, -2);
@@ -836,21 +889,35 @@ fn occupied_heads_use_distinct_colors_then_reset_when_the_head_turns_away() {
         .insert(2, Actor::new(Race::Rat, Position::new(other, hex2d::YX)));
     loc.actors_coord_to_id.insert(other, 2);
     let occupied = render(&mut renderer, &loc, Mode::Normal, None, 0, 20, 12);
-    cell(&occupied, (12, 6), "r", 196, color::EMPTY_BG[0], false);
+    cell(
+        &occupied,
+        (12, 6),
+        "r",
+        196,
+        color::EMPTY_BG.index(true, FULL_LIGHT),
+        false,
+    );
     loc.actors_byid.get_mut(&2).unwrap().pos.dir = XY;
     let clear = render(&mut renderer, &loc, Mode::Normal, None, 0, 20, 12);
     cell(
         &clear,
         (12, 6),
         "r",
-        color::CHAR_ENEMY_FG[0],
-        color::EMPTY_BG[0],
+        color::CHAR_ENEMY_FG.index(true, FULL_LIGHT),
+        color::EMPTY_BG.index(true, FULL_LIGHT),
         false,
     );
     // An enemy pointing at the player changes only the player's foreground too.
     loc.actors_byid.get_mut(&1).unwrap().pos.dir = hex2d::YX;
     let player_head = render(&mut renderer, &loc, Mode::Normal, None, 0, 20, 12);
-    cell(&player_head, (10, 6), "@", 196, color::EMPTY_BG[0], false);
+    cell(
+        &player_head,
+        (10, 6),
+        "@",
+        196,
+        color::EMPTY_BG.index(true, FULL_LIGHT),
+        false,
+    );
 }
 
 #[test]
@@ -875,7 +942,7 @@ fn movement_and_turns_leave_no_trails_and_mode_changes_rebuild_camera_cache() {
         (10, 6),
         "@",
         color::CHAR_GRAY_FG,
-        color::EMPTY_BG[0],
+        color::EMPTY_BG.index(true, FULL_LIGHT),
         false,
     );
     assert_eq!(buffer[(6, 6)].symbol(), "@"); // Player moves on screen, not in world.
@@ -945,7 +1012,7 @@ fn shared_heads_blink_on_elapsed_seconds_independent_of_order_and_occupancy() {
                         (12, 6),
                         if occupied { "r" } else { "•" },
                         fg,
-                        color::EMPTY_BG[0],
+                        color::EMPTY_BG.index(true, FULL_LIGHT),
                         !occupied,
                     );
                 }
@@ -960,7 +1027,7 @@ fn shared_heads_blink_on_elapsed_seconds_independent_of_order_and_occupancy() {
                 (12, 6),
                 if occupied { "r" } else { "•" },
                 21,
-                color::EMPTY_BG[0],
+                color::EMPTY_BG.index(true, FULL_LIGHT),
                 !occupied,
             );
 

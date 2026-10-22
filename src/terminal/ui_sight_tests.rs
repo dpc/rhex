@@ -216,7 +216,7 @@ fn legend_symbols_share_fully_lit_map_styles_regardless_of_world_lighting() {
     ] {
         let mut canonical = None;
         let mut lit_map = None;
-        for light in [4, 2, 1, 0] {
+        for light in [5, 4, 3, 2, 1, 0] {
             let c = Coordinate::new(0, 2);
             let mut loc = fixtures::room();
             loc.map[c] = tile::Tile::new(terrain);
@@ -237,7 +237,7 @@ fn legend_symbols_share_fully_lit_map_styles_regardless_of_world_lighting() {
             let map_cell = &buffer[((15 + dx) as u16, (12 + dy) as u16)];
             let legend_cell = &buffer[(30, 11)];
             assert_eq!(legend_cell.symbol(), map_cell.symbol());
-            if light == 4 {
+            if light == 5 {
                 assert_eq!(legend_cell, map_cell, "{name}");
                 assert_ne!(legend_cell.fg, legend_cell.bg, "{name}");
                 canonical = Some(legend_cell.clone());
@@ -248,7 +248,9 @@ fn legend_symbols_share_fully_lit_map_styles_regardless_of_world_lighting() {
                     canonical.as_ref(),
                     "{name}, light {light}"
                 );
-                assert_ne!(Some(map_cell), lit_map.as_ref(), "{name}, light {light}");
+                if light == 0 {
+                    assert_ne!(Some(map_cell), lit_map.as_ref(), "{name}, light {light}");
+                }
             }
             assert_eq!(
                 row(&buffer, 11).trim(),
@@ -384,7 +386,7 @@ fn nearest_duplicate_wins_and_long_names_clip_without_spilling() {
     assert!(row(&buffer, 12).trim().is_empty());
     assert_eq!(
         buffer[(30, 11)].fg,
-        ratatui::style::Color::Indexed(color::WALL_FG[0])
+        ratatui::style::Color::Indexed(color::WALL_FG.index(true, 5))
     );
     // A dimmer duplicate retains the same legend style and distinct count.
     ui.engine
@@ -397,7 +399,7 @@ fn nearest_duplicate_wins_and_long_names_clip_without_spilling() {
     let buffer = frame(&mut ui);
     assert_eq!(
         buffer[(30, 11)].fg,
-        ratatui::style::Color::Indexed(color::WALL_FG[0])
+        ratatui::style::Color::Indexed(color::WALL_FG.index(true, 5))
     );
     assert!(row(&buffer, 12).trim().is_empty());
     ui.engine.current_location_mut().items.clear();

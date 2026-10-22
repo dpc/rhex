@@ -2,6 +2,8 @@ use crate::game;
 
 /// Working with 256 color palette
 mod color;
+mod rgb;
+mod shade;
 
 mod consts;
 

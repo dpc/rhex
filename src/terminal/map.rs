@@ -4,6 +4,7 @@ use std::time::Duration;
 use super::Window;
 use super::color::{self, Color};
 use super::consts::*;
+use super::shade::{FULL_LIGHT, Shade};
 use super::ui::Mode;
 
 use crate::game::actor::{self, Race};
@@ -467,12 +468,7 @@ impl MapRenderer {
                         bg = color::FOREST_BG;
                     }
                     if visible && cur_loc.at(c).tile().light > 0 {
-                        fg = [
-                            color::LIGHTSOURCE[0].to_u8(),
-                            color::LIGHTSOURCE[1].to_u8(),
-                            color::LIGHTSOURCE[2].to_u8(),
-                            color::LIGHTSOURCE[3].to_u8(),
-                        ]
+                        fg = color::LIGHTSOURCE;
                     }
                 }
 
@@ -508,7 +504,7 @@ impl MapRenderer {
         };
 
         // Legend samples retain visibility gates but not environmental shading.
-        let light = if apply_lighting { light } else { 3 };
+        let light = if apply_lighting { light } else { FULL_LIGHT };
         let fg = color_by_visibility(fg, visible, light);
         let bg = color_by_visibility(bg, visible, light);
 
@@ -580,7 +576,7 @@ impl MapRenderer {
             if actor.is_player() {
                 head.0 = true;
             } else {
-                head.1 = Some(race_to_palete(race)[0].into());
+                head.1 = Some(race_to_palete(race).index(true, FULL_LIGHT).into());
             }
 
             if let Some((vx, vy)) = self.coord_to_glyph_xy(actor_coord) {
@@ -811,19 +807,11 @@ pub fn race_to_char(race: Race) -> char {
     }
 }
 
-pub fn color_by_visibility(color: [u8; 4], visible: bool, light: u32) -> Color {
-    let fg = if !visible || light == 0 {
-        if visible { color[2] } else { color[3] }
-    } else if light < 3 {
-        color[1]
-    } else {
-        color[0]
-    };
-
-    Color::from(fg)
+pub fn color_by_visibility(color: Shade, visible: bool, light: u32) -> Color {
+    Color::from(color.index(visible, light))
 }
 
-pub fn race_to_palete(race: Race) -> [u8; 4] {
+pub fn race_to_palete(race: Race) -> Shade {
     match race {
         Race::Human | Race::Elf | Race::Dwarf => color::CHAR_HUMANOID_FG,
         _ => color::CHAR_ENEMY_FG,
