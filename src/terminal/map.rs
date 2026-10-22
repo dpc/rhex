@@ -10,7 +10,9 @@ use crate::game::actor::{self, Race};
 use crate::game::{Location, item, tile};
 use hex2d::{Coordinate, Direction, Position};
 
-use ratatui::style::Modifier;
+use ratatui::style::{Modifier, Style};
+
+use super::sight_entry::SightEntry;
 
 #[cfg(test)]
 #[path = "awareness_tests.rs"]
@@ -37,6 +39,18 @@ impl Default for DisplayCharacter {
             fg: color::MAP_BACKGROUND_BG.into(),
             bg: color::MAP_BACKGROUND_BG.into(),
             bold: false,
+        }
+    }
+}
+
+impl DisplayCharacter {
+    /// Preserve the ordinary map colors and emphasis in other UI regions.
+    fn style(self) -> Style {
+        let style = color::style(self.fg, self.bg);
+        if self.bold {
+            style.add_modifier(Modifier::BOLD)
+        } else {
+            style
         }
     }
 }
@@ -103,6 +117,75 @@ pub struct MapRenderer {
 }
 
 impl MapRenderer {
+    /// Describe current sight, never remembered cells or transient overlays.
+    ///
+    /// Like the map, show only the topmost occupant. Prefer creatures, then
+    /// items, features and unusual terrain; deduplicate equal glyph/name pairs.
+    /// Sample ordinary terrain/item rendering in a one-cell scratch buffer so
+    /// lighting and glyph rules stay shared even outside the map viewport.
+    pub(super) fn sight_entries(&self, loc: &Location) -> Vec<SightEntry> {
+        let player = loc.player();
+        let mut coords: Vec<_> = player.visible.iter().copied().collect();
+        coords.sort_by_key(|c| (player.pos.coord.distance(*c), c.x, c.y));
+        let mut scratch = Self::new(self.dot);
+        scratch.base.resize(1, 1);
+        scratch.items.resize(1, 1);
+        let mut entries = Vec::new();
+        for c in coords {
+            if !player.knows(c) {
+                continue;
+            }
+            let at = loc.at(c);
+            scratch.draw_map_base_glyph(loc, 0, 0, c, true);
+            let base = *scratch.base.at(0, 0);
+            let actor = at.actor_map_or(None, |actor| {
+                (!actor.is_dead()).then_some((actor.race, actor.is_player()))
+            });
+            let (priority, name, ch) = if let Some((race, is_player)) = actor {
+                if is_player {
+                    continue;
+                }
+                (
+                    0,
+                    race.description(),
+                    DisplayCharacter {
+                        glyph: race_to_char(race),
+                        fg: color_by_visibility(race_to_palete(race), true, base.light),
+                        bg: color_by_visibility(color::CHAR_BG, true, base.light),
+                        bold: base.base.bold,
+                    },
+                )
+            } else if let Some(item) = at.item() {
+                scratch.draw_items(loc, 0, 0, c, true);
+                (1, item.description(), scratch.items.at(0, 0).unwrap())
+            } else if let Some(feature) = at.tile().feature {
+                (2, feature.description().to_owned(), base.base)
+            } else if matches!(
+                at.tile().type_,
+                tile::Water | tile::ShallowWater | tile::TreeTrunk | tile::Thicket
+            ) {
+                (3, at.tile().type_.description().to_owned(), base.base)
+            } else {
+                continue;
+            };
+            if !entries
+                .iter()
+                .any(|(_, entry): &(u8, SightEntry)| entry.glyph == ch.glyph && entry.name == name)
+            {
+                entries.push((
+                    priority,
+                    SightEntry {
+                        glyph: ch.glyph,
+                        style: ch.style(),
+                        name,
+                    },
+                ));
+            }
+        }
+        entries.sort_by_key(|(priority, _)| *priority);
+        entries.into_iter().map(|(_, entry)| entry).collect()
+    }
+
     pub fn new(dot: char) -> Self {
         MapRenderer {
             animations: Default::default(),
@@ -626,11 +709,7 @@ impl MapRenderer {
                         }
                     }
                 };
-                let mut style = color::style(ch.fg, ch.bg);
-                if ch.bold {
-                    style = style.add_modifier(Modifier::BOLD);
-                }
-                window.put(vy as i32, vx as i32, ch.glyph, style);
+                window.put(vy as i32, vx as i32, ch.glyph, ch.style());
             }
         }
     }

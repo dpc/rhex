@@ -8,6 +8,7 @@ mod consts;
 mod animations;
 mod input;
 mod map;
+mod sight_entry;
 
 mod runner;
 mod session;

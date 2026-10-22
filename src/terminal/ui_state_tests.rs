@@ -75,7 +75,7 @@ fn comma_production_dispatch_picks_then_toggles_without_moving() {
             );
             let before = game::fixtures::outcome(ui.current_location());
             let buffer = frame(&mut ui, 60, 24);
-            let front: String = (30..60).map(|x| buffer[(x, 10)].symbol()).collect();
+            let front: String = (30..60).map(|x| buffer[(x, 8)].symbol()).collect();
             assert_eq!(front, format!("{:30}", format!("In front: {description}")));
             assert_eq!(before, game::fixtures::outcome(ui.current_location()));
         }
@@ -562,9 +562,9 @@ fn below_describes_ground_items_features_and_terrain_not_the_player() {
             ui.mode_switch_to(mode);
             ui.target_pos = Some(Position::new(Coordinate::new(2, -2), hex2d::XY));
             let buffer = frame(&mut ui, 60, 24);
-            let row: String = (30..60).map(|x| buffer[(x, 11)].symbol()).collect();
+            let row: String = (30..60).map(|x| buffer[(x, 9)].symbol()).collect();
             assert_eq!(row, format!("{:30}", format!("Below: {expected}")));
-            let front: String = (30..60).map(|x| buffer[(x, 10)].symbol()).collect();
+            let front: String = (30..60).map(|x| buffer[(x, 8)].symbol()).collect();
             assert_eq!(front, format!("{:30}", "In front: nothing"));
         }
     }
@@ -580,16 +580,16 @@ fn below_updates_after_moving_onto_and_off_stairs() {
         |buffer: &Buffer, y| -> String { (30..60).map(|x| buffer[(x, y)].symbol()).collect() };
     let before = frame(&mut ui, 60, 24);
     assert_eq!(
-        row(&before, 10),
+        row(&before, 8),
         format!("{:30}", "In front: to Dark Forest (>)")
     );
-    assert_eq!(row(&before, 11), format!("{:30}", "Below: nothing"));
+    assert_eq!(row(&before, 9), format!("{:30}", "Below: nothing"));
     for (step, expected) in [(1, "to Dark Forest (>)"), (2, "nothing")] {
         key(&mut ui, KeyCode::Char('k'), now);
         ui.advance((24, 60), now + Duration::from_secs(step));
         let buffer = frame(&mut ui, 60, 24);
         assert_eq!(
-            row(&buffer, 11),
+            row(&buffer, 9),
             format!("{:30}", format!("Below: {expected}"))
         );
     }
@@ -619,14 +619,14 @@ fn long_ground_readouts_clip_without_overwriting_stats_or_log() {
                 .map(|x| buffer[(x, y)].symbol())
                 .collect()
         };
-        assert_eq!(row(10), "In front: plate armor of infra");
-        assert_eq!(row(11), "Below: plate armor of infravis");
-        assert_eq!(row(12), format!("{:30}", "Turn: 0       Level: 0"));
+        assert_eq!(row(8), "In front: plate armor of infra");
+        assert_eq!(row(9), "Below: plate armor of infravis");
+        assert_eq!(row(10), format!("{:30}", "Turn: 0       Level: 0"));
         assert_eq!(row(13), format!("{:30}", "A quiet room."));
         ui.engine.current_location_mut().items.clear();
         let cleared = frame(&mut ui, width as u16, height as u16);
         let row: String = ((width - 30) as u16..width as u16)
-            .map(|x| cleared[(x, 11)].symbol())
+            .map(|x| cleared[(x, 9)].symbol())
             .collect();
         assert_eq!(row, format!("{:30}", "Below: nothing"));
     }
@@ -1092,7 +1092,7 @@ fn exit_keys_roundtrip_preserve_state_and_reset_location_presentation() {
         let before = game::fixtures::outcome(ui.current_location());
         for _ in 0..3 {
             let buffer = frame(&mut ui, 60, 24);
-            let below: String = (30..60).map(|x| buffer[(x, 11)].symbol()).collect();
+            let below: String = (30..60).map(|x| buffer[(x, 9)].symbol()).collect();
             assert_eq!(below, format!("{readout:30}"));
         }
         assert_eq!(before, game::fixtures::outcome(ui.current_location()));

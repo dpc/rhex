@@ -937,39 +937,89 @@ impl Ui {
         map_renderer.draw_into(&windows.map);
     }
 
-    fn draw_stats_bar(&self, window: &Window, y: i32, name: &str, cur: i32, prev: i32, max: i32) {
-        let (max_y, max_x) = Ui::window_size(window);
-
-        if max_x < 6 || max_y < 1 {
-            // Don't draw anything on too small window
-            return;
-        }
-
-        let cur = cmp::max(cur, 0) as u32;
-        let prev = cmp::max(prev, 0) as u32;
-        let max = cmp::max(max, 1) as u32;
-
-        window.set_style(self.label_color);
-        window.move_to(y, 0);
-        window.write(&format!("{}: ", name));
-
-        let width = max_x as u32 - 4 - name.chars().count() as u32;
-        let cur_w = cur * width / max;
-        let prev_w = prev * width / max;
-
-        window.set_style(self.text_color);
-        window.write_char('[');
-        for i in 0..width {
-            let (ch, style) = match (i < cur_w, i < prev_w) {
-                (true, true) => ('=', self.text_color),
-                (false, true) => ('-', self.red_color),
-                (true, false) => ('+', self.green_color),
-                (false, false) => break,
+    /// Keep exact resource values on one row; color changes as the old bars did.
+    fn draw_resources(&self, window: &Window, y: i32) {
+        let player = self.player();
+        for (index, (label, current, previous, maximum)) in [
+            ("HP", player.hp, player.saved_hp, player.stats.base.max_hp),
+            ("MP", player.mp, player.saved_mp, player.stats.base.max_mp),
+            ("SP", player.sp, player.saved_sp, player.stats.base.max_sp),
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            let x = index as i32 * 10;
+            window.move_to(y, x);
+            self.draw_label(window, label);
+            let style = match current.cmp(&previous) {
+                cmp::Ordering::Less => self.red_color,
+                cmp::Ordering::Greater => self.green_color,
+                cmp::Ordering::Equal => self.text_color,
             };
-            window.set_style(style);
-            window.write_char(ch);
+            Self::put_clipped(window, y, x + 3, 7, &format!("{current}/{maximum}"), style);
         }
-        window.put(y, max_x - 1, ']', self.text_color);
+    }
+
+    /// Clip a single-line field explicitly rather than allowing Window wrapping.
+    fn put_clipped(window: &Window, y: i32, x: i32, width: usize, text: &str, style: Style) {
+        let length = text.chars().count();
+        for (offset, ch) in text.chars().take(width).enumerate() {
+            let ch = if offset + 1 == width && length > width {
+                '…'
+            } else {
+                ch
+            };
+            window.put(y, x + offset as i32, ch, style);
+        }
+    }
+
+    /// Pack short sight entries in pairs, retaining a visible overflow count.
+    fn draw_sight(&self, window: &Window, first_y: i32) {
+        let entries = self.map_renderer.sight_entries(self.current_location());
+        let width = window.size().1 as usize;
+        let half = (width - 1) / 2;
+        let mut rows: Vec<Vec<&super::sight_entry::SightEntry>> = Vec::new();
+        for entry in &entries {
+            if entry.name.chars().count() + 4 <= half
+                && let Some(row) = rows.last_mut()
+                && row.len() == 1
+                && row[0].name.chars().count() + 4 <= half
+            {
+                row.push(entry);
+            } else {
+                rows.push(vec![entry]);
+            }
+        }
+        let available = (window.size().0 - first_y).max(0) as usize;
+        let mut displayed = 0;
+        for (offset, row) in rows.iter().take(available).enumerate() {
+            let y = first_y + offset as i32;
+            for (column, entry) in row.iter().enumerate() {
+                let x = if column == 0 { 0 } else { half + 1 };
+                let field_width = if row.len() == 1 { width } else { half };
+                if offset + 1 == available && column + 1 == row.len() && rows.len() > available {
+                    Self::put_clipped(
+                        window,
+                        y,
+                        x as i32,
+                        field_width,
+                        &format!("+{} more", entries.len() - displayed),
+                        self.text_gray_color,
+                    );
+                    break;
+                }
+                window.put(y, x as i32, entry.glyph, entry.style);
+                Self::put_clipped(
+                    window,
+                    y,
+                    x as i32 + 1,
+                    field_width - 1,
+                    &format!(" - {}", entry.name),
+                    self.text_color,
+                );
+                displayed += 1;
+            }
+        }
     }
 
     fn draw_turn<T>(&self, window: &Window, label: &str, val: T)
@@ -1076,34 +1126,7 @@ impl Ui {
         self.draw_val(window, "Dex", player.stats.base.dex);
 
         y += 1;
-        self.draw_stats_bar(
-            window,
-            y,
-            "HP",
-            player.hp,
-            player.saved_hp,
-            player.stats.base.max_hp,
-        );
-
-        y += 1;
-        self.draw_stats_bar(
-            window,
-            y,
-            "MP",
-            player.mp,
-            player.saved_mp,
-            player.stats.base.max_mp,
-        );
-
-        y += 1;
-        self.draw_stats_bar(
-            window,
-            y,
-            "SP",
-            player.sp,
-            player.saved_sp,
-            player.stats.base.max_sp,
-        );
+        self.draw_resources(window, y);
 
         let slots = [
             ("R", Slot::RHand),
@@ -1152,6 +1175,8 @@ impl Ui {
         window.move_to(y, 0);
         self.draw_turn(window, "Turn", turn);
         self.draw_turn(window, "Level", cur_loc.level);
+
+        self.draw_sight(window, y + 1);
     }
 
     /// Keep each tile readout on its own row without spilling into other stats.
@@ -1392,3 +1417,7 @@ mod property_tests;
 #[cfg(test)]
 #[path = "ui_snapshot_tests.rs"]
 mod snapshot_tests;
+
+#[cfg(test)]
+#[path = "ui_sight_tests.rs"]
+mod sight_tests;

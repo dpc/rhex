@@ -51,6 +51,26 @@ Moving into a closed door still opens it without entering. Comma does not clear
 thickets or use items, exits, or objects underfoot. Use `E` for inventory items
 and `<`/`>` for the passage you are standing on.
 
+### Reading the sidebar
+
+Read current/maximum HP, MP and SP in one row. Red values indicate a decrease
+since the previous turn; green values indicate an increase.
+
+Below the equipment, tile readouts and turn counter, use the compact sight
+legend to identify entries by `X - name`. Each entry uses its ordinary map glyph
+and lighting colors, without transient facing, targeting or animation effects.
+The legend lists visible creatures, items, doors, passages, statues, water and
+forest obstacles. It excludes the player and remembered or hidden contents.
+It follows the map's topmost-occupant priority: an actor or item can obscure a
+feature.
+
+Entries with the same symbol and name share one legend entry, using the nearest
+example's colors. Creatures come first, followed by items, features and unusual
+terrain; within each group, nearer entries come first. Short names share a row.
+Long names use the full width and clip with an ellipsis. `+N more` counts
+additional distinct entries that do not fit. The map and log keep
+their space, including at the minimum supported size of 60 columns by 24 rows.
+
 ### Forests and returning to levels
 
 You start in a Dark Forest. Stand on its `>` exit and press `>` to enter a
