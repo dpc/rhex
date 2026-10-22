@@ -977,10 +977,13 @@ impl Actor {
             } else if old_pos.coord != new_pos.coord
                 && loc.map[new_pos.coord].type_ == tile::Thicket
             {
-                // A bump in a melee direction is a hit, not a movement. Even a
-                // charge stops here; never attack an occupant through vegetation.
+                // Forward and strafe bumps clear vegetation without moving.
+                // Even a charge stops here; never attack through vegetation.
                 if !self.race.is_beast()
-                    && self.could_be_attack(action)
+                    && matches!(
+                        action,
+                        Action::Charge | Action::Move(Left | Right | Forward)
+                    )
                     && self.can_attack()
                     && self.can_attack_sp()
                 {
@@ -1074,10 +1077,8 @@ impl Actor {
         self.noise_makes(9);
     }
 
+    /// Only forward movement and charging can turn an occupied bump into melee.
     pub fn could_be_attack(&self, action: Action) -> bool {
-        matches!(
-            action,
-            Action::Charge | Action::Move(Left | Right | Forward)
-        )
+        matches!(action, Action::Charge | Action::Move(Forward))
     }
 }

@@ -4,7 +4,7 @@ use hex2d::{Angle, Coordinate};
 pub enum Action {
     Wait,
     Turn(Angle),
-    /// Step relative to facing without turning; Left/Right strafe front-left/right.
+    /// Step without turning; Left/Right strafe and bump terrain, but never attack actors.
     Move(Angle),
     Charge,
     Equip(char),

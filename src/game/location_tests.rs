@@ -21,15 +21,15 @@ fn ready_act(loc: &mut Location, action: Action) {
 fn strafing_preserves_shared_movement_collision_cost_and_sound_rules() {
     for &facing in Direction::all() {
         for angle in [Angle::Left, Angle::Right] {
-            for player in [true, false] {
+            for race in [Race::Human, Race::Rat, Race::Wolf, Race::CaveBeetle] {
                 for obstacle in ["floor", "wall", "door", "creature", "thicket"] {
                     let mut loc = fixtures::room();
-                    let id = if player {
+                    let id = if race == Race::Human {
                         loc.actors_byid.get_mut(&0).unwrap().pos.dir = facing;
                         0
                     } else {
                         loc.spawn(Actor::new(
-                            Race::Rat,
+                            race,
                             Position::new(Coordinate::new(2, -1), facing),
                         ))
                     };
@@ -44,7 +44,12 @@ fn strafing_preserves_shared_movement_collision_cost_and_sound_rules() {
                         }
                         _ => {}
                     }
+                    let target_before = loc
+                        .actors_coord_to_id
+                        .get(&target)
+                        .map(|id| (*id, loc.actors_byid[id].hp));
                     let sp = loc.actors_byid[&id].sp;
+                    let melee_cost = loc.actors_byid[&id].melee_sp_cost();
                     loc.act(id, Action::Move(angle));
                     let actor = &loc.actors_byid[&id];
                     assert_eq!(actor.pos.dir, facing);
@@ -70,16 +75,95 @@ fn strafing_preserves_shared_movement_collision_cost_and_sound_rules() {
                         }
                         "door" => {
                             assert_eq!(actor.sp, sp);
-                            assert_eq!(loc.map[target].feature, Some(tile::Door(true)));
-                            assert!(actor.heard.contains_key(&before.coord));
+                            assert_eq!(loc.map[target].feature, Some(tile::Door(!race.is_beast())));
+                            assert_eq!(actor.heard.contains_key(&before.coord), !race.is_beast());
                         }
-                        "creature" => assert_eq!(actor.did_attack.len(), 1),
-                        "thicket" => assert_eq!(loc.map[target].type_, tile::Ground),
+                        "creature" => {
+                            assert!(actor.did_attack.is_empty());
+                            assert_eq!(actor.sp, sp);
+                            assert!(loc.combat_events.is_empty());
+                            assert!(loc.sound_events.is_empty());
+                            let (target_id, hp) = target_before.unwrap();
+                            assert_eq!(loc.actors_byid[&target_id].hp, hp);
+                        }
+                        "thicket" => {
+                            assert_eq!(
+                                loc.map[target].type_,
+                                if race.is_beast() {
+                                    tile::Thicket
+                                } else {
+                                    tile::Ground
+                                }
+                            );
+                            assert_eq!(loc.sound_events.is_empty(), race.is_beast());
+                            assert!(actor.did_attack.is_empty());
+                            if race.is_beast() {
+                                assert_eq!(actor.sp, sp);
+                            } else {
+                                assert_eq!(actor.sp, sp - melee_cost);
+                            }
+                        }
                         _ => unreachable!(),
                     }
                     fixtures::occupancy(&loc);
                 }
             }
+        }
+    }
+}
+
+#[test]
+fn strafe_thicket_clearing_respects_action_and_stamina_restrictions() {
+    for &facing in Direction::all() {
+        for angle in [Angle::Left, Angle::Right] {
+            for blocked in ["cooldown", "dead", "stamina"] {
+                let mut loc = fixtures::room();
+                let player = player_mut(&mut loc);
+                player.pos.dir = facing;
+                match blocked {
+                    "cooldown" => player.action_cd = 2,
+                    "dead" => player.hp = 0,
+                    _ => {
+                        player.stats.melee_str_req = 100;
+                        player.sp = 0;
+                    }
+                }
+                let before = player.pos;
+                let target = before.coord + Coordinate::from(facing + angle);
+                loc.map[target].type_ = tile::Thicket;
+                loc.act(0, Action::Move(angle));
+                assert_eq!(loc.player().pos, before);
+                assert_eq!(loc.map[target].type_, tile::Thicket, "{blocked}");
+                assert!(loc.sound_events.is_empty());
+                if blocked != "dead" {
+                    fixtures::occupancy(&loc);
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn forward_bumps_still_attack_for_players_and_creatures_in_every_facing() {
+    for &facing in Direction::all() {
+        for race in [Race::Human, Race::Rat, Race::Wolf, Race::CaveBeetle] {
+            let mut loc = fixtures::room();
+            let id = if race == Race::Human {
+                loc.actors_byid.get_mut(&0).unwrap().pos.dir = facing;
+                0
+            } else {
+                loc.spawn(Actor::new(
+                    race,
+                    Position::new(Coordinate::new(2, -1), facing),
+                ))
+            };
+            let before = loc.actors_byid[&id].pos;
+            let target = loc.actors_byid[&id].head();
+            loc.spawn(Actor::new(Race::Troll, Position::new(target, facing)));
+            loc.act(id, Action::Move(Angle::Forward));
+            assert_eq!(loc.actors_byid[&id].pos, before);
+            assert_eq!(loc.actors_byid[&id].did_attack.len(), 1);
+            fixtures::occupancy(&loc);
         }
     }
 }

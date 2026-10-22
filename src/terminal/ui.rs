@@ -1464,7 +1464,8 @@ impl Ui {
         ));
         window.write("Turn left/right: h/l or Left/Right arrows\n");
         window.write("Move forward/back: k/j or Up/Down arrows\n");
-        window.write("Strafe/attack front-left/right: Shift + h/l (keep facing)\n");
+        window.write("Strafe front-left/right: Shift + h/l\n");
+        window.write("  Keep facing; no attacks. Doors/thickets still work.\n");
         if self.in_vi_input_mode() {
             window.write("Automove: shift + k\n");
         }

@@ -63,6 +63,34 @@ fn creatures_strafe_toward_forward_diagonal_cues_without_turning() {
 }
 
 #[test]
+fn creatures_turn_then_attack_forward_diagonal_occupants() {
+    for &facing in hex2d::Direction::all() {
+        for angle in [Left, Right] {
+            for race in [actor::Race::Rat, actor::Race::Wolf, actor::Race::CaveBeetle] {
+                let mut loc = fixtures::room();
+                let origin = loc.player().coord() - Coordinate::from(facing + angle);
+                let id = loc.spawn(Actor::new(race, Position::new(origin, facing)));
+                let target = loc.player().coord();
+                let creature = loc.actors_byid.get_mut(&id).unwrap();
+                creature.visible.clear();
+                creature.visible.insert(target);
+                creature.heard.clear();
+                let mut rng = SmallRng::seed_from_u64(0);
+                let action = Simple.action(id, &loc, &mut rng);
+                assert_eq!(action, Action::Turn(angle));
+                loc.act(id, action);
+                assert_eq!(loc.actors_byid[&id].coord(), origin);
+                let action = Simple.action(id, &loc, &mut rng);
+                assert_eq!(action, Action::Move(Forward));
+                loc.act(id, action);
+                assert_eq!(loc.actors_byid[&id].did_attack.len(), 1);
+                fixtures::occupancy(&loc);
+            }
+        }
+    }
+}
+
+#[test]
 fn visible_player_precedes_items_and_heard_targets() {
     let mut loc = fixtures::room();
     let coord = Coordinate::new(-1, 1);

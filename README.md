@@ -29,7 +29,9 @@ or a separate `tput` program. Run from a writable directory: the game writes
 Press any key at the introduction, then choose a race (`a` for human).
 In either input mode, use `h`/`l` or the Left/Right arrows to turn left/right.
 Use `k`/`j` or the Up/Down arrows to move forward/backward, and Shift-H/Shift-L
-to strafe front-left/front-right without changing your facing.
+to strafe front-left/front-right without changing your facing. You never attack
+creatures while strafing. You can open doors and clear thickets while strafing
+if your character has those capabilities.
 Creatures use the same `Move` actions to approach targets.
 These replace the old `a`/`s`/`d`/`w`/`q`/`e` movement bindings.
 You can no longer use Shift-W for automatic walking or `u`/`i` to spin.

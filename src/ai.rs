@@ -129,8 +129,8 @@ fn go_to(
             return game::Action::Move(Forward);
         } else {
             let rdir = ndir - astate.pos.dir;
-            // Forward diagonals share the player's facing-preserving movement.
-            if matches!(rdir, Left | Right) {
+            // Strafe into free cells, but face occupants before attacking.
+            if matches!(rdir, Left | Right) && !gstate.at(n_pos.coord).is_occupied() {
                 return game::Action::Move(rdir);
             }
             let rdir = match rdir {

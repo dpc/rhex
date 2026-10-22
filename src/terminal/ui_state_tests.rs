@@ -938,7 +938,8 @@ fn help_lists_only_supported_movement_keys_in_both_modes() {
         let text: String = buffer.content.iter().map(|cell| cell.symbol()).collect();
         assert!(text.contains("Turn left/right: h/l or Left/Right arrows"));
         assert!(text.contains("Move forward/back: k/j or Up/Down arrows"));
-        assert!(text.contains("Strafe/attack front-left/right: Shift + h/l"));
+        assert!(text.contains("Strafe front-left/right: Shift + h/l"));
+        assert!(text.contains("Keep facing; no attacks. Doors/thickets still work."));
         assert_eq!(
             text.contains("Automove: shift + k"),
             input_mode == InputMode::Vi
