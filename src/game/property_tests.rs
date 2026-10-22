@@ -18,8 +18,6 @@ fn actions() -> impl Strategy<Value = Vec<Action>> {
             Action::Turn(Angle::Left),
             Action::Turn(Angle::Right),
             Action::Charge,
-            Action::Spin(Angle::Left),
-            Action::Spin(Angle::Right),
             Action::Pick,
             Action::Equip('a'),
             Action::Equip('b'),

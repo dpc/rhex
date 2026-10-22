@@ -624,21 +624,18 @@ impl Ui {
 
     fn key_to_action_normal(input_mode: InputMode, key: i32) -> Option<Action> {
         let action = match (key, input_mode == InputMode::Vi) {
-            (KEY_LOWH, _) | (KEY_LOWA, false) | (input::LEFT, _) => Game(Turn(Left)),
-            (KEY_LOWL, _) | (KEY_LOWD, false) | (input::RIGHT, _) => Game(Turn(Right)),
-            (KEY_LOWK, _) | (KEY_LOWW, false) | (input::UP, _) => Game(Move(Forward)),
+            (KEY_LOWH, _) | (input::LEFT, _) => Game(Turn(Left)),
+            (KEY_LOWL, _) | (input::RIGHT, _) => Game(Turn(Right)),
+            (KEY_LOWK, _) | (input::UP, _) => Game(Move(Forward)),
             (KEY_LOWC, _) => Game(Charge),
-            (KEY_LOWU, true) => Game(Spin(Left)),
-            (KEY_LOWI, true) => Game(Spin(Right)),
-            (KEY_CAPH, _) | (KEY_LOWQ, false) => Game(Move(Left)),
-            (KEY_CAPL, _) | (KEY_LOWE, false) => Game(Move(Right)),
-            (KEY_LOWJ, _) | (KEY_LOWS, false) | (input::DOWN, _) => Game(Move(Back)),
+            (KEY_CAPH, _) => Game(Move(Left)),
+            (KEY_CAPL, _) => Game(Move(Right)),
+            (KEY_LOWJ, _) | (input::DOWN, _) => Game(Move(Back)),
             (KEY_DOT, _) => Game(Wait),
             (KEY_COMMA, _) => Game(Interact),
             (KEY_DESCEND | KEY_RETURN, _) => Game(Descend),
             (KEY_LOWO, _) => AutoMove(AutoMoveType::Explore),
             (KEY_CAPK, true) => AutoMove(AutoMoveType::Walk),
-            (KEY_CAPW, false) => AutoMove(AutoMoveType::Walk),
             (KEY_LOWQ, true) | (KEY_ESC, _) => ModeSwitch(Mode::FullScreen(FSMode::Quit)),
             (KEY_CAPI, _) => ModeSwitch(Mode::Inventory(InvMode::View)),
             (KEY_CAPE, _) => ModeSwitch(Mode::Inventory(InvMode::Equip)),
@@ -807,19 +804,19 @@ impl Ui {
                         self.target_pos = None;
                         self.mode_switch_to(Mode::Normal);
                     }
-                    KEY_LOWH | KEY_LOWA => {
+                    KEY_LOWH => {
                         self.target_pos = Some(util::circular_move(center, pos, Angle::Left));
                         self.redraw();
                     }
-                    KEY_LOWL | KEY_LOWD => {
+                    KEY_LOWL => {
                         self.target_pos = Some(util::circular_move(center, pos, Angle::Right));
                         self.redraw();
                     }
-                    KEY_LOWJ | KEY_LOWS => {
+                    KEY_LOWJ => {
                         self.target_pos = Some(util::circular_move(center, pos, Angle::Back));
                         self.redraw();
                     }
-                    KEY_LOWK | KEY_LOWW => {
+                    KEY_LOWK => {
                         self.target_pos = Some(util::circular_move(center, pos, Angle::Forward));
                         self.redraw();
                     }
@@ -1416,11 +1413,7 @@ impl Ui {
         window.write("Move forward/back: k/j or Up/Down arrows\n");
         window.write("Strafe/attack front-left/right: Shift + h/l (keep facing)\n");
         if self.in_vi_input_mode() {
-            window.write("Move/attack: hjklui\n");
             window.write("Automove: shift + k\n");
-        } else {
-            window.write("Move/attack: awsdqe\n");
-            window.write("Automove: shift + w\n");
         }
         window.write("Charge: c\n");
         window.write("Wait: .\n");
@@ -1433,7 +1426,11 @@ impl Ui {
         window.write("Equip/Use: E\n");
         window.write("Drop: D\n");
         window.write("Ranged/Throw: f (not fully working)\n");
-        window.write("Quit: ESC/q\n");
+        if self.in_vi_input_mode() {
+            window.write("Quit: ESC/q\n");
+        } else {
+            window.write("Quit: ESC\n");
+        }
     }
 
     fn draw_quit(&mut self) {

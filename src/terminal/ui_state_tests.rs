@@ -834,6 +834,85 @@ fn automove_stairs_occupancy_and_perception_interruptions() {
 }
 
 #[test]
+fn help_lists_only_supported_movement_keys_in_both_modes() {
+    for input_mode in [InputMode::Normal, InputMode::Vi] {
+        let now = Instant::now();
+        let mut ui = fixture(now);
+        ui.input_mode = input_mode;
+        chars(&mut ui, "?", now);
+        let buffer = frame(&mut ui, 120, 36);
+        let text: String = buffer.content.iter().map(|cell| cell.symbol()).collect();
+        assert!(text.contains("Turn left/right: h/l or Left/Right arrows"));
+        assert!(text.contains("Move forward/back: k/j or Up/Down arrows"));
+        assert!(text.contains("Strafe/attack front-left/right: Shift + h/l"));
+        assert_eq!(
+            text.contains("Automove: shift + k"),
+            input_mode == InputMode::Vi
+        );
+        for retired in ["awsdqe", "hjklui", "shift + w"] {
+            assert!(!text.contains(retired));
+        }
+    }
+}
+
+#[test]
+fn retired_movement_keys_do_not_act_or_move_target_cursors() {
+    for input_mode in [InputMode::Normal, InputMode::Vi] {
+        for mode in [
+            Mode::Normal,
+            Mode::Examine,
+            Mode::Target(TargetMode::Ranged),
+        ] {
+            let now = Instant::now();
+            let mut ui = fixture(now);
+            ui.input_mode = input_mode;
+            ui.advance((24, 60), now);
+            ui.mode_switch_to(mode);
+            ui.target_pos = Some(ui.player().pos);
+            let target = ui.target_pos;
+            let before = game::fixtures::outcome(ui.current_location());
+            let turn = ui.engine.turn();
+            // q remains a non-movement quit/cancel command in Vi and cursor modes.
+            let keys = if mode == Mode::Normal && input_mode == InputMode::Normal {
+                "asdwqeuiW"
+            } else {
+                "asdweuiW"
+            };
+            for ch in keys.chars() {
+                key(&mut ui, KeyCode::Char(ch), now);
+                ui.advance((24, 60), now);
+                assert_eq!(ui.mode, mode, "{input_mode:?} {mode:?} {ch}");
+                assert_eq!(ui.target_pos, target);
+                assert!(ui.game_action_queue.is_empty());
+                assert!(!ui.is_automoving());
+                assert_eq!(ui.engine.turn(), turn);
+                assert_eq!(game::fixtures::outcome(ui.current_location()), before);
+            }
+        }
+    }
+}
+
+#[test]
+fn retired_movement_letters_still_select_inventory_items() {
+    for input_mode in [InputMode::Normal, InputMode::Vi] {
+        for letter in "asdwqeuiW".chars() {
+            let now = Instant::now();
+            let mut ui = fixture(now);
+            ui.input_mode = input_mode;
+            player_mut(&mut ui)
+                .items_backpack
+                .insert(letter, Box::new(Item::new(Type::Knife, vec![])));
+            ui.advance((24, 60), now);
+            let turn = ui.engine.turn();
+            chars(&mut ui, &format!("I{letter}"), now);
+            assert_eq!(ui.mode, Mode::Inventory(InvMode::Actions(letter)));
+            assert!(ui.game_action_queue.is_empty());
+            assert_eq!(ui.engine.turn(), turn);
+        }
+    }
+}
+
+#[test]
 fn unsupported_events_cannot_act_select_or_cancel() {
     let now = Instant::now();
     let mut ui = fixture(now);
@@ -1138,7 +1217,8 @@ fn intro_race_selection_and_quit_dispatch_without_terminal() {
 fn automove_cancel_consumes_key_and_goto_selects_exits() {
     let now = Instant::now();
     let mut ui = fixture(now);
-    chars(&mut ui, "W", now);
+    key(&mut ui, KeyCode::F(2), now);
+    chars(&mut ui, "K", now);
     assert!(ui.is_automoving());
     chars(&mut ui, "h", now);
     assert!(!ui.is_automoving());

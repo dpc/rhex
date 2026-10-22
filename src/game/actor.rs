@@ -332,16 +332,6 @@ impl Actor {
                     vec![pos + Coordinate::from(pos.dir)]
                 }
             }
-            Action::Spin(a) => {
-                vec![
-                    pos + Coordinate::from(pos.dir + a)
-                        + match a {
-                            Angle::Right => Angle::Left,
-                            Angle::Left => Angle::Right,
-                            _ => return vec![pos],
-                        },
-                ]
-            }
         }
     }
 

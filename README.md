@@ -27,18 +27,17 @@ or a separate `tput` program. Run from a writable directory: the game writes
 `debug.log` there. The game has no save/load support.
 
 Press any key at the introduction, then choose a race (`a` for human).
-In either input mode, use `h`/`l` or the Left/Right arrows to turn left/right, and
-`k`/`j` or the Up/Down arrows to move forward/backward.
-In either input mode, press Shift-H/Shift-L to strafe front-left/front-right
-without changing your facing. Creatures use the same `Move` actions to approach
-targets.
-In normal input mode, you can also use `w`/`s` to move forward/backward, `a`/`d`
-to turn, and `q`/`e` to sidestep. Press `.` to wait, `,` to interact in front,
-`I` to open inventory, and `?` for help.
-Press F2 to toggle additional Vi-style controls (`u`/`i` spin,
-`K` walks automatically, and `q` quits instead of sidestepping).
-Use these movement aliases during gameplay; in menus and inventory, use letters
-to select entries.
+In either input mode, use `h`/`l` or the Left/Right arrows to turn left/right.
+Use `k`/`j` or the Up/Down arrows to move forward/backward, and Shift-H/Shift-L
+to strafe front-left/front-right without changing your facing.
+Creatures use the same `Move` actions to approach targets.
+These replace the old `a`/`s`/`d`/`w`/`q`/`e` movement bindings.
+You can no longer use Shift-W for automatic walking or `u`/`i` to spin.
+Press `.` to wait, `,` to interact in front, `I` to open inventory, and `?` for help.
+Press F2 to toggle Vi input mode. Only in Vi mode, use `K` for automatic walking
+and `q` to quit.
+Press `Esc` to quit in either mode. In menus and inventory, letters still select
+entries and actions.
 
 Press comma to interact with the tile in front of you without moving or turning.
 You pick up an item first; if there is no item, you open or close a door. This

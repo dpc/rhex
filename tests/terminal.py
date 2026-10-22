@@ -243,7 +243,7 @@ def exercise(binary, race, terminal="xterm-256color"):
             game.until(lambda: "Inventory:" not in game.screen.text(), "inventory close")
             game.expect("Level")
             assert game.screen.turn() == before, (before, game.screen.turn())
-        game.action(b"d")
+        game.action(b"l")
         game.action(b".")
         # These aliases must work from fresh startup, without an F2 toggle.
         for key in (b"h", b"l", b"k", b"j"):
@@ -257,10 +257,10 @@ def exercise(binary, race, terminal="xterm-256color"):
         # Random-world Turn can advance independently (combat/cooldown/death);
         # exact no-action/world guarantees live in ui_state_tests.rs fixtures.
         game.send(b"?")
-        game.expect("Quit: ESC/q")
+        game.expect("Quit: ESC")
         game.send(b"\x04\x1bd\x1b[1;5D\x1b[1;2C" + "šŁ".encode())
         game.drain(0.3)
-        game.expect("Quit: ESC/q")
+        game.expect("Quit: ESC")
         game.expect("Turn left/right: h/l or Left/Right arrows")
         game.expect("Move forward/back: k/j or Up/Down arrows")
         game.expect("Current input mode: Normal")
@@ -318,8 +318,8 @@ def small_start(binary):
         # Build a pending action queue before pausing, rather than testing only
         # an idle game. A paused queue must not turn the event loop into a spin.
         # A final Help command must eventually be observed, not merely some turn.
-        game.send(b"d" * 2048 + b"?")
-        game.expect("Quit: ESC/q")
+        game.send(b"l" * 2048 + b"?")
+        game.expect("Quit: ESC")
         game.drain(0.05)
         game.resize(8, 24)
         game.expect("Terminal too small.")
@@ -365,7 +365,7 @@ def runner_probe(test_binary):
                  "--nocapture", "--test-threads=1"])
     try:
         game.expect("Session ready")
-        game.send(b"d")
+        game.send(b"l")
         game.finished(0)
         diagnostic = b"injected UI draw error"
         assert diagnostic in game.transcript

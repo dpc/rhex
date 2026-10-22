@@ -81,7 +81,7 @@ fn left_and_right_keys_rotate_actor_in_opposite_directions() {
 #[test]
 fn movement_and_commands_in_both_input_modes() {
     for mode in [InputMode::Normal, InputMode::Vi] {
-        let mut bindings = vec![
+        let bindings = [
             (KeyCode::Left, Turn(Left)),
             (KeyCode::Right, Turn(Right)),
             (KeyCode::Up, Move(Forward)),
@@ -90,28 +90,14 @@ fn movement_and_commands_in_both_input_modes() {
             (KeyCode::Char('l'), Turn(Right)),
             (KeyCode::Char('k'), Move(Forward)),
             (KeyCode::Char('j'), Move(Back)),
+            (KeyCode::Char('H'), Move(Left)),
+            (KeyCode::Char('L'), Move(Right)),
             (KeyCode::Char('c'), Charge),
             (KeyCode::Char('.'), Wait),
             (KeyCode::Char(','), Interact),
             (KeyCode::Char('>'), Descend),
             (KeyCode::Char('<'), Descend),
         ];
-        bindings.extend(match mode {
-            InputMode::Normal => vec![
-                (KeyCode::Char('a'), Turn(Left)),
-                (KeyCode::Char('d'), Turn(Right)),
-                (KeyCode::Char('w'), Move(Forward)),
-                (KeyCode::Char('s'), Move(Back)),
-                (KeyCode::Char('q'), Move(Left)),
-                (KeyCode::Char('e'), Move(Right)),
-            ],
-            InputMode::Vi => vec![
-                (KeyCode::Char('u'), Spin(Left)),
-                (KeyCode::Char('i'), Spin(Right)),
-                (KeyCode::Char('H'), Move(Left)),
-                (KeyCode::Char('L'), Move(Right)),
-            ],
-        });
         for (code, expected) in bindings {
             let key = input::game_key(KeyEvent::new(code, KeyModifiers::NONE)).unwrap();
             let Some(Game(actual)) = Ui::key_to_action_normal(mode, key) else {
@@ -140,20 +126,16 @@ fn ui_commands_are_not_game_actions() {
             };
             assert_eq!(actual, expected);
         }
-        for (key, expected) in [
-            ('o', AutoMoveType::Explore),
-            (
-                if mode == InputMode::Vi { 'K' } else { 'W' },
-                AutoMoveType::Walk,
-            ),
-        ] {
-            assert!(matches!(
-                Ui::key_to_action_normal(mode, key as i32),
-                Some(AutoMove(actual)) if actual == expected
-            ));
-        }
+        assert!(matches!(
+            Ui::key_to_action_normal(mode, 'o' as i32),
+            Some(AutoMove(AutoMoveType::Explore))
+        ));
         assert!(Ui::key_to_action_normal(mode, input::F2).is_none());
     }
+    assert!(matches!(
+        Ui::key_to_action_normal(InputMode::Vi, 'K' as i32),
+        Some(AutoMove(AutoMoveType::Walk))
+    ));
     assert!(matches!(
         Ui::key_to_action_normal(InputMode::Vi, 'q' as i32),
         Some(ModeSwitch(Mode::FullScreen(FSMode::Quit)))
@@ -171,7 +153,10 @@ fn ui_commands_are_not_game_actions() {
 
 #[test]
 fn unmapped_keys_do_not_gain_vi_or_global_commands() {
-    for (mode, keys) in [(InputMode::Normal, "uiK"), (InputMode::Vi, "adwseW")] {
+    for (mode, keys) in [
+        (InputMode::Normal, "asdwqeuiWK"),
+        (InputMode::Vi, "asdweuiW"),
+    ] {
         for key in keys.chars().chain(['z', ' ', '\n']) {
             assert!(
                 Ui::key_to_action_normal(mode, key as i32).is_none(),

@@ -7,7 +7,6 @@ pub enum Action {
     /// Step relative to facing without turning; Left/Right strafe front-left/right.
     Move(Angle),
     Charge,
-    Spin(Angle),
     Equip(char),
     Drop_(char),
     Ranged(Coordinate),
