@@ -65,6 +65,12 @@ game rules and costs as `E` (equip/use or unequip) and `D` (drop). You can still
 press either shortcut followed by an item letter.
 Use inventory letters in either movement input mode.
 
+Choosing an inventory action, including through `E` or `D`, returns you to the
+map for about 200 ms before the action takes effect. The simulation stays frozen
+during this pause. Movement, turning and automatic movement have no added delay.
+If you reopen a menu, the pending action waits until you return to the map, then
+waits another roughly 200 ms before taking effect.
+
 ### Exploration finds
 
 Face a closed chest (`%`) and press comma to open it. Opening takes extra time
@@ -83,6 +89,8 @@ space. The lantern stays shuttered in a backpack or on the ground
 and needs no fuel. Light helps you scout but can expose you to other creatures.
 
 Select Use on a reusable whistle to make a loud sound at your current position.
+You see visible map cells turn bold for a moment as the sound wave spreads outward.
+Your own sound source does not blink or show a red marker.
 Nearby creatures may investigate, but the whistle cannot act as a remote decoy
 or guarantee a distraction. Drink a stamina potion to consume it and restore
 up to five SP.

@@ -98,8 +98,8 @@ fn check(events: &[Event]) {
                 } else {
                     match screen {
                         Screen::Normal => match event {
-                            Event::Forward => queue.push_back(Move(Forward)),
-                            Event::Wait => queue.push_back(Wait),
+                            Event::Forward => queue.push_back((Move(Forward), None)),
+                            Event::Wait => queue.push_back((Wait, None)),
                             Event::Fire => {
                                 screen = Screen::Target;
                                 radius = None;
@@ -119,7 +119,7 @@ fn check(events: &[Event]) {
                             Event::Forward => radius = Some(radius.unwrap_or(0) + 1),
                             Event::Fire | Event::Confirm => {
                                 if let Some(r) = radius {
-                                    queue.push_back(Ranged(Coordinate::new(r, -r)));
+                                    queue.push_back((Ranged(Coordinate::new(r, -r)), None));
                                 }
                                 radius = None;
                                 screen = Screen::Normal;

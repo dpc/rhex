@@ -24,6 +24,13 @@ fn chars(ui: &mut Ui, keys: &str, now: Instant) {
     }
 }
 
+fn queued_actions(ui: &Ui) -> Vec<game::Action> {
+    ui.game_action_queue
+        .iter()
+        .map(|(action, _)| *action)
+        .collect()
+}
+
 fn player_mut(ui: &mut Ui) -> &mut Actor {
     let loc = ui.engine.current_location_mut();
     loc.actors_byid.get_mut(&loc.player_id()).unwrap()
@@ -62,7 +69,7 @@ fn comma_production_dispatch_picks_then_toggles_without_moving() {
             let time = now + Duration::from_secs(turn);
             chars(&mut ui, ",", time);
             assert_eq!(ui.game_action_queue.len(), 1);
-            assert_eq!(ui.game_action_queue[0], game::Action::Interact);
+            assert_eq!(ui.game_action_queue[0].0, game::Action::Interact);
             ui.advance((24, 60), time);
             assert!(ui.game_action_queue.is_empty());
             assert_eq!(ui.engine.turn(), turn);
@@ -1061,12 +1068,12 @@ fn burst_keeps_exact_queue_and_modal_screens_do_not_pause_queued_actions() {
     key(&mut ui, KeyCode::F(2), now);
     assert_eq!(ui.mode, Mode::FullScreen(FSMode::Help));
     assert_eq!(ui.input_mode, InputMode::Vi);
-    assert_eq!(ui.game_action_queue, [Turn(Left), Turn(Right)]);
+    assert_eq!(queued_actions(&ui), [Turn(Left), Turn(Right)]);
     let original = ui.player().pos;
     ui.advance((24, 60), now);
     assert_eq!(ui.mode, Mode::FullScreen(FSMode::Help));
     assert_eq!(ui.player().pos.dir, hex2d::XZ);
-    assert_eq!(ui.game_action_queue, [Turn(Right)]);
+    assert_eq!(queued_actions(&ui), [Turn(Right)]);
     ui.advance((24, 60), now);
     assert_eq!(ui.player().pos, original);
     assert!(ui.game_action_queue.is_empty());
@@ -1100,10 +1107,11 @@ fn inventory_only_queues_owned_letters_and_clears_removed_rows() {
         .insert('a', Box::new(Item::new(Type::Knife, vec![])));
     key(&mut ui, KeyCode::Esc, now);
     chars(&mut ui, "Eza", now);
-    assert_eq!(ui.game_action_queue, [Equip('a')]);
-    key(&mut ui, KeyCode::Esc, now);
+    assert_eq!(queued_actions(&ui), [Equip('a')]);
+    assert_eq!(ui.mode, Mode::Normal);
     chars(&mut ui, "Dza", now);
-    assert_eq!(ui.game_action_queue, [Equip('a'), Drop_('a')]);
+    assert_eq!(queued_actions(&ui), [Equip('a'), Drop_('a')]);
+    assert_eq!(ui.mode, Mode::Normal);
 }
 
 #[test]
@@ -1163,9 +1171,17 @@ fn inventory_letters_offer_only_valid_actions_without_spending_turns() {
             } else {
                 Equip(letter)
             };
-            assert_eq!(ui.game_action_queue, [action]);
+            assert_eq!(queued_actions(&ui), [action]);
             assert_eq!(ui.mode, Mode::Normal);
-            ui.advance((24, 60), now + Duration::from_secs(1));
+            for ms in [0, 100, 199] {
+                ui.advance((24, 60), now + Duration::from_millis(ms));
+                assert_eq!(ui.engine.turn(), turn);
+                assert_eq!(before, game::fixtures::outcome(ui.current_location()));
+                assert_eq!(queued_actions(&ui), [action]);
+                assert!(ui.should_idle());
+                frame(&mut ui, 60, 24);
+            }
+            ui.advance((24, 60), now + Duration::from_millis(200));
             assert_eq!(ui.engine.turn(), 1);
             if equipped {
                 assert!(ui.player().items_backpack.contains_key(&letter));
@@ -1185,6 +1201,191 @@ fn inventory_letters_offer_only_valid_actions_without_spending_turns() {
                 );
             }
         }
+    }
+}
+
+#[test]
+fn inventory_whistle_renders_a_propagating_wave_after_the_lead_in() {
+    use ratatui::style::Modifier;
+
+    for keys in ["Iwu", "Ew"] {
+        let now = Instant::now();
+        let mut ui = fixture(now);
+        player_mut(&mut ui)
+            .items_backpack
+            .insert('w', Box::new(Item::new(Type::Whistle, vec![])));
+        let near = Coordinate::new(1, 0);
+        let far = Coordinate::new(4, 0);
+        let baseline = frame(&mut ui, 60, 24);
+        let sample = |buffer: &Buffer, coord: Coordinate| {
+            // The 30x24 map is centered on the fixture's stationary origin.
+            let (x, y) = coord.to_pixel_integer(SPACING);
+            buffer[((15 + x) as u16, (12 + y) as u16)].clone()
+        };
+        let near_before = sample(&baseline, near);
+        let far_before = sample(&baseline, far);
+        assert!(!near_before.modifier.contains(Modifier::BOLD));
+        assert!(!far_before.modifier.contains(Modifier::BOLD));
+
+        chars(&mut ui, keys, now);
+        assert_eq!(ui.mode, Mode::Normal);
+        for ms in [0, 100, 199] {
+            ui.advance((24, 60), now + Duration::from_millis(ms));
+            let buffer = frame(&mut ui, 60, 24);
+            assert_eq!(sample(&buffer, near), near_before);
+            assert_eq!(sample(&buffer, far), far_before);
+            assert_eq!(ui.engine.turn(), 0);
+            assert!(ui.pending_sounds.is_empty());
+        }
+        ui.advance((24, 60), now + Duration::from_millis(200));
+        assert_eq!(ui.engine.turn(), 1);
+        assert_eq!(ui.player().action_cd, 2);
+        assert!(ui.player().items_backpack.contains_key(&'w'));
+        assert!(ui.game_action_queue.is_empty());
+        let state = game::fixtures::outcome(ui.current_location());
+        for (ms, near_bold, far_bold) in [
+            (200, true, false),
+            (500, true, true),
+            (799, true, true),
+            (1100, false, false),
+        ] {
+            // Follow the production frame clock without submitting another action.
+            ui.frame_due(now + Duration::from_millis(ms));
+            let buffer = frame(&mut ui, 60, 24);
+            for (coord, before, bold) in [
+                (near, &near_before, near_bold),
+                (far, &far_before, far_bold),
+            ] {
+                let cell = sample(&buffer, coord);
+                assert_eq!(cell.symbol(), before.symbol());
+                assert_eq!(cell.fg, before.fg);
+                assert_eq!(cell.bg, before.bg);
+                assert_eq!(
+                    cell.modifier.contains(Modifier::BOLD),
+                    bold,
+                    "{ms} {coord:?}"
+                );
+            }
+            assert_eq!(state, game::fixtures::outcome(ui.current_location()));
+        }
+    }
+}
+
+#[test]
+fn inventory_lead_in_preserves_fifo_and_does_not_delay_direct_controls() {
+    let now = Instant::now();
+    for keys in ["Ea", "Da"] {
+        let mut ui = fixture(now);
+        player_mut(&mut ui)
+            .items_backpack
+            .insert('a', Box::new(Item::new(Type::Knife, vec![])));
+        chars(&mut ui, keys, now);
+        let state = game::fixtures::outcome(ui.current_location());
+        ui.advance((24, 60), now + Duration::from_millis(199));
+        assert_eq!(state, game::fixtures::outcome(ui.current_location()));
+        assert_eq!(ui.engine.turn(), 0);
+        ui.advance((24, 60), now + Duration::from_millis(200));
+        assert_eq!(ui.engine.turn(), 1);
+        assert!(!ui.player().items_backpack.contains_key(&'a'));
+    }
+
+    let mut ui = fixture(now);
+    player_mut(&mut ui)
+        .items_backpack
+        .insert('w', Box::new(Item::new(Type::Whistle, vec![])));
+    let pose = ui.player().pos;
+    chars(&mut ui, "hIwul", now);
+    assert_eq!(queued_actions(&ui), [Turn(Left), Equip('w'), Turn(Right)]);
+    ui.advance((24, 60), now);
+    assert_eq!(ui.player().pos.dir, pose.dir + Left);
+    let state = game::fixtures::outcome(ui.current_location());
+    // The pending item action freezes cooldown and enemy ticks too.
+    for ms in [0, 100, 199] {
+        ui.advance((24, 60), now + Duration::from_millis(ms));
+        assert_eq!(state, game::fixtures::outcome(ui.current_location()));
+        assert_eq!(ui.engine.turn(), 1);
+    }
+    // Once due, normal cooldown ticks incur no additional presentation delay.
+    for _ in 0..3 {
+        ui.advance((24, 60), now + Duration::from_millis(200));
+    }
+    assert_eq!(queued_actions(&ui), [Turn(Right)]);
+    assert_eq!(ui.player().action_cd, 0);
+    ui.advance((24, 60), now + Duration::from_millis(200));
+    assert_eq!(ui.player().pos, pose);
+    assert!(ui.game_action_queue.is_empty());
+
+    // A standalone move still executes at its input timestamp.
+    let mut ui = fixture(now);
+    chars(&mut ui, "k", now);
+    ui.advance((24, 60), now);
+    assert_eq!(ui.player().coord(), Coordinate::new(1, -1));
+}
+
+#[test]
+fn pending_inventory_action_survives_resize_and_modals_but_never_runs_after_quit() {
+    let now = Instant::now();
+    for quit in [false, true] {
+        let mut ui = fixture(now);
+        player_mut(&mut ui)
+            .items_backpack
+            .insert('w', Box::new(Item::new(Type::Whistle, vec![])));
+        chars(&mut ui, "Iwu", now);
+        let state = game::fixtures::outcome(ui.current_location());
+        ui.handle_event(TerminalEvent::Resize(59, 24), now);
+        ui.advance((24, 59), now + Duration::from_secs(1));
+        assert_eq!(state, game::fixtures::outcome(ui.current_location()));
+        assert_eq!(ui.engine.turn(), 0);
+        ui.handle_event(TerminalEvent::Resize(60, 24), now + Duration::from_secs(1));
+        key(&mut ui, KeyCode::Esc, now + Duration::from_secs(1));
+        ui.advance((24, 60), now + Duration::from_secs(2));
+        assert_eq!(state, game::fixtures::outcome(ui.current_location()));
+        chars(
+            &mut ui,
+            if quit { "y" } else { "n" },
+            now + Duration::from_secs(2),
+        );
+        ui.advance((24, 60), now + Duration::from_millis(2199));
+        assert_eq!(state, game::fixtures::outcome(ui.current_location()));
+        ui.advance((24, 60), now + Duration::from_millis(2200));
+        assert_eq!(ui.engine.turn(), u64::from(!quit));
+        assert_eq!(ui.exited(), quit);
+        if !quit {
+            assert!(ui.game_action_queue.is_empty());
+            assert_eq!(ui.player().action_cd, 2);
+        }
+    }
+}
+
+#[test]
+fn auto_movement_cannot_overtake_a_pending_inventory_action() {
+    for prefix in ["", "h"] {
+        let now = Instant::now();
+        let mut ui = fixture(now);
+        ui.input_mode = InputMode::Vi;
+        player_mut(&mut ui)
+            .items_backpack
+            .insert('w', Box::new(Item::new(Type::Whistle, vec![])));
+        let mut pose = ui.player().pos;
+        chars(&mut ui, &format!("{prefix}IwuK"), now);
+        ui.advance((24, 60), now);
+        let preceding_turns = u64::from(!prefix.is_empty());
+        if !prefix.is_empty() {
+            pose.dir = pose.dir + Left;
+        }
+        assert_eq!(ui.player().pos, pose);
+        assert_eq!(ui.engine.turn(), preceding_turns);
+        ui.advance((24, 60), now + Duration::from_millis(199));
+        assert_eq!(ui.engine.turn(), preceding_turns);
+        ui.advance((24, 60), now + Duration::from_millis(200));
+        assert_eq!(ui.engine.turn(), preceding_turns + 1);
+        assert_eq!(ui.player().pos, pose);
+        assert_eq!(ui.player().action_cd, 2);
+        assert!(ui.game_action_queue.is_empty());
+        // A key still interrupts auto movement immediately, without replaying the item.
+        chars(&mut ui, "k", now + Duration::from_millis(201));
+        assert!(!ui.is_automoving());
+        assert!(ui.game_action_queue.is_empty());
     }
 }
 
@@ -1218,7 +1419,7 @@ fn target_and_examine_change_only_selected_pose_and_queue_exact_target() {
     assert_eq!(ui.target_pos.unwrap().coord, Coordinate::new(2, -2));
     assert_eq!(ui.player().pos, pose);
     key(&mut ui, KeyCode::Enter, now);
-    assert_eq!(ui.game_action_queue, [Ranged(Coordinate::new(2, -2))]);
+    assert_eq!(queued_actions(&ui), [Ranged(Coordinate::new(2, -2))]);
     assert_eq!(ui.mode, Mode::Normal);
     assert_eq!(ui.target_pos, None);
     chars(&mut ui, "fk", now);
@@ -1319,7 +1520,7 @@ fn automove_cancel_consumes_key_and_goto_selects_exits() {
     assert!(!ui.is_automoving());
     assert!(ui.game_action_queue.is_empty());
     chars(&mut ui, "l", now);
-    assert_eq!(ui.game_action_queue, [Turn(Right)]);
+    assert_eq!(queued_actions(&ui), [Turn(Right)]);
     chars(&mut ui, "G>", now);
     assert!(matches!(
         ui.automoving,
@@ -1328,7 +1529,7 @@ fn automove_cancel_consumes_key_and_goto_selects_exits() {
     chars(&mut ui, "hGh", now);
     assert_eq!(ui.mode, Mode::Normal);
     assert!(!ui.is_automoving());
-    assert_eq!(ui.game_action_queue, [Turn(Right)]);
+    assert_eq!(queued_actions(&ui), [Turn(Right)]);
 }
 
 #[test]
@@ -1414,7 +1615,7 @@ fn below_minimum_pauses_queue_and_automove_and_recovers_each_mode() {
             );
             assert_eq!(ui.engine.turn(), 0);
             assert_eq!(ui.player().pos, pose);
-            assert_eq!(ui.game_action_queue, [Turn(Left)]);
+            assert_eq!(queued_actions(&ui), [Turn(Left)]);
             assert!(ui.is_automoving());
             assert_eq!(ui.mode, mode);
             assert_eq!(ui.target_pos, target);
@@ -1435,7 +1636,7 @@ fn below_minimum_pauses_queue_and_automove_and_recovers_each_mode() {
             }
             key(&mut ui, KeyCode::Char('l'), now + Duration::from_secs(11));
             assert!(!ui.is_automoving());
-            assert_eq!(ui.game_action_queue, [Turn(Left)]);
+            assert_eq!(queued_actions(&ui), [Turn(Left)]);
             ui.advance((24, 60), now + Duration::from_secs(11));
             assert!(ui.game_action_queue.is_empty());
             assert_eq!(ui.player().pos, Position::new(pose.coord, hex2d::XZ));
@@ -1506,7 +1707,7 @@ fn dead_player_turns_are_paced_but_live_cooldown_is_not_idle() {
         assert_eq!(ui.engine.turn(), turn);
         assert_eq!(ui.player().action_cd, cooldown);
         assert_eq!(ui.player().pos, pose);
-        assert_eq!(ui.game_action_queue, [Turn(Left)]);
+        assert_eq!(queued_actions(&ui), [Turn(Left)]);
     }
     ui.advance((24, 60), now);
     assert_eq!(ui.engine.turn(), 3);

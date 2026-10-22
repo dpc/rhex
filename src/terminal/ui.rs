@@ -136,7 +136,8 @@ pub struct Ui {
     next_turn_ts: Instant,
     next_anim_frame_ts: Instant,
 
-    game_action_queue: VecDeque<game::Action>,
+    /// Gameplay actions in input order; inventory selections have a presentation deadline.
+    game_action_queue: VecDeque<(game::Action, Option<Instant>)>,
 
     map_renderer: MapRenderer,
     /// Level owning the current effects; traversal invalidates their coordinates.
@@ -210,6 +211,7 @@ impl Ui {
     }
 
     pub fn initial_spawn(&mut self, race: actor::Race) {
+        self.game_action_queue.clear();
         self.map_renderer.animations.clear();
         self.pending_sounds.clear();
         self.engine.initial_spawn(race);
@@ -474,7 +476,17 @@ impl Ui {
     }
 
     pub fn run_engine_turn(&mut self) {
+        if self.exit {
+            return;
+        }
         if self.spawned && self.is_next_turn_time() {
+            // Inventory selections leave time to see the map before their effect.
+            // Keep this before start_turn: even the turn counter stays frozen.
+            if self.game_action_queue.front().is_some_and(|(_, ready)| {
+                ready.is_some_and(|ready| self.mode != Mode::Normal || self.now < ready)
+            }) {
+                return;
+            }
             let player_id = self.current_location().player_id();
             let mut player_acted = false;
 
@@ -483,7 +495,14 @@ impl Ui {
             }
 
             if self.engine.needs_player_input() {
-                if let Some(movetype) = self.automoving {
+                // An auto-move request during the lead-in must not strand the
+                // already accepted inventory action behind automatic steps.
+                if let Some(movetype) = self.automoving.filter(|_| {
+                    !self
+                        .game_action_queue
+                        .iter()
+                        .any(|(_, ready)| ready.is_some())
+                }) {
                     match self.automove_action(movetype) {
                         AutoMoveAction::Blocked => {
                             match movetype {
@@ -506,7 +525,7 @@ impl Ui {
                             self.automoving_stop();
                         }
                     }
-                } else if let Some(action) = self.game_action_queue.pop_front() {
+                } else if let Some((action, _)) = self.game_action_queue.pop_front() {
                     self.engine.player_act(action);
                     self.engine_change(player_id);
                     player_acted = true;
@@ -566,7 +585,11 @@ impl Ui {
 
     /// Avoid spinning while paused or waiting for player input.
     pub fn should_idle(&self) -> bool {
-        self.too_small() || self.game_action_queue.is_empty()
+        self.too_small()
+            || self.game_action_queue.front().is_some_and(|(_, ready)| {
+                ready.is_some_and(|ready| self.mode != Mode::Normal || self.now < ready)
+            })
+            || self.game_action_queue.is_empty()
     }
 
     /// Dispatch native events, including resize, pause and cancellation policy.
@@ -598,10 +621,21 @@ impl Ui {
     }
 
     pub fn action_push(&mut self, action: game::Action) {
-        self.game_action_queue.push_back(action);
+        let ready = (matches!(self.mode, Mode::Inventory(_))
+            && matches!(action, game::Action::Equip(_) | game::Action::Drop_(_)))
+        .then_some(self.now + Duration::from_millis(200));
+        self.game_action_queue.push_back((action, ready));
     }
 
     fn mode_switch_to(&mut self, mode: Mode) {
+        if self.mode != Mode::Normal && mode == Mode::Normal {
+            // Give a pending inventory effect a visible lead-in after leaving a modal.
+            for (_, ready) in &mut self.game_action_queue {
+                if ready.is_some() {
+                    *ready = Some(self.now + Duration::from_millis(200));
+                }
+            }
+        }
         self.mode = mode;
         self.redraw();
     }
@@ -711,7 +745,8 @@ impl Ui {
                     KEY_ESC => self.mode_switch_to(Mode::Normal),
                     _ => match ch {
                         'a'..='z' | 'A'..='Z' if self.player().item_letter_taken(ch) => {
-                            self.queue_equip(ch)
+                            self.queue_equip(ch);
+                            self.mode_switch_to(Mode::Normal);
                         }
                         _ => {}
                     },
@@ -747,7 +782,8 @@ impl Ui {
                     KEY_ESC => self.mode_switch_to(Mode::Normal),
                     _ => match ch {
                         'a'..='z' | 'A'..='Z' if self.player().item_letter_taken(ch) => {
-                            self.queue_drop(ch)
+                            self.queue_drop(ch);
+                            self.mode_switch_to(Mode::Normal);
                         }
                         _ => {}
                     },
