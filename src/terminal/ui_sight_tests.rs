@@ -177,7 +177,7 @@ fn pairs_prioritize_creatures_then_items_and_report_distinct_overflow() {
 }
 
 #[test]
-fn legend_symbols_share_map_lighting_glyphs_and_styles() {
+fn legend_symbols_share_fully_lit_map_styles_regardless_of_world_lighting() {
     for (terrain, feature, item, race, name) in [
         (
             tile::Empty,
@@ -204,9 +204,19 @@ fn legend_symbols_share_map_lighting_glyphs_and_styles() {
         ),
         (tile::Empty, Some(tile::Statue), None, None, "statue"),
         (tile::ShallowWater, None, Some(Type::Knife), None, "knife"),
+        (tile::Ground, None, Some(Type::Whistle), None, "whistle"),
+        (
+            tile::Ground,
+            None,
+            Some(Type::HandLantern),
+            None,
+            "hand lantern",
+        ),
         (tile::Ground, None, None, Some(Race::Rat), "rat"),
     ] {
-        for light in [0, 1, 4] {
+        let mut canonical = None;
+        let mut lit_map = None;
+        for light in [4, 2, 1, 0] {
             let c = Coordinate::new(0, 2);
             let mut loc = fixtures::room();
             loc.map[c] = tile::Tile::new(terrain);
@@ -218,13 +228,28 @@ fn legend_symbols_share_map_lighting_glyphs_and_styles() {
             if let Some(race) = race {
                 loc.spawn(Actor::new(race, Position::new(c, hex2d::XY)));
             }
-            loc.light_map[c] = light;
+            for coord in c.range_iter(1) {
+                loc.light_map[coord] = light;
+            }
             let mut ui = fixture(loc);
             let buffer = frame(&mut ui);
             let (dx, dy) = c.to_pixel_integer(SPACING);
             let map_cell = &buffer[((15 + dx) as u16, (12 + dy) as u16)];
             let legend_cell = &buffer[(30, 11)];
-            assert_eq!(legend_cell, map_cell, "{name}, light {light}");
+            assert_eq!(legend_cell.symbol(), map_cell.symbol());
+            if light == 4 {
+                assert_eq!(legend_cell, map_cell, "{name}");
+                assert_ne!(legend_cell.fg, legend_cell.bg, "{name}");
+                canonical = Some(legend_cell.clone());
+                lit_map = Some(map_cell.clone());
+            } else {
+                assert_eq!(
+                    Some(legend_cell),
+                    canonical.as_ref(),
+                    "{name}, light {light}"
+                );
+                assert_ne!(Some(map_cell), lit_map.as_ref(), "{name}, light {light}");
+            }
             assert_eq!(
                 row(&buffer, 11).trim(),
                 format!("{} - {name}", map_cell.symbol())
@@ -275,7 +300,7 @@ fn current_sight_excludes_hidden_remembered_unknown_and_dead_creatures() {
             0 => Some(loc.spawn(Actor::new(Race::Goblin, Position::new(c, hex2d::XY)))),
             1 => {
                 loc.items
-                    .insert(c, Box::new(Item::new(Type::Knife, vec![])));
+                    .insert(c, Box::new(Item::new(Type::Whistle, vec![])));
                 None
             }
             _ => {
@@ -361,7 +386,7 @@ fn nearest_duplicate_wins_and_long_names_clip_without_spilling() {
         buffer[(30, 11)].fg,
         ratatui::style::Color::Indexed(color::WALL_FG[0])
     );
-    // Hiding the nearer duplicate changes lighting, not the distinct count.
+    // A dimmer duplicate retains the same legend style and distinct count.
     ui.engine
         .current_location_mut()
         .actors_byid
@@ -372,7 +397,7 @@ fn nearest_duplicate_wins_and_long_names_clip_without_spilling() {
     let buffer = frame(&mut ui);
     assert_eq!(
         buffer[(30, 11)].fg,
-        ratatui::style::Color::Indexed(color::WALL_FG[1])
+        ratatui::style::Color::Indexed(color::WALL_FG[0])
     );
     assert!(row(&buffer, 12).trim().is_empty());
     ui.engine.current_location_mut().items.clear();

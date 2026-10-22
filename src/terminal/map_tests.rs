@@ -91,7 +91,8 @@ fn actor_bodies_inherit_terrain_background_through_facing_and_overlays() {
                 .into_iter()
                 .find(|entry| entry.name == "cave beetle")
                 .unwrap();
-            assert_eq!(entry.style.bg, Some(TerminalColor::Indexed(bg)));
+            // The legend retains the terrain category, without map shading.
+            assert_eq!(entry.style.bg, Some(TerminalColor::Indexed(palette[0])));
             let target = Some(Position::new(enemy_coord, XY));
             let buffer = render(
                 &mut renderer,

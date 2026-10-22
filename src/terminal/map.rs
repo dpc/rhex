@@ -123,7 +123,8 @@ impl MapRenderer {
     /// items, then notable features; deduplicate equal glyph/name pairs.
     /// Omit bare terrain: common surroundings should not crowd out discoveries.
     /// Sample ordinary terrain/item rendering in a one-cell scratch buffer so
-    /// lighting and glyph rules stay shared even outside the map viewport.
+    /// glyphs and color categories stay shared even outside the map viewport.
+    /// The legend uses fully lit colors, independent of world lighting.
     pub(super) fn sight_entries(&self, loc: &Location) -> Vec<SightEntry> {
         let player = loc.player();
         let mut coords: Vec<_> = player.visible.iter().copied().collect();
@@ -137,7 +138,7 @@ impl MapRenderer {
                 continue;
             }
             let at = loc.at(c);
-            scratch.draw_map_base_glyph(loc, 0, 0, c, true);
+            scratch.draw_map_base_glyph(loc, 0, 0, c, true, false);
             let base = *scratch.base.at(0, 0);
             let actor = at.actor_map_or(None, |actor| {
                 (!actor.is_dead()).then_some((actor.race, actor.is_player()))
@@ -236,7 +237,9 @@ impl MapRenderer {
         if anim_frame_count == 0 {
             self.base.reset();
             self.items.reset();
-            self.for_each_glyph(cur_loc, Self::draw_map_base_glyph);
+            self.for_each_glyph(cur_loc, |renderer, loc, vx, vy, c, proper| {
+                renderer.draw_map_base_glyph(loc, vx, vy, c, proper, true);
+            });
             self.for_each_glyph(cur_loc, Self::draw_items);
         }
         // Facing colors animate even while the simulation and terrain are idle.
@@ -315,6 +318,7 @@ impl MapRenderer {
         vy: usize,
         c: Coordinate,
         is_proper_coord: bool,
+        apply_lighting: bool,
     ) {
         let player = cur_loc.player();
 
@@ -491,6 +495,8 @@ impl MapRenderer {
             None => (color::EMPTY_FG, color::EMPTY_BG, '?'),
         };
 
+        // Legend samples retain visibility gates but not environmental shading.
+        let light = if apply_lighting { light } else { 3 };
         let fg = color_by_visibility(fg, visible, light);
         let bg = color_by_visibility(bg, visible, light);
 
