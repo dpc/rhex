@@ -350,6 +350,28 @@ fn real_same_turn_sounds_are_concurrent_and_expire_behind_menus_and_tiny_windows
             .next()
             .is_none()
     );
+    assert!(
+        ui.map_renderer
+            .animations
+            .sound_cells(Duration::from_millis(500))
+            .any(|(_, marker)| !marker)
+    );
+    assert!(
+        ui.map_renderer
+            .animations
+            .sound_cells(Duration::from_millis(500))
+            .all(|(_, marker)| !marker)
+    );
+    ui.advance((10, 20), now + Duration::from_millis(900));
+    for ms in [500, 899, 900] {
+        assert!(
+            ui.map_renderer
+                .animations
+                .sound_cells(Duration::from_millis(ms))
+                .next()
+                .is_none()
+        );
+    }
     assert_eq!(state, game::fixtures::outcome(ui.current_location()));
 }
 

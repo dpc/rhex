@@ -95,7 +95,9 @@ fn waves_start_concurrently_union_overlaps_and_expire_at_phase_boundaries() {
     let b = Coordinate::new(0, 4);
     let mut animations = Animations::default();
     animations.enqueue_sounds(vec![sound(a), sound(b), sound(a)], at(0));
-    for ms in [0, 99, 100, 199, 200, 299, 300, 399, 499, 500] {
+    for ms in [
+        0, 99, 100, 199, 200, 299, 300, 399, 499, 500, 599, 600, 699, 700, 799, 800, 899, 900,
+    ] {
         let cells: Vec<_> = animations.sound_cells(at(ms)).collect();
         for source in [a, b] {
             assert_eq!(cells.contains(&(source, true)), ms < 500);
@@ -103,14 +105,44 @@ fn waves_start_concurrently_union_overlaps_and_expire_at_phase_boundaries() {
                 let coord = source + Coordinate::new(phase, 0);
                 assert_eq!(
                     cells.contains(&(coord, false)),
-                    (phase as u64 * 100..phase as u64 * 100 + 200).contains(&ms)
+                    (phase as u64 * 100..phase as u64 * 100 + 600).contains(&ms)
                 );
             }
         }
         let unique: std::collections::HashSet<_> = cells.iter().collect();
         assert_eq!(unique.len(), cells.len());
     }
-    animations.advance(at(500));
+    animations.advance(at(900));
+    assert!(animations.sounds.is_empty());
+}
+
+#[test]
+fn staggered_waves_keep_independent_arrivals_and_trailing_highlights() {
+    let source = Coordinate::new(0, 0);
+    let mut animations = Animations::default();
+    animations.enqueue_sounds(vec![sound(source)], at(0));
+    // Preserve existing 100ms start quantization for off-boundary enqueues.
+    animations.enqueue_sounds(vec![sound(source)], at(450));
+    for ms in [
+        450, 499, 500, 599, 600, 699, 700, 899, 900, 999, 1000, 1199, 1200, 1299, 1300,
+    ] {
+        let cells: Vec<_> = animations.sound_cells(at(ms)).collect();
+        assert_eq!(cells.contains(&(source, true)), ms < 900);
+        for phase in 0..=3 {
+            let arrival = phase as u64 * 100;
+            let expected = (arrival..arrival + 600).contains(&ms)
+                || (arrival + 400..arrival + 1000).contains(&ms);
+            assert_eq!(
+                cells
+                    .iter()
+                    .filter(|&&cell| cell == (source + Coordinate::new(phase, 0), false))
+                    .count(),
+                usize::from(expected),
+                "phase {phase} at {ms}ms"
+            );
+        }
+    }
+    animations.advance(at(1300));
     assert!(animations.sounds.is_empty());
 }
 
@@ -120,7 +152,7 @@ fn rapid_batches_keep_every_source_in_bounded_time_masks_without_fifo() {
     for ms in 0..1000 {
         let source = Coordinate::new(ms as i32 % 10, 0);
         animations.enqueue_sounds(vec![sound(source)], at(ms));
-        assert!(animations.sounds.len() <= 5);
+        assert!(animations.sounds.len() <= 9);
         // Every source from the last bucket remains, including after >8 batches.
         if ms >= 10 {
             for x in 0..10 {
@@ -132,10 +164,10 @@ fn rapid_batches_keep_every_source_in_bounded_time_masks_without_fifo() {
             }
         }
     }
-    assert!(animations.sound_cells(at(1399)).next().is_some());
-    animations.advance(at(1400));
+    assert!(animations.sound_cells(at(1799)).next().is_some());
+    animations.advance(at(1800));
     assert!(animations.sounds.is_empty());
-    animations.enqueue_sounds(vec![sound(Coordinate::new(0, 0))], at(1500));
+    animations.enqueue_sounds(vec![sound(Coordinate::new(0, 0))], at(1900));
     animations.clear();
     assert!(animations.sounds.is_empty());
 }

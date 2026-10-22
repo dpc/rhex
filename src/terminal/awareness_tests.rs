@@ -50,7 +50,7 @@ fn awareness_exact_yellow_style_over_hit_sound_and_facing_restores_at_500ms() {
         }],
         Duration::ZERO,
     );
-    for ms in [0, 199, 200, 399, 400, 499, 500, 1000] {
+    for ms in [0, 199, 200, 399, 400, 499, 500, 599, 600, 1000] {
         let now = Duration::from_millis(ms);
         renderer.update(&loc, Mode::Normal, None, 0, now);
         baseline.update(&loc, Mode::Normal, None, 0, now);
@@ -60,6 +60,8 @@ fn awareness_exact_yellow_style_over_hit_sound_and_facing_restores_at_500ms() {
             expected.fg = color::YELLOW.into();
             expected.bold = true;
             assert_eq!(expected.fg, color::Color::from(226u8));
+        } else if ms < 600 {
+            expected.bold = true;
         }
         assert_eq!(composed(&renderer, coord), expected, "{ms}ms");
     }

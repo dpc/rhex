@@ -34,6 +34,8 @@ struct Hit {
 
 const STRIKE: Duration = Duration::from_millis(200);
 const TOTAL: Duration = Duration::from_millis(400);
+/// Six 100ms slices keep wave cells bold three times as long as before.
+const SOUND_BOLD_TICKS: u128 = 6;
 
 impl Animations {
     /// Start visible acquisition markers together, without adding gameplay delays.
@@ -77,7 +79,8 @@ impl Animations {
         for sound in sounds {
             for cell in sound.cells {
                 let phase = u128::from(3 * cell.hops / max_hops);
-                for tick in start + phase..start + phase + 2 {
+                // Keep arrival phases unchanged; only extend the trailing highlight.
+                for tick in start + phase..start + phase + SOUND_BOLD_TICKS {
                     self.sounds
                         .entry(tick)
                         .or_default()

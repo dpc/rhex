@@ -73,7 +73,7 @@ fn real_source_only_sound_never_blinks_but_another_wave_can_cross_its_source() {
     assert!(
         renderer
             .animations
-            .sound_cells(Duration::from_millis(500))
+            .sound_cells(Duration::from_millis(900))
             .next()
             .is_none()
     );
@@ -103,7 +103,7 @@ fn waves_add_only_bold_preserve_facing_hit_and_natural_bold_and_restore_cleanly(
         ],
         Duration::ZERO,
     );
-    for ms in [0, 100, 199, 200, 499, 500] {
+    for ms in [0, 100, 199, 200, 499, 500, 599, 600] {
         for r in [&mut baseline, &mut animated] {
             r.update(
                 &loc,
@@ -115,7 +115,7 @@ fn waves_add_only_bold_preserve_facing_hit_and_natural_bold_and_restore_cleanly(
         }
         for coord in [origin, item_coord, wall] {
             let mut expected = composed(&baseline, coord);
-            if ms < 200 {
+            if ms < 600 {
                 expected.bold = true;
             }
             assert_eq!(
