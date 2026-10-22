@@ -10,9 +10,12 @@ use std::fmt;
 pub enum Type {
     Wall,
     Empty,
-    // Terrain fixtures cover water, but the current generator only places land.
-    #[cfg_attr(not(test), expect(dead_code))]
+    /// Deep, transparent water that cannot be walked through.
     Water,
+    Ground,
+    Thicket,
+    TreeTrunk,
+    ShallowWater,
 }
 
 impl Type {
@@ -20,7 +23,11 @@ impl Type {
         match *self {
             Wall => "wall",
             Empty => "nothing",
-            Water => "water",
+            Water => "deep water",
+            Ground => "forest ground",
+            Thicket => "thicket (hit to clear)",
+            TreeTrunk => "tree trunk",
+            ShallowWater => "shallow water",
         }
     }
 }
@@ -35,6 +42,8 @@ impl fmt::Display for Type {
 pub enum Feature {
     Door(bool),
     Stairs,
+    ForestPath,
+    Entrance,
     Statue,
 }
 
@@ -44,8 +53,15 @@ impl Feature {
             Door(true) => "open door",
             Door(false) => "closed door",
             Stairs => "stairs down",
+            ForestPath => "forest path onward",
+            Entrance => "return passage",
             Statue => "statue",
         }
+    }
+
+    /// Whether the feature can connect to another retained level.
+    pub fn is_exit(self) -> bool {
+        matches!(self, Stairs | ForestPath | Entrance)
     }
 }
 
@@ -66,12 +82,16 @@ pub struct Tile {
 impl Tile {
     /// Walls block transmission; movement restrictions do not define acoustics.
     pub fn transmits_sound(&self) -> bool {
-        self.type_ != Wall
+        !matches!(self.type_, Wall | TreeTrunk)
     }
 
     /// Quarter-level absorption, also applied to the six adjacent cells.
     pub fn sound_dampening(&self) -> u16 {
-        let terrain = if self.type_ == Wall { 1 } else { 0 };
+        let terrain = match self.type_ {
+            Wall | TreeTrunk => 1,
+            Thicket => 2,
+            _ => 0,
+        };
         terrain.max(match self.feature {
             Some(Statue) => 4,
             Some(Door(false)) => 2,
@@ -146,9 +166,8 @@ impl Tile {
 impl Type {
     pub fn is_passable(&self) -> bool {
         match *self {
-            Wall => false,
-            Empty => true,
-            Water => false,
+            Wall | Water | Thicket | TreeTrunk => false,
+            Empty | Ground | ShallowWater => true,
         }
     }
 
@@ -158,16 +177,16 @@ impl Type {
 
     pub fn opaqueness(&self) -> i32 {
         match *self {
-            Wall => 1000,
-            Empty | Water => 1,
+            Wall | TreeTrunk | Thicket => 1000,
+            Empty | Water | Ground | ShallowWater => 1,
         }
     }
 
     pub fn base_ascii_expand(&self) -> i32 {
         match *self {
-            Water => 7,
-            Wall => 9,
-            Empty => 10,
+            Water | ShallowWater => 7,
+            Wall | TreeTrunk | Thicket => 9,
+            Empty | Ground => 10,
         }
     }
 }

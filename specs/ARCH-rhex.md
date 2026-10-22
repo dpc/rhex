@@ -14,8 +14,10 @@ the game, controls, terminal requirements, and development commands.
   translates input into game actions or interface mode changes, queues player
   actions, handles automatic movement, and controls animation and turn pacing.
 - [`game::Engine`](../src/game/engine.rs) owns the locations and turn progression.
-  It coordinates player and AI actions and transfers the player into a newly
-  generated location on descent.
+  It coordinates player and AI actions and transfers one player between retained
+  locations. Stable level identities are separate from difficulty. Exit links
+  pair source and destination coordinates in both directions. The engine generates
+  a location on first use of an onward exit and reuses it on return travel.
 - [`game::Location`](../src/game/location.rs) owns a level's terrain, actors,
   ground items, and lighting. It applies actions and coordinates their effects
   with the actor and item models. Actors capture sound origins when actions
@@ -24,7 +26,8 @@ the game, controls, terminal requirements, and development commands.
   It uses that result once for gameplay hearing and retains only
   player-permitted observations for presentation.
   Actor state includes perception and discovery information for the player's view.
-- [`generate`](../src/generate.rs) builds levels from game types;
+- [`generate`](../src/generate.rs) builds dungeons and
+  [`forest`](../src/forest.rs) builds Dark Forests from game types;
   [`ai`](../src/ai.rs) chooses actions from the current location and actor state.
   Neither these modules nor `game` depend on the terminal interface. Shared
   hexagonal coordinates and spatial algorithms come from `hex2d` and
@@ -53,7 +56,7 @@ Locations retain geometry for observed, resolved hits until `Ui` consumes it
 after each actor action. The map renderer owns active animations independently
 of actor lifetimes and advances them using `Ui`'s elapsed presentation time.
 Effects at the same impact cell play in resolution order; effects at different
-cells play concurrently. Visibility gates both capture and display, and descent
+cells play concurrently. Visibility gates both capture and display, and traversal
 clears old effects. Animation playback neither advances turns nor consumes game RNG.
 
 The interface drains sound observations after each action and starts their
@@ -65,7 +68,7 @@ unseen, including on unknown cells. The player's own emissions animate waves
 but never get markers, even for earlier charge footsteps behind the player's
 current position. These markers reveal the origin without revealing terrain or
 actors. Sound observations that the interface has not drained expire at the next
-action boundary, and descent discards old-level presentation state.
+action boundary, and traversal discards old-level presentation state.
 
 Actors retain current awareness of the player, separate from transient hearing
 cues. After each action and the initial player spawn, the location checks whether
@@ -99,7 +102,13 @@ does not consume randomness. Explicit seeds reproduce worlds and action
 outcomes within the current RNG implementation, not across versions or platforms.
 
 The player acts first, followed by living actors in ascending spawn-ID order.
-Descent transfers the player and discards the old location's pending schedule.
+Traversal transfers the player's inventory and condition and discards the old
+location's pending schedule and presentation events. Locations retain their
+tactical RNG, terrain, items, enemies, awareness and player exploration.
+Only the current location advances. If an actor occupies the arrival tile, the
+engine chooses a deterministic nearest free tile in the same walkable component.
+If that component is full, the engine refuses travel without removing the player.
+Presentation resets by stable level identity rather than difficulty.
 Coordinate order resolves AI cue ties and generation dependencies; inventory
 letters determine row and corpse-loot placement order. These orders replace
 hash-table iteration wherever it could change behavior.

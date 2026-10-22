@@ -19,12 +19,15 @@ pub mod item;
 pub use self::engine::*;
 pub mod tile;
 pub use self::tile::Tile;
+pub mod level;
 pub mod location;
 pub use self::location::Location;
 
 #[cfg(test)]
 pub(crate) mod fixtures;
 
+#[cfg(test)]
+mod forest_tests;
 #[cfg(test)]
 mod property_tests;
 

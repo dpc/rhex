@@ -53,6 +53,7 @@ fn movement_and_commands_in_both_input_modes() {
             (KeyCode::Char('.'), Wait),
             (KeyCode::Char(','), Pick),
             (KeyCode::Char('>'), Descend),
+            (KeyCode::Char('<'), Descend),
         ];
         bindings.extend(match mode {
             InputMode::Normal => vec![

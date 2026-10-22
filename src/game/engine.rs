@@ -1,8 +1,12 @@
 use super::actor::{self, Actor};
+use super::level::{ExitLink, LevelId};
+use super::tile;
 use super::{Action, Location};
 use crate::ai::{self, Ai};
 use crate::util;
+use hex2d::Coordinate;
 use rand::{RngExt, SeedableRng, rngs::SmallRng};
+use std::collections::{HashSet, VecDeque};
 
 #[cfg(test)]
 #[path = "engine_tests.rs"]
@@ -91,22 +95,91 @@ impl Engine {
         if actor_id == self.current_location().player_id()
             && self.current_location().player().descended()
         {
-            let mut player = self.current_location_mut().remove(actor_id).unwrap();
-            self.current_location_mut().sound_events.clear();
-            self.current_location_mut().awareness_events.clear();
-            self.location_cur += 1;
-            self.locations
-                .push(Location::new(self.location_cur as u32, self.rng.random()));
-            player.pos = util::random_pos(0, 0, &mut self.rng);
-            let _player = self.current_location_mut().spawn_player(player);
-            self.end_turn();
-        } else {
-            self.state = State::AiMove;
-
-            if self.ids_to_move.is_empty() {
+            if self.traverse_exit() {
                 self.end_turn();
+            } else {
+                self.finish_action();
+            }
+        } else {
+            self.finish_action();
+        }
+    }
+
+    fn finish_action(&mut self) {
+        self.state = State::AiMove;
+        if self.ids_to_move.is_empty() {
+            self.end_turn();
+        }
+    }
+
+    /// Follow an explicit link, creating a reciprocal pair on first exploration.
+    /// A crowded arrival searches only its walkable component; if full, stay put.
+    fn traverse_exit(&mut self) -> bool {
+        let source = self.player().coord();
+        let link = if let Some(&link) = self.current_location().exits.get(&source) {
+            link
+        } else {
+            let arrival = Coordinate::new(0, 0);
+            let destination = LevelId(self.locations.len());
+            let depth = self.current_location().level as u32 + 1;
+            let biome = self.current_location().biome.next();
+            let mut location = Location::generated(destination, depth, biome, self.rng.random());
+            location.map[arrival].feature = Some(tile::Entrance);
+            location.exits.insert(
+                arrival,
+                ExitLink {
+                    destination: self.current_location().id,
+                    arrival: source,
+                },
+            );
+            self.locations.push(location);
+            let link = ExitLink {
+                destination,
+                arrival,
+            };
+            self.current_location_mut().exits.insert(source, link);
+            link
+        };
+        let Some(arrival) = Self::free_arrival(&self.locations[link.destination.0], link.arrival)
+        else {
+            return false;
+        };
+        let id = self.current_location().player_id();
+        let mut player = self.current_location_mut().remove(id).unwrap();
+        let old = self.current_location_mut();
+        old.explored = std::mem::take(&mut player.known);
+        old.explored_areas = std::mem::take(&mut player.known_areas);
+        old.combat_events.clear();
+        old.sound_events.clear();
+        old.awareness_events.clear();
+        self.location_cur = link.destination.0;
+        let destination = self.current_location_mut();
+        destination.combat_events.clear();
+        destination.sound_events.clear();
+        destination.awareness_events.clear();
+        player.pos.coord = arrival;
+        destination.spawn_player(player);
+        true
+    }
+
+    fn free_arrival(location: &Location, start: Coordinate) -> Option<Coordinate> {
+        let mut visited = HashSet::from([start]);
+        let mut queue = VecDeque::from([start]);
+        while let Some(c) = queue.pop_front() {
+            if !location.map[c].is_passable() || location.map[c].feature == Some(tile::Door(false))
+            {
+                continue;
+            }
+            if !location.actors_coord_to_id.contains_key(&c) {
+                return Some(c);
+            }
+            for neighbor in c.neighbors() {
+                if visited.insert(neighbor) {
+                    queue.push_back(neighbor);
+                }
             }
         }
+        None
     }
 
     fn reload_actors_ids_to_move(&mut self) {
@@ -170,7 +243,7 @@ impl Engine {
     }
 
     fn end_turn(&mut self) {
-        // Descent invalidates every pending ID from the old level.
+        // Traversal invalidates every pending ID from the old level.
         self.ids_to_move.clear();
         self.current_location_mut().post_turn();
         self.state = State::TurnDone;

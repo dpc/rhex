@@ -167,3 +167,23 @@ each real run. Changing `TERM` alone is not another emulator or platform.
 
 The suite claims no Windows or macOS coverage. Neither the guard nor these tests
 promise restoration after `SIGKILL`, abort, or arbitrary fatal signals.
+
+## Forest and connected-level checks
+
+`cargo test --bin rhex forest` exercises seeded forest geometry, route
+connectivity, terrain semantics, lighting, clearing permissions and sound.
+The fixed 128-seed corpus and bounded property cases check dense vegetation,
+multi-cell trunks, shallow/deep water, dark coverage, lit clearings and reachable
+exits. Generation uses a fixed-size map and bounded searches, with no retries.
+
+To inspect three generated maps, run
+`cargo test --bin rhex print_forest_atlas -- --ignored --nocapture`.
+The command prints a hex-offset terrain atlas, not a terminal gameplay screenshot.
+The exact cell-buffer tests cover terrain glyphs and visibility palettes.
+
+Engine roundtrip tests exercise reciprocal links through three retained levels,
+non-destructive occupied arrivals, full-component refusal, unique player
+ownership, inventory, exploration, awareness, inactive schedules and RNG.
+Composed UI tests use the normal event path to enter and return, verifying the
+exit readouts and presentation reset. These are automated checks, not a manual
+gameplay test.

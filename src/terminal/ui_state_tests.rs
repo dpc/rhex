@@ -449,8 +449,17 @@ fn below_describes_ground_items_features_and_terrain_not_the_player() {
     for (terrain, feature, item, area, expected) in [
         (tile::Empty, None, false, false, "nothing"),
         (tile::Empty, None, false, true, "room"),
-        (tile::Water, None, false, false, "water"),
-        (tile::Empty, Some(tile::Stairs), false, false, "stairs down"),
+        (tile::Water, None, false, false, "deep water"),
+        (tile::Ground, None, false, false, "forest ground"),
+        (tile::ShallowWater, None, false, false, "shallow water"),
+        (tile::TreeTrunk, None, false, false, "tree trunk"),
+        (
+            tile::Empty,
+            Some(tile::Stairs),
+            false,
+            false,
+            "to Dark Forest (>)",
+        ),
         (
             tile::Empty,
             Some(tile::Door(true)),
@@ -494,9 +503,12 @@ fn below_updates_after_moving_onto_and_off_stairs() {
     let row =
         |buffer: &Buffer, y| -> String { (30..60).map(|x| buffer[(x, y)].symbol()).collect() };
     let before = frame(&mut ui, 60, 24);
-    assert_eq!(row(&before, 10), format!("{:30}", "In front: stairs down"));
+    assert_eq!(
+        row(&before, 10),
+        format!("{:30}", "In front: to Dark Forest (>)")
+    );
     assert_eq!(row(&before, 11), format!("{:30}", "Below: nothing"));
-    for (step, expected) in [(1, "stairs down"), (2, "nothing")] {
+    for (step, expected) in [(1, "to Dark Forest (>)"), (2, "nothing")] {
         key(&mut ui, KeyCode::Char('k'), now);
         ui.advance((24, 60), now + Duration::from_secs(step));
         let buffer = frame(&mut ui, 60, 24);
@@ -958,7 +970,7 @@ fn intro_race_selection_and_quit_dispatch_without_terminal() {
 }
 
 #[test]
-fn automove_cancel_consumes_key_and_goto_selects_only_stairs() {
+fn automove_cancel_consumes_key_and_goto_selects_exits() {
     let now = Instant::now();
     let mut ui = fixture(now);
     chars(&mut ui, "W", now);
@@ -977,6 +989,61 @@ fn automove_cancel_consumes_key_and_goto_selects_only_stairs() {
     assert_eq!(ui.mode, Mode::Normal);
     assert!(!ui.is_automoving());
     assert_eq!(ui.game_action_queue, [Turn(Right)]);
+}
+
+#[test]
+fn exit_keys_roundtrip_preserve_state_and_reset_location_presentation() {
+    let now = Instant::now();
+    let mut ui = fixture(now);
+    let origin = ui.player().coord();
+    ui.engine.current_location_mut().map[origin].feature = Some(tile::Stairs);
+    player_mut(&mut ui).pick_item(Box::new(Item::new(Type::Bow, vec![])));
+    for (step, key_char, expected, readout) in [
+        (1, '>', 1, "Below: return to level 0 (<)"),
+        (2, '<', 0, "Below: to Dark Forest (>)"),
+        (3, '>', 1, "Below: return to level 0 (<)"),
+    ] {
+        ui.target_pos = Some(Position::new(Coordinate::new(50, 50), hex2d::XY));
+        let time = now + Duration::from_secs(step);
+        key(&mut ui, KeyCode::Char(key_char), time);
+        ui.advance((24, 60), time);
+        assert_eq!(ui.current_location().id, game::level::LevelId(expected));
+        assert_eq!(ui.animation_level, ui.current_location().id);
+        assert!(ui.target_pos.is_none());
+        assert!(ui.automoving.is_none());
+        assert!(ui.pending_sounds.is_empty());
+        assert_eq!(ui.player().items_backpack[&'a'].description(), "bow");
+        let before = game::fixtures::outcome(ui.current_location());
+        for _ in 0..3 {
+            let buffer = frame(&mut ui, 60, 24);
+            let below: String = (30..60).map(|x| buffer[(x, 11)].symbol()).collect();
+            assert_eq!(below, format!("{readout:30}"));
+        }
+        assert_eq!(before, game::fixtures::outcome(ui.current_location()));
+    }
+}
+
+#[test]
+fn goto_finds_return_and_forest_exits_but_never_clears_obstacles() {
+    let now = Instant::now();
+    for feature in [tile::Entrance, tile::ForestPath] {
+        let mut ui = fixture(now);
+        let head = ui.player().head();
+        ui.engine.current_location_mut().map[head].feature = Some(feature);
+        chars(&mut ui, "G<", now);
+        assert!(matches!(ui.automoving, Some(AutoMoveType::GoTo(_))));
+        assert!(matches!(
+            ui.goto_action(GoToType::Stairs),
+            AutoMoveAction::Action(Move(Forward))
+        ));
+        for c in ui.player().coord().neighbors() {
+            ui.engine.current_location_mut().map[c] = tile::Tile::new(tile::Thicket);
+        }
+        assert!(matches!(
+            ui.goto_action(GoToType::Stairs),
+            AutoMoveAction::Blocked
+        ));
+    }
 }
 
 #[test]

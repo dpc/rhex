@@ -10,6 +10,7 @@ extern crate fnv;
 extern crate log;
 
 mod ai;
+mod forest;
 mod game;
 mod generate;
 mod logging;

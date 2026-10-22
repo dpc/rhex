@@ -12,6 +12,7 @@ use simplemap::SimpleMap;
 use super::Action;
 use super::actor::{self, Actor};
 use super::item::Item;
+use super::level::{Biome, ExitLink, LevelId};
 use super::tile;
 use super::{Items, LightMap, Map};
 
@@ -24,6 +25,16 @@ mod tests;
 
 #[derive(Clone, Debug)]
 pub struct Location {
+    /// Stable world identity, not the difficulty counter.
+    pub id: LevelId,
+    /// Generated environment.
+    pub biome: Biome,
+    /// Explicit reciprocal links, installed when a forward exit is first used.
+    pub exits: HashMap<Coordinate, ExitLink>,
+    /// Player exploration parked here while another level is active.
+    pub(crate) explored: super::Visibility,
+    /// Remembered area centers for the returning player.
+    pub(crate) explored_areas: super::Visibility,
     /// Owned tactical stream, never accessed by presentation.
     pub(crate) rng: SmallRng,
     pub actors_byid: HashMap<actor::Id, Actor>, // id -> State
@@ -65,6 +76,11 @@ impl Location {
     pub(crate) fn fixture(map: Map, mut player: Actor) -> Self {
         player.recalculate_stats();
         Self {
+            id: LevelId(0),
+            biome: Biome::Dungeon,
+            exits: Default::default(),
+            explored: Default::default(),
+            explored_areas: Default::default(),
             rng: SmallRng::seed_from_u64(0),
             actors_coord_to_id: [(player.pos.coord, 0)].into(),
             actors_byid: [(0, player)].into(),
@@ -81,7 +97,15 @@ impl Location {
         }
     }
     pub fn new(level: u32, seed: u64) -> Location {
-        let (map, gen_actors, items) = generate::gen_level(level, seed);
+        Self::generated(LevelId(0), level, Biome::Dungeon, seed)
+    }
+
+    /// Generate a location with identity and environment separate from difficulty.
+    pub fn generated(id: LevelId, level: u32, biome: Biome, seed: u64) -> Location {
+        let (map, gen_actors, items) = match biome {
+            Biome::Dungeon => generate::gen_level(level, seed),
+            Biome::DarkForest => crate::forest::generate(level, seed),
+        };
 
         let mut actors: HashMap<u32, Actor> = Default::default();
         let mut actors_pos: HashMap<Coordinate, u32> = Default::default();
@@ -98,6 +122,11 @@ impl Location {
         }
 
         Location {
+            id,
+            biome,
+            exits: Default::default(),
+            explored: Default::default(),
+            explored_areas: Default::default(),
             rng: SmallRng::seed_from_u64(seed),
             actors_byid: actors,
             actors_coord_to_id: actors_pos,
@@ -210,6 +239,11 @@ impl Location {
     }
 
     pub fn recalculate_light_map(&mut self) {
+        self.recalculate_light_with_actor(None);
+    }
+
+    /// Include the acting actor while it is temporarily outside the actor table.
+    pub(crate) fn recalculate_light_with_actor(&mut self, acting: Option<&Actor>) {
         let mut light_map: SimpleMap<Coordinate, u32, BuildHasherDefault<FnvHasher>> =
             Default::default();
 
@@ -236,8 +270,12 @@ impl Location {
             }
         }
 
-        for id in self.actors_coord_to_id.values() {
-            let astate = &self.actors_byid[id];
+        for astate in self
+            .actors_coord_to_id
+            .values()
+            .filter_map(|id| self.actors_byid.get(id))
+            .chain(acting)
+        {
             let pos = astate.pos.coord;
             if astate.light_emision() > 0 {
                 algo::los::los(
@@ -292,6 +330,9 @@ impl Location {
         let actor = actor?;
 
         self.actors_coord_to_id.remove(&actor.pos.coord);
+        if self.player_id == Some(id) {
+            self.player_id = None;
+        }
 
         Some(actor)
     }

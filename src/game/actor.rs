@@ -571,8 +571,24 @@ impl Actor {
 
     pub fn pre_spawn(&mut self, loc: &Location) {
         self.descended = false;
-        self.known = Default::default();
-        self.known_areas = Default::default();
+        self.pre_pos = None;
+        self.pre_head = None;
+        self.opened_door = false;
+        self.known = if self.is_player() {
+            loc.explored.clone()
+        } else {
+            Default::default()
+        };
+        self.known_areas = if self.is_player() {
+            loc.explored_areas.clone()
+        } else {
+            Default::default()
+        };
+        self.temporary_los.clear();
+        self.discovered.clear();
+        self.discovered_areas.clear();
+        self.did_attack.clear();
+        self.was_attacked_by.clear();
         self.recalculate_stats();
         let pos = self.pos;
         self.moved(loc, pos);
@@ -760,7 +776,7 @@ impl Actor {
     pub fn discovered_stairs(&self, loc: &Location) -> bool {
         self.discovered
             .iter()
-            .any(|c| loc.at(*c).tile().feature == Some(Feature::Stairs))
+            .any(|c| loc.at(*c).tile().feature.is_some_and(Feature::is_exit))
     }
 
     pub fn set_player(&mut self) {
@@ -884,7 +900,12 @@ impl Actor {
                         }
                     }
                     Action::Descend => {
-                        if loc.at(self.coord()).tile().feature == Some(tile::Feature::Stairs) {
+                        if loc
+                            .at(self.coord())
+                            .tile()
+                            .feature
+                            .is_some_and(Feature::is_exit)
+                        {
                             self.descend();
                         }
                     }
@@ -893,8 +914,22 @@ impl Actor {
                     }
                     _ => {}
                 }
+            } else if old_pos.coord != new_pos.coord
+                && loc.map[new_pos.coord].type_ == tile::Thicket
+            {
+                // A bump in a melee direction is a hit, not a movement. Even a
+                // charge stops here; never attack an occupant through vegetation.
+                if self.could_be_attack(action) && self.can_attack() && self.can_attack_sp() {
+                    loc.map[new_pos.coord].type_ = tile::Ground;
+                    self.substract_melee_sp_cost();
+                    self.noise_makes(self.attack_noise().max(5));
+                    loc.recalculate_light_with_actor(Some(self));
+                    self.postprocess_visibile(loc);
+                }
+                break;
             } else if self.could_be_attack(action)
                 && old_pos.coord != new_pos.coord
+                && loc.map[new_pos.coord].is_passable()
                 && loc.actors_coord_to_id.contains_key(&new_pos.coord)
             {
                 // we've tried to move into self; attack?
@@ -943,6 +978,8 @@ impl Actor {
                 {
                     self.dig(angle, loc)
                 }
+                // Multi-step actions cannot jump over a blocked first cell.
+                break;
             }
         }
     }

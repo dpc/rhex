@@ -71,6 +71,15 @@ fn check(seed: u64, trace: &[Action]) {
     enemy.pick_item(Box::new(Item::new(item::Type::Junk, vec![])));
     loc.spawn(enemy);
     loc.map[Coordinate::new(0, -1)].feature = Some(tile::Door(false));
+    for (coord, terrain) in [
+        (Coordinate::new(2, 0), tile::Thicket),
+        (Coordinate::new(-2, 0), tile::TreeTrunk),
+        (Coordinate::new(0, 2), tile::ShallowWater),
+        (Coordinate::new(0, -2), tile::Water),
+        (Coordinate::new(2, -2), tile::Ground),
+    ] {
+        loc.map[coord] = Tile::new(terrain);
+    }
     let original_items = inventory(&loc);
 
     for (index, action) in trace.iter().enumerate() {

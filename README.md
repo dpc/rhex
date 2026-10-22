@@ -34,6 +34,30 @@ Press F2 to toggle additional Vi-style controls (`u`/`i` spin,
 Use these movement aliases during gameplay; in menus and inventory, use letters
 to select entries.
 
+### Forests and returning to levels
+
+The game starts in a Dungeon. Stand on its `>` exit and press `>` to enter a
+Dark Forest; onward exits alternate the two environments. A `<` marks the
+return passage. Press either `<` or `>` while standing on a passage to use it.
+The tile readouts name the passage's destination. Press `G`, then `>` or `<`,
+to route to the nearest known passage without using it automatically.
+
+Dark Forests have narrow paths through dense undergrowth and large brown tree
+trunks, with small lit canopy openings, a winding creek and a pond. Green `%`
+thickets block movement and sight. Hit them by moving forward or diagonally
+forward into them. The hit consumes an action and makes noise, leaving ground
+you can enter on the next move. You can clear thickets unarmed, subject to the
+normal action and stamina checks. Charging also stops after clearing one thicket.
+Brown `#` trunks block movement, sight and sound and cannot be cleared.
+Blue `,` shallow water is transparent and walkable; blue `~` deep water is
+transparent but impassable. Thickets absorb sound without completely blocking it.
+
+Visited levels stay in memory: returning preserves enemies, awareness, items,
+terrain changes and exploration. Inactive levels do not take turns. If an actor
+occupies the return tile, arrival uses the nearest free connected walkable tile;
+if that component is full, traversal leaves you where you are. This persistence
+lasts only for the current game; there is still no save/load support.
+
 To exit, press Escape, then `y` to confirm.
 If your terminal has fewer than 60 columns or 24 rows, the game pauses and asks
 you to resize it. Press Escape at this prompt to exit without confirmation.

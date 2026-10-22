@@ -137,8 +137,8 @@ pub struct Ui {
     game_action_queue: VecDeque<game::Action>,
 
     map_renderer: MapRenderer,
-    /// Level owning the current effects; descent invalidates their coordinates.
-    animation_level: i32,
+    /// Level owning the current effects; traversal invalidates their coordinates.
+    animation_level: game::level::LevelId,
     /// Per-action observations staged until all actors in this turn have acted.
     pending_sounds: Vec<game::sound::ObservedSound>,
 
@@ -197,7 +197,7 @@ impl Ui {
             next_anim_frame_ts: now,
             game_action_queue: VecDeque::new(),
             map_renderer: MapRenderer::new(UNICODE_DOT),
-            animation_level: 0,
+            animation_level: game::level::LevelId(0),
             pending_sounds: Vec::new(),
             now,
             presentation_started: now,
@@ -339,7 +339,13 @@ impl Ui {
 
         let mut bfs = bfs::Traverser::new(
             |c| c == start || (cur_loc.at(c).tile().is_passable() && player.knows(c)),
-            |c| cur_loc.at(c).tile().feature == Some(tile::Feature::Stairs),
+            |c| {
+                cur_loc
+                    .at(c)
+                    .tile()
+                    .feature
+                    .is_some_and(tile::Feature::is_exit)
+            },
             start,
         );
 
@@ -408,11 +414,13 @@ impl Ui {
     }
 
     fn engine_change(&mut self, actor_id: actor::Id) {
-        let level = self.current_location().level;
+        let level = self.current_location().id;
         if self.animation_level != level {
             self.map_renderer.animations.clear();
             self.pending_sounds.clear();
             self.animation_level = level;
+            self.target_pos = None;
+            self.automoving = None;
         }
         let events = std::mem::take(&mut self.engine.current_location_mut().combat_events);
         self.pending_sounds
@@ -625,7 +633,7 @@ impl Ui {
             (KEY_LOWJ, _) | (KEY_LOWS, false) | (input::DOWN, _) => Game(Move(Back)),
             (KEY_DOT, _) => Game(Wait),
             (KEY_COMMA, _) => Game(Pick),
-            (KEY_DESCEND, _) => Game(Descend),
+            (KEY_DESCEND | KEY_RETURN, _) => Game(Descend),
             (KEY_LOWO, _) => AutoMove(AutoMoveType::Explore),
             (KEY_CAPK, true) => AutoMove(AutoMoveType::Walk),
             (KEY_CAPW, false) => AutoMove(AutoMoveType::Walk),
@@ -803,7 +811,7 @@ impl Ui {
                 }
             }
             Mode::GoTo => {
-                if let KEY_DESCEND = key {
+                if let KEY_DESCEND | KEY_RETURN = key {
                     self.automoving = Some(AutoMoveType::GoTo(GoToType::Stairs))
                 }
                 self.mode_switch_to(Mode::Normal);
@@ -852,7 +860,7 @@ impl Ui {
         }
 
         if player.discovered_stairs(cur_loc) {
-            self.log("You've found stairs.");
+            self.log("You've found an exit.");
         }
 
         for res in &player.was_attacked_by {
@@ -1240,6 +1248,15 @@ impl Ui {
             return item.description();
         }
         if let Some(feature) = tile.feature {
+            if feature == tile::Entrance {
+                return match gstate.exits.get(&coord) {
+                    Some(link) => format!("return to level {} (<)", link.destination.0),
+                    None => "return passage (<)".to_owned(),
+                };
+            }
+            if feature.is_exit() {
+                return format!("to {} (>)", gstate.biome.next().description());
+            }
             return feature.description().to_owned();
         }
         match tile.type_ {
@@ -1327,9 +1344,9 @@ impl Ui {
         }
         window.write("Charge: c\n");
         window.write("Wait: .\n");
-        window.write("Descend: >\n");
+        window.write("Use exit: > or < (on its tile)\n");
         window.write("Autoexplore: o\n");
-        window.write("Go to: G (only '>' follow-up implemented)\n");
+        window.write("Go to exit: G, then > or <\n");
         window.write("Examine: x\n");
         window.write("Pick item in front: ,\n");
         window.write("Look at Inventory: I\n");

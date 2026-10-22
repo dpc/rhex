@@ -318,10 +318,14 @@ impl MapRenderer {
 
         let mut bold = false;
         let (fg, bg, glyph) = match tt {
-            Some(tile::Empty) => {
+            Some(tile::Empty | tile::Ground) => {
                 let mut fg = color::STONE_FG;
                 let mut bg = color::EMPTY_BG;
                 let mut glyph = ' ';
+                if tt == Some(tile::Ground) {
+                    fg = color::GROUND_FG;
+                    bg = color::FOREST_BG;
+                }
 
                 if is_proper_coord {
                     match t.and_then(|t| t.feature) {
@@ -340,8 +344,14 @@ impl MapRenderer {
                         }
                         Some(tile::Statue) => glyph = STATUE_CH,
                         Some(tile::Stairs) => glyph = STAIRS_DOWN_CH,
+                        Some(tile::ForestPath) => glyph = '>',
+                        Some(tile::Entrance) => glyph = '<',
                     }
 
+                    if tt == Some(tile::Ground) {
+                        fg = color::GROUND_FG;
+                        bg = color::FOREST_BG;
+                    }
                     if visible && cur_loc.at(c).tile().light > 0 {
                         fg = [
                             color::LIGHTSOURCE[0].to_u8(),
@@ -359,6 +369,12 @@ impl MapRenderer {
                 (color::WALL_FG, color::WALL_BG, WALL_CH)
             }
             Some(tile::Water) => (color::WATER_FG, color::WATER_BG, WATER_CH),
+            Some(tile::ShallowWater) => (color::WATER_FG, color::WATER_BG, ','),
+            Some(tile::TreeTrunk) => {
+                bold = true;
+                (color::TRUNK_FG, color::FOREST_BG, WALL_CH)
+            }
+            Some(tile::Thicket) => (color::THICKET_FG, color::FOREST_BG, '%'),
             None => (color::EMPTY_FG, color::EMPTY_BG, '?'),
         };
 
