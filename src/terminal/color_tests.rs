@@ -95,6 +95,123 @@ fn representative_shades_are_monotonic_and_saturate_without_overflow() {
     assert_eq!(FOREST_BG.index(false, 5), 16);
 }
 
+/// Measure decoded terminal colors independently of the selector's RGB helpers.
+fn luma(index: u8) -> u32 {
+    let [r, g, b] = channels(index).map(u32::from);
+    2126 * r + 7152 * g + 722 * b
+}
+
+#[test]
+fn arbitrary_palette_endpoints_get_ordered_shades_with_dark_neutral_fallback() {
+    for index in 16..=255 {
+        let [r, g, b] = channels(index);
+        let base = Rgb::new(r, g, b);
+        for (dark, lit, ascending) in [
+            (Rgb::new(0, 0, 0), base, true),
+            (base, Rgb::new(0, 0, 0), false),
+        ] {
+            let shade = Shade::new(lit, dark, 236);
+            let colors = (0..=5)
+                .map(|light| shade.index(true, light))
+                .collect::<Vec<_>>();
+            assert_eq!(channels(colors[0]), channels(dark.to_u8()));
+            assert_eq!(channels(colors[5]), channels(lit.to_u8()));
+            for pair in colors.windows(2) {
+                assert!(
+                    if ascending {
+                        luma(pair[0]) <= luma(pair[1])
+                    } else {
+                        luma(pair[0]) >= luma(pair[1])
+                    },
+                    "{index}: {colors:?}"
+                );
+            }
+            // Four interior neutral grays exist below any endpoint above gray38.
+            if luma(index) > 380_000 {
+                assert_eq!(
+                    colors
+                        .iter()
+                        .copied()
+                        .collect::<std::collections::BTreeSet<_>>()
+                        .len(),
+                    6,
+                    "{index}: {colors:?}"
+                );
+            }
+            assert_eq!(shade.index(true, u32::MAX), colors[5]);
+            assert_eq!(shade.index(false, u32::MAX), 236);
+        }
+    }
+}
+
+#[test]
+fn constrained_and_fixed_colors_repeat_instead_of_inventing_brightness() {
+    for (base, distinct) in [
+        (Rgb::new(0, 0, 0), 1),
+        (Rgb::new(0, 0, 95), 2),
+        (Rgb::new(8, 8, 8), 2),
+        (Rgb::new(18, 18, 18), 3),
+        (Rgb::new(28, 28, 28), 4),
+        (Rgb::new(38, 38, 38), 5),
+        (Rgb::new(48, 48, 48), 6),
+    ] {
+        let shade = Shade::new(base, Rgb::new(0, 0, 0), 236);
+        let colors = (0..=5)
+            .map(|light| shade.index(true, light))
+            .collect::<std::collections::BTreeSet<_>>();
+        assert_eq!(colors.len(), distinct, "{base:?}: {colors:?}");
+        assert!(colors.iter().all(|&c| luma(c) <= luma(base.to_u8())));
+        let fixed = Shade::new(base, base, 236);
+        for light in 0..=6 {
+            assert_eq!(fixed.index(true, light), base.to_u8());
+        }
+    }
+}
+
+proptest::proptest! {
+    #[test]
+    fn arbitrary_rgb_endpoints_preserve_bounds_memory_and_available_steps(
+        dark in proptest::array::uniform3(proptest::num::u8::ANY),
+        lit in proptest::array::uniform3(proptest::num::u8::ANY),
+    ) {
+        let dark = Rgb::new(dark[0], dark[1], dark[2]);
+        let lit = Rgb::new(lit[0], lit[1], lit[2]);
+        let shade = Shade::new(lit, dark, 236);
+        let first = dark.to_u8();
+        let last = lit.to_u8();
+        let low = luma(first).min(luma(last));
+        let high = luma(first).max(luma(last));
+        assert_eq!(shade.index(true, 0), first);
+        assert_eq!(shade.index(true, 5), last);
+        assert_eq!(shade.index(true, u32::MAX), last);
+        let colors = (0..=5).map(|light| shade.index(true, light)).collect::<Vec<_>>();
+        if low != high {
+            for pair in colors.windows(2) {
+                assert!(
+                    if luma(first) < luma(last) {
+                        luma(pair[0]) <= luma(pair[1])
+                    } else {
+                        luma(pair[0]) >= luma(pair[1])
+                    },
+                    "{dark:?}->{lit:?}: {colors:?}"
+                );
+            }
+            if (232..=255).filter(|&c| low < luma(c) && luma(c) < high).count() >= 4 {
+                assert_eq!(colors.iter().collect::<std::collections::BTreeSet<_>>().len(), 6);
+            }
+        }
+        for light in [0, 1, 4, 5, 6, u32::MAX] {
+            assert_eq!(shade.index(false, light), 236);
+        }
+        let inverse = shade.with_unlit(247);
+        assert_eq!(inverse.index(true, 0), 247);
+        for light in 1..=6 {
+            assert_eq!(inverse.index(true, light), shade.index(true, light));
+        }
+        assert_eq!(inverse.index(false, 0), 236);
+    }
+}
+
 #[test]
 fn dungeon_foregrounds_keep_contrast_through_the_whole_ramp() {
     for foreground in [EMPTY_DOT_FG, EMPTY_FG, STONE_FG] {

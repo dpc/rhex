@@ -451,7 +451,7 @@ fn terrain_has_distinct_rendered_light_steps_but_memory_ignores_live_light() {
             None,
             "~",
             [242, 243, 102, 246, 247, 248],
-            [16, 17, 18, 19, 20, 26],
+            [16, 17, 23, 24, 25, 26],
             false,
         ),
         (
@@ -459,7 +459,7 @@ fn terrain_has_distinct_rendered_light_steps_but_memory_ignores_live_light() {
             None,
             ",",
             [242, 243, 102, 246, 247, 248],
-            [16, 17, 18, 19, 20, 26],
+            [16, 17, 23, 24, 25, 26],
             false,
         ),
         (
@@ -467,7 +467,7 @@ fn terrain_has_distinct_rendered_light_steps_but_memory_ignores_live_light() {
             None,
             "•",
             [238, 59, 243, 245, 248, 250],
-            [16, 233, 235, 22, 28, 34],
+            [16, 234, 236, 22, 28, 34],
             false,
         ),
         (
@@ -475,31 +475,31 @@ fn terrain_has_distinct_rendered_light_steps_but_memory_ignores_live_light() {
             None,
             "γ",
             [22, 28, 70, 71, 77, 119],
-            [16, 233, 235, 22, 28, 34],
+            [16, 234, 236, 22, 28, 34],
             false,
         ),
         (
             tile::TreeTrunk,
             None,
             "#",
-            [59, 59, 95, 137, 138, 180],
-            [16, 233, 235, 22, 28, 34],
+            [59, 95, 101, 137, 138, 180],
+            [16, 234, 236, 22, 28, 34],
             true,
         ),
         (
             tile::Ground,
             Some(tile::ForestPath),
             ">",
-            [22, 22, 64, 65, 107, 149],
-            [16, 233, 235, 22, 28, 34],
+            [22, 58, 64, 65, 107, 149],
+            [16, 234, 236, 22, 28, 34],
             false,
         ),
         (
             tile::Ground,
             Some(tile::Entrance),
             "<",
-            [22, 22, 64, 65, 107, 149],
-            [16, 233, 235, 22, 28, 34],
+            [22, 58, 64, 65, 107, 149],
+            [16, 234, 236, 22, 28, 34],
             false,
         ),
         (
@@ -545,6 +545,7 @@ fn terrain_has_distinct_rendered_light_steps_but_memory_ignores_live_light() {
         let mut renderer = MapRenderer::new(UNICODE_DOT);
         renderer.resize(20, 12);
         let mut rendered_backgrounds = std::collections::BTreeSet::new();
+        let mut rendered_foregrounds = std::collections::BTreeSet::new();
         let mut previous_luma = None;
         writeln!(
             svg,
@@ -568,6 +569,10 @@ fn terrain_has_distinct_rendered_light_steps_but_memory_ignores_live_light() {
             };
             let rgb = channels(background);
             let fg_rgb = channels(foreground);
+            assert!(
+                rendered_foregrounds.insert(fg_rgb),
+                "{terrain:?}: collapsed foreground at light {light}"
+            );
             assert!(
                 rendered_backgrounds.insert(rgb),
                 "{terrain:?}: light {light}"
@@ -626,7 +631,7 @@ fn shoreline_glue_matches_ground_light_in_both_directions() {
     for water in [tile::Water, tile::ShallowWater] {
         for (ground, wet) in [(left, right), (right, left)] {
             for (ground_light, water_light, expected_bg) in
-                [(4, 0, 28), (3, 1, 22), (1, 4, 233), (0, 4, 16)]
+                [(4, 0, 28), (3, 1, 22), (1, 4, 234), (0, 4, 16)]
             {
                 let mut loc = scene();
                 loc.map[ground] = tile::Tile::new(tile::Ground);
@@ -664,7 +669,7 @@ fn adjacent_water_keeps_tile_glyphs_and_continuous_background_without_glue_glyph
     let right = left + Direction::XY;
     for (left_water, left_glyph) in [(tile::Water, "~"), (tile::ShallowWater, ",")] {
         for (right_water, right_glyph) in [(tile::Water, "~"), (tile::ShallowWater, ",")] {
-            for (light, fg, bg) in [(0, 242, 16), (1, 243, 17), (3, 246, 19), (5, 248, 26)] {
+            for (light, fg, bg) in [(0, 242, 16), (1, 243, 17), (3, 246, 24), (5, 248, 26)] {
                 for (left_seen, right_seen) in
                     [(true, true), (true, false), (false, true), (false, false)]
                 {
