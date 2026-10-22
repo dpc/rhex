@@ -10,6 +10,21 @@ fn filled(area: Rect) -> Buffer {
 }
 
 #[test]
+fn fresh_windows_and_partial_styles_use_black_without_a_clear() {
+    let window = Window::new(3, 2, 0, 0);
+    window.set_style(Style::default().fg(Color::Red));
+    window.write("x");
+    window.put(1, 1, 'y', Style::default().fg(Color::Green));
+    let mut frame = filled(Rect::new(0, 0, 3, 2));
+    window.render(&mut frame);
+    assert_eq!(frame[(0, 0)].fg, Color::Red);
+    assert_eq!(frame[(1, 1)].fg, Color::Green);
+    for cell in &frame.content {
+        assert_eq!(cell.bg, Color::Indexed(16));
+    }
+}
+
+#[test]
 fn local_coordinates_and_clipping_preserve_surrounding_cells() {
     let window = Window::new(3, 2, 2, 1);
     window.clear();
@@ -85,7 +100,7 @@ fn clear_removes_old_glyphs_attributes_and_resets_text_state() {
             let cell = &frame[(x, y)];
             assert_eq!(cell.symbol(), if (x, y) == (0, 0) { "x" } else { " " });
             assert_eq!(cell.fg, Color::Indexed(231));
-            assert_eq!(cell.bg, Color::Indexed(232));
+            assert_eq!(cell.bg, Color::Indexed(16));
             assert_eq!(cell.modifier, Modifier::empty());
         }
     }

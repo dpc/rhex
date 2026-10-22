@@ -49,6 +49,40 @@ fn frame(ui: &mut Ui, width: u16, height: u16) -> Buffer {
 }
 
 #[test]
+fn composed_frames_never_fall_back_to_terminal_background() {
+    use ratatui::style::Color;
+
+    let now = Instant::now();
+    let mut ui = fixture(now);
+    for mode in [
+        Mode::Normal,
+        Mode::Inventory(InvMode::View),
+        Mode::FullScreen(FSMode::Help),
+    ] {
+        ui.mode_switch_to(mode);
+        let buffer = frame(&mut ui, 60, 24);
+        assert!(buffer.content.iter().all(|cell| cell.bg != Color::Reset));
+        if matches!(mode, Mode::FullScreen(_)) {
+            assert!(
+                buffer
+                    .content
+                    .iter()
+                    .all(|cell| cell.bg == Color::Indexed(16))
+            );
+        }
+    }
+    ui.resize((23, 59));
+    // A larger destination also exercises cells outside the current windows.
+    let buffer = frame(&mut ui, 60, 24);
+    assert!(
+        buffer
+            .content
+            .iter()
+            .all(|cell| cell.bg == Color::Indexed(16))
+    );
+}
+
+#[test]
 fn comma_production_dispatch_picks_then_toggles_without_moving() {
     for mode in [InputMode::Normal, InputMode::Vi] {
         let now = Instant::now();

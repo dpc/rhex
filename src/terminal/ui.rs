@@ -243,6 +243,7 @@ impl Ui {
     /// Compose the same complete frame for the terminal and headless tests.
     pub fn render_into(&mut self, buffer: &mut Buffer) {
         buffer.reset();
+        buffer.set_style(buffer.area, self.text_color);
         if self.too_small() {
             self.windows.full.clear();
             self.windows

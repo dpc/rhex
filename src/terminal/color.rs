@@ -90,13 +90,15 @@ pub const WHITE: u8 = GRAY[25];
 
 pub const YELLOW: Rgb = Rgb(5, 5, 0);
 
-pub const BACKGROUND_BG: u8 = GRAY[1];
+// Index 232 is near-black, brighter than unlit forest tiles. Use cube black
+// rather than a grayscale step or the terminal's configurable default.
+pub const BACKGROUND_BG: u8 = BLACK;
 pub const MAP_BACKGROUND_BG: u8 = BACKGROUND_BG;
 
 pub const VISIBLE_FG: u8 = WHITE;
 
 pub const NOT_IN_LOS_FG: u8 = GRAY[16];
-pub const NOT_IN_LOS_BG: u8 = GRAY[1];
+pub const NOT_IN_LOS_BG: u8 = BACKGROUND_BG;
 pub const REMEMBERED_TERRAIN_FG: u8 = GRAY[5];
 
 // in light, shaded (barely visible), in LoS but not visible (dark), not in LoS

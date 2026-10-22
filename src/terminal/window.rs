@@ -33,13 +33,15 @@ impl Window {
             w.max(0) as u16,
             h.max(0) as u16,
         );
-        Self {
+        let window = Self {
             area,
             buffer: RefCell::new(Buffer::empty(area)),
             cursor: Cell::new((0, 0)),
             wrapped: Cell::new(false),
             style: Cell::new(color::style(color::VISIBLE_FG, color::BACKGROUND_BG)),
-        }
+        };
+        window.clear();
+        window
     }
 
     /// Return the height and width in terminal cells.

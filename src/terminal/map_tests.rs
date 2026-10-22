@@ -363,6 +363,25 @@ fn death_lights_remembered_terrain_without_revealing_unknown_cells() {
 }
 
 #[test]
+fn dark_forest_remembered_and_unknown_cells_share_true_black() {
+    let mut loc = scene();
+    let coord = Coordinate::new(0, 2);
+    loc.map[coord] = tile::Tile::new(tile::Ground);
+    loc.light_map[coord] = 0;
+    let mut renderer = MapRenderer::new(UNICODE_DOT);
+    renderer.resize(20, 12);
+
+    let visible = render(&mut renderer, &loc, Mode::Normal, None, 0, 20, 12);
+    cell(&visible, (8, 4), "•", 238, 16, false);
+    player_mut(&mut loc).visible.remove(&coord);
+    let remembered = render(&mut renderer, &loc, Mode::Normal, None, 0, 20, 12);
+    cell(&remembered, (8, 4), "•", 236, 16, false);
+    player_mut(&mut loc).known.remove(&coord);
+    let unknown = render(&mut renderer, &loc, Mode::Normal, None, 0, 20, 12);
+    cell(&unknown, (8, 4), " ", 16, 16, false);
+}
+
+#[test]
 fn unlit_dots_and_remembered_terrain_are_subdued_without_recoloring_other_terrain() {
     // Literal indexed colors keep this independent of the production palette.
     // Each visible style is ordered: unlit, shaded, fully lit.
@@ -472,7 +491,7 @@ fn unlit_dots_and_remembered_terrain_are_subdued_without_recoloring_other_terrai
                 loc.light_map[lit_coord] = light;
             }
             let buffer = render(&mut renderer, &loc, Mode::Normal, None, 0, 20, 12);
-            cell(&buffer, (8, 4), glyph, 236, 232, bold);
+            cell(&buffer, (8, 4), glyph, 236, 16, bold);
         }
     }
 }
@@ -506,11 +525,11 @@ fn shoreline_glue_matches_ground_light_in_both_directions() {
 
                 player_mut(&mut loc).visible.remove(&wet);
                 let remembered = render(&mut renderer, &loc, Mode::Normal, None, 0, 20, 12);
-                cell(&remembered, (9, 4), " ", 236, 232, false);
+                cell(&remembered, (9, 4), " ", 236, 16, false);
                 player_mut(&mut loc).known.remove(&ground);
                 player_mut(&mut loc).known.remove(&wet);
                 let unknown = render(&mut renderer, &loc, Mode::Normal, None, 0, 20, 12);
-                cell(&unknown, (9, 4), " ", 232, 232, false);
+                cell(&unknown, (9, 4), " ", 16, 16, false);
             }
         }
     }
@@ -545,7 +564,7 @@ fn adjacent_water_keeps_tile_glyphs_and_continuous_background_without_glue_glyph
                         ((9, 4), " ", left_seen || right_seen),
                         ((10, 4), right_glyph, right_seen),
                     ] {
-                        let (fg, bg) = if seen { (fg, bg) } else { (236, 232) };
+                        let (fg, bg) = if seen { (fg, bg) } else { (236, 16) };
                         cell(&buffer, xy, glyph, fg, bg, false);
                     }
 
@@ -564,7 +583,7 @@ fn adjacent_water_keeps_tile_glyphs_and_continuous_background_without_glue_glyph
                         }
                         let unknown = render(&mut renderer, &loc, Mode::Normal, None, 0, 20, 12);
                         for xy in [(8, 4), (9, 4), (10, 4)] {
-                            cell(&unknown, xy, " ", 232, 232, false);
+                            cell(&unknown, xy, " ", 16, 16, false);
                         }
                     }
                 }

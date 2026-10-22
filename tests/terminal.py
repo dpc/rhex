@@ -226,7 +226,7 @@ def exercise(binary, race, terminal="xterm-256color"):
         game.expect("Level")
         # Preserve the 30-column stats panel, indexed palette and Unicode map.
         assert "Str:" in "".join(game.screen.cells[0][90:])
-        assert game.screen.styles[0][90][:3] == (94, 232, False), (
+        assert game.screen.styles[0][90][:3] == (94, 16, False), (
             game.screen.styles[0][90], bytes(game.transcript[-2000:])
         )
         assert "\u2022" in game.screen.text()
