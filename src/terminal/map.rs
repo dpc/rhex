@@ -438,7 +438,6 @@ impl MapRenderer {
                                 glyph = DOOR_OPEN_CH;
                             } else {
                                 glyph = DOOR_CLOSED_CH;
-                                bg = color::WALL_BG;
                             }
                         }
                         Some(tile::Statue) => glyph = STATUE_CH,

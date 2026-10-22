@@ -597,7 +597,7 @@ fn terrain_has_distinct_rendered_light_steps_but_memory_ignores_live_light() {
             None,
             "#",
             [247, 235, 234, 233, 232, 16],
-            [235, 246, 145, 251, 188, 255],
+            [235, 239, 59, 242, 243, 244],
             true,
         ),
         (
@@ -779,6 +779,54 @@ fn terrain_has_distinct_rendered_light_steps_but_memory_ignores_live_light() {
 }
 
 #[test]
+fn adjacent_walls_share_medium_gray_shades_and_remembered_glue_stays_dark() {
+    use super::color::tests::channels;
+
+    let left = Coordinate::new(0, 2);
+    let right = left + Direction::XY;
+    let mut loc = scene();
+    for coord in [left, right] {
+        loc.map[coord] = tile::Tile::new(tile::Wall);
+    }
+    let mut renderer = MapRenderer::new(UNICODE_DOT);
+    renderer.resize(20, 12);
+    for (light, fg, bg) in [
+        (0, 247, 235),
+        (1, 235, 239),
+        (2, 234, 59),
+        (3, 233, 242),
+        (4, 232, 243),
+        (5, 16, 244),
+        (100, 16, 244),
+    ] {
+        // Walls and their glue sample incident light from adjacent cells.
+        for coord in Coordinate::new(0, 0).range_iter(8) {
+            loc.light_map[coord] = light;
+        }
+        let buffer = render(&mut renderer, &loc, Mode::Normal, None, 0, 20, 12);
+        for xy in [(8, 4), (9, 4), (10, 4)] {
+            cell(&buffer, xy, "#", fg, bg, true);
+        }
+        let background = channels(bg);
+        assert_eq!(background, [background[0]; 3]);
+        assert!(background[0] <= 128);
+        assert!(background[0].abs_diff(channels(fg)[0]) >= 40);
+    }
+    for coord in [left, right] {
+        player_mut(&mut loc).visible.remove(&coord);
+    }
+    for light in [0, 5, 100] {
+        for coord in Coordinate::new(0, 0).range_iter(8) {
+            loc.light_map[coord] = light;
+        }
+        let buffer = render(&mut renderer, &loc, Mode::Normal, None, 0, 20, 12);
+        for xy in [(8, 4), (9, 4), (10, 4)] {
+            cell(&buffer, xy, "#", 236, 16, true);
+        }
+    }
+}
+
+#[test]
 fn shoreline_glue_matches_ground_light_in_both_directions() {
     let left = Coordinate::new(0, 2);
     let right = left + Direction::XY;
@@ -922,7 +970,7 @@ fn projected_terrain_visibility_light_and_glue_have_exact_cells() {
             (cx + 2, cy + 2),
             "×",
             color::STONE_FG.index(true, FULL_LIGHT),
-            color::WALL_BG.index(true, FULL_LIGHT),
+            color::EMPTY_BG.index(true, FULL_LIGHT),
             false,
         );
         cell(

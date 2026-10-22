@@ -72,7 +72,10 @@ pub const STONE_FG: Shade = Shade::new(
 )
 .with_unlit(247);
 pub const WALL_FG: Shade = STONE_FG;
-pub const WALL_BG: Shade = EMPTY_BG;
+// Walls peak at medium gray without dimming floors or forest trunks. Keep the
+// lit ramp above the dark stone glyphs, and preserve zero-light polarity.
+pub const WALL_BG: Shade =
+    Shade::new(Rgb::new(128, 128, 128), Rgb::new(68, 68, 68), NOT_IN_LOS_BG).with_unlit(235);
 /// Earth and foliage retain their color family while gaining intermediate shades.
 pub const GROUND_FG: Shade = Shade::new(
     Rgb::new(175, 215, 95),
