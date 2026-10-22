@@ -25,7 +25,7 @@ impl Type {
             Empty => "nothing",
             Water => "deep water",
             Ground => "forest ground",
-            Thicket => "thicket (hit to clear)",
+            Thicket => "thicket",
             TreeTrunk => "tree trunk",
             ShallowWater => "shallow water",
         }
