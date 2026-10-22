@@ -305,7 +305,9 @@ fn enemy_bodies_and_facing_stay_red_at_every_light_level() {
 fn empty_tile_chests_are_shaded_but_the_legend_is_fully_lit() {
     use crate::game::chest::Chest;
 
-    for (opened, has_item, glyph) in [(false, true, "%"), (true, true, "["), (true, false, "_")] {
+    for (opened, has_item, glyph) in [(false, true, "◼"), (true, true, "◻"), (true, false, "_")]
+    {
+        assert_eq!(ratatui::text::Line::from(glyph).width(), 1);
         for (light, fg) in [(0, 242), (1, 243), (2, 102), (3, 246), (4, 247), (5, 248)] {
             let mut loc = scene();
             let coord = Coordinate::new(0, 2);
@@ -341,7 +343,8 @@ fn chest_memory_survives_turning_without_observing_hidden_mutations() {
     use crate::game::{Action, chest::Chest};
     use hex2d::Angle;
 
-    for (opened, has_item, glyph) in [(false, true, "%"), (true, true, "["), (true, false, "_")] {
+    for (opened, has_item, glyph) in [(false, true, "◼"), (true, true, "◻"), (true, false, "_")]
+    {
         let mut loc = crate::game::fixtures::room();
         let coord = Coordinate::new(2, 0);
         let mut chest =
@@ -414,7 +417,7 @@ fn chest_memory_survives_turning_without_observing_hidden_mutations() {
         let returned = render(&mut renderer, &loc, Mode::Normal, None, 0, 20, 12);
         assert_eq!(returned[xy].symbol(), "•");
         let (x, y) = renderer.coord_to_glyph_xy(other).unwrap();
-        assert_eq!(returned[(x as u16, y as u16)].symbol(), "%");
+        assert_eq!(returned[(x as u16, y as u16)].symbol(), "◼");
         assert!(!loc.remembered_chests.contains_key(&coord));
     }
 }

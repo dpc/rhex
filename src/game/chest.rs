@@ -40,11 +40,11 @@ impl Chest {
     /// Distinguish a closed chest, an open reward, and an exhausted container.
     pub fn glyph(&self) -> char {
         if !self.opened {
-            '%'
+            '◼'
         } else if self.contents.is_empty() {
             '_'
         } else {
-            '['
+            '◻'
         }
     }
 

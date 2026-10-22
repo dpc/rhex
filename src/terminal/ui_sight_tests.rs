@@ -45,13 +45,15 @@ fn chest_map_legend_and_readout_reveal_only_open_visible_contents() {
     assert!(
         entries
             .iter()
-            .any(|e| e.glyph == '%' && e.name == "closed chest")
+            .any(|e| e.glyph == '◼' && e.name == "closed chest")
     );
     assert!(!entries.iter().any(|e| e.name.contains("whistle")));
     assert_eq!(
         Ui::tile_surface_description(c, ui.current_location()),
         "closed chest"
     );
+    let buffer = frame(&mut ui);
+    assert!((0..24).any(|y| row(&buffer, y).starts_with("◼ - closed chest")));
     ui.engine
         .current_location_mut()
         .act(0, game::Action::Interact);
@@ -60,12 +62,14 @@ fn chest_map_legend_and_readout_reveal_only_open_visible_contents() {
     assert!(
         entries
             .iter()
-            .any(|e| e.glyph == '[' && e.name == "open chest: whistle")
+            .any(|e| e.glyph == '◻' && e.name == "open chest: whistle")
     );
     assert_eq!(
         Ui::tile_surface_description(c, ui.current_location()),
         "open chest: whistle"
     );
+    let buffer = frame(&mut ui);
+    assert!((0..24).any(|y| row(&buffer, y).starts_with("◻ - open chest: whistle")));
     let loc = ui.engine.current_location_mut();
     while loc.player().action_cd > 0 {
         loc.skip_act(0);

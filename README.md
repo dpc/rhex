@@ -76,14 +76,14 @@ waits another roughly 200 ms before taking effect.
 
 ### Exploration finds
 
-Face a closed chest (`%`) and press comma to open it. Opening takes extra time
+Face a closed chest (`◼`) and press comma to open it. Opening takes extra time
 and makes noise, and some chests contain nothing. You can see the contents of
-an open chest with loot (`[`); each further comma moves one item into your
+an open chest with loot (`◻`); each further comma moves one item into your
 backpack. If the backpack is full, the item stays in the chest. Empty chests
 (`_`) remain in place. Revisiting a chest does not generate new contents. Its
 state and remaining loot persist when you leave a level and return during the same
-run, without saving to disk. Outside current sight, you see remembered chests
-as the generic `%` symbol.
+run, without saving to disk. Outside current sight, remembered chests retain
+their last-observed symbol.
 
 Short swords sit between knives and swords; clubs need less strength but make
 more attack noise. A buckler offers protection at the cost of louder footsteps.

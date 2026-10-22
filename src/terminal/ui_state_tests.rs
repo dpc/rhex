@@ -775,7 +775,7 @@ fn below_examine_hidden_cells_use_only_known_observations() {
     ui.engine
         .current_location_mut()
         .remembered_chests
-        .insert(cursor, '%');
+        .insert(cursor, '◼');
     assert_eq!(readout(&mut ui), format!("{:30}", "Below: chest"));
     // A remembered chest remains an observation after its live removal.
     ui.engine.current_location_mut().chests.remove(&cursor);

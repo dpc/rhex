@@ -369,7 +369,7 @@ fn opened_partial_and_closed_chests_survive_actual_return_travel() {
     loc.act(0, Action::Interact);
     let expected = loc.chests.clone();
     let remembered = loc.remembered_chests.clone();
-    assert_eq!(remembered[&head], '[');
+    assert_eq!(remembered[&head], '◻');
     let mut engine = Engine::fixture(loc);
     for _ in 0..3 {
         traverse(&mut engine);
