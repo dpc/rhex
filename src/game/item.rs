@@ -246,6 +246,14 @@ impl Item {
         self.category() == Consumable
     }
 
+    /// Describe activating this item without implying that every use consumes it.
+    pub fn use_label(&self) -> &'static str {
+        match self.type_ {
+            HealthPotion => "Drink",
+            _ => "Use",
+        }
+    }
+
     /// Use item
     ///
     /// Returns: true if the item was consumed in the process.

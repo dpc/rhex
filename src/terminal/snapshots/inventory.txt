@@ -1,7 +1,7 @@
 |Inventory:                    Str: 3 DMG: 3  ACC: 3|
 | a - knife                    Int: 3  AC: 2  EV: 2|
 |                              Dex: 3|
-|[ESC] to close...             HP:15/15  MP:15/21  SP:15/21|
+|Letter: actions | ESC: close  HP:15/15  MP:15/21  SP:15/21|
 |                              R:-           L:-|
 |                              F:-           B:-|
 |                              H:-           C:-|

@@ -915,7 +915,7 @@ fn inventory_only_queues_owned_letters_and_clears_removed_rows() {
     player_mut(&mut ui)
         .items_backpack
         .insert('a', Box::new(Item::new(Type::Knife, vec![])));
-    chars(&mut ui, "Iaz", now);
+    chars(&mut ui, "Iz", now);
     assert_eq!(ui.mode, Mode::Inventory(InvMode::View));
     assert!(ui.game_action_queue.is_empty());
     let before = frame(&mut ui, 60, 24);
@@ -938,6 +938,95 @@ fn inventory_only_queues_owned_letters_and_clears_removed_rows() {
     key(&mut ui, KeyCode::Esc, now);
     chars(&mut ui, "Dza", now);
     assert_eq!(ui.game_action_queue, [Equip('a'), Drop_('a')]);
+}
+
+#[test]
+fn inventory_letters_offer_only_valid_actions_without_spending_turns() {
+    for input_mode in [InputMode::Normal, InputMode::Vi] {
+        for (letter, type_, equipped, label, shortcut) in [
+            ('a', Type::Knife, false, "Equip", 'e'),
+            ('D', Type::Plate, false, "Equip", 'e'),
+            ('q', Type::Knife, true, "Unequip", 'e'),
+            ('h', Type::HealthPotion, false, "Drink", 'u'),
+            ('e', Type::Junk, false, "Drop", 'd'),
+        ] {
+            let now = Instant::now();
+            let mut ui = fixture(now);
+            ui.input_mode = input_mode;
+            let item = Box::new(Item::new(type_, vec![]));
+            if equipped {
+                player_mut(&mut ui).equip(item, letter);
+                player_mut(&mut ui).action_cd = 0;
+            } else {
+                player_mut(&mut ui).items_backpack.insert(letter, item);
+            }
+            ui.advance((24, 60), now);
+            let turn = ui.engine.turn();
+            let before = game::fixtures::outcome(ui.current_location());
+            chars(&mut ui, &format!("I{letter}"), now);
+            assert_eq!(ui.mode, Mode::Inventory(InvMode::Actions(letter)));
+            let rendered = frame(&mut ui, 60, 24);
+            let text: String = rendered.content.iter().map(|cell| cell.symbol()).collect();
+            assert!(text.contains(&format!("[{shortcut}] {label}")));
+            assert!(text.contains("[d] Drop"));
+            for unavailable in ["Equip", "Unequip", "Drink", "Use"] {
+                if unavailable != label {
+                    assert!(!text.contains(&format!("] {unavailable}")));
+                }
+            }
+            chars(&mut ui, "z,k", now);
+            key(&mut ui, KeyCode::Enter, now);
+            ui.advance((24, 60), now);
+            assert_eq!(ui.engine.turn(), turn);
+            assert_eq!(before, game::fixtures::outcome(ui.current_location()));
+            assert!(ui.game_action_queue.is_empty());
+            key(&mut ui, KeyCode::Esc, now);
+            assert_eq!(ui.mode, Mode::Inventory(InvMode::View));
+            key(&mut ui, KeyCode::Esc, now);
+            assert_eq!(ui.mode, Mode::Normal);
+            assert!(ui.game_action_queue.is_empty());
+
+            chars(&mut ui, &format!("I{letter}{shortcut}"), now);
+            let action = if shortcut == 'd' {
+                Drop_(letter)
+            } else {
+                Equip(letter)
+            };
+            assert_eq!(ui.game_action_queue, [action]);
+            assert_eq!(ui.mode, Mode::Normal);
+            ui.advance((24, 60), now + Duration::from_secs(1));
+            assert_eq!(ui.engine.turn(), 1);
+            if equipped {
+                assert!(ui.player().items_backpack.contains_key(&letter));
+                assert!(ui.player().items_equipped.is_empty());
+            } else if type_ == Type::HealthPotion || type_ == Type::Junk {
+                assert!(!ui.player().item_letter_taken(letter));
+            } else {
+                assert!(!ui.player().items_backpack.contains_key(&letter));
+                assert!(
+                    ui.player()
+                        .items_equipped
+                        .values()
+                        .any(|(ch, _)| *ch == letter)
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn inventory_action_menu_revalidates_removed_items() {
+    let now = Instant::now();
+    let mut ui = fixture(now);
+    player_mut(&mut ui)
+        .items_backpack
+        .insert('a', Box::new(Item::new(Type::Knife, vec![])));
+    chars(&mut ui, "Ia", now);
+    player_mut(&mut ui).items_backpack.clear();
+    chars(&mut ui, "ed", now);
+    assert!(ui.game_action_queue.is_empty());
+    key(&mut ui, KeyCode::Esc, now);
+    assert_eq!(ui.mode, Mode::Inventory(InvMode::View));
 }
 
 #[test]

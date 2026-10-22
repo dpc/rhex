@@ -51,6 +51,19 @@ Moving into a closed door still opens it without entering. Comma does not clear
 thickets or use items, exits, or objects underfoot. Use `E` for inventory items
 and `<`/`>` for the passage you are standing on.
 
+### Inventory actions
+
+Press `I`, then an item's letter to see its available actions. You can equip
+backpack equipment, unequip equipped items, drink health potions, or drop any
+owned item. Press the shortcut beside the action: `e` for Equip/Unequip,
+`u` for Drink/Use, or `d` for Drop.
+
+Press `Esc` to return to inventory, then `Esc` again to close it. You spend no
+turns opening menus, selecting an item, or cancelling. Actions follow the same
+game rules and costs as `E` (equip/use or unequip) and `D` (drop). You can still
+press either shortcut followed by an item letter.
+Use inventory letters in either movement input mode.
+
 ### Reading the sidebar
 
 Read current/maximum HP, MP and SP in one row. Red values indicate a decrease

@@ -16,3 +16,4 @@ terminfo
 Crossterm
 Ratatui
 lockfile
+[Uu]nequip

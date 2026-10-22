@@ -80,6 +80,8 @@ impl Windows {
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub enum InvMode {
     View,
+    /// Choose an action for an owned inventory letter.
+    Actions(char),
     Equip,
     Drop_,
 }
@@ -719,9 +721,23 @@ impl Ui {
                 match key {
                     KEY_ESC => self.mode_switch_to(Mode::Normal),
                     _ => match ch {
-                        'a'..='z' | 'A'..='Z' => {}
+                        'a'..='z' | 'A'..='Z' if self.player().item_letter_taken(ch) => {
+                            self.mode_switch_to(Mode::Inventory(InvMode::Actions(ch)));
+                        }
                         _ => {}
                     },
+                }
+            }
+            Mode::Inventory(InvMode::Actions(ch)) => {
+                if key == KEY_ESC {
+                    self.mode_switch_to(Mode::Inventory(InvMode::View));
+                } else if let Some((_, _, action)) = self
+                    .inventory_actions(ch)
+                    .into_iter()
+                    .find(|(shortcut, _, _)| *shortcut as i32 == key)
+                {
+                    self.queue_action(action);
+                    self.mode_switch_to(Mode::Normal);
                 }
             }
             Mode::Inventory(InvMode::Drop_) => {
@@ -1063,6 +1079,25 @@ impl Ui {
         }
     }
 
+    /// Derive both menu rows and accepted input from current item capabilities.
+    fn inventory_actions(&self, ch: char) -> Vec<(char, &'static str, game::Action)> {
+        let player = self.player();
+        let mut actions = Vec::new();
+        if let Some(item) = player.items_backpack.get(&ch) {
+            if item.is_usable() {
+                actions.push(('u', item.use_label(), Equip(ch)));
+            } else if item.slot().is_some() {
+                actions.push(('e', "Equip", Equip(ch)));
+            }
+        } else if player.item_letter_taken(ch) {
+            actions.push(('e', "Unequip", Equip(ch)));
+        } else {
+            return actions;
+        }
+        actions.push(('d', "Drop", Drop_(ch)));
+        actions
+    }
+
     fn draw_inventory(&self) {
         self.windows.map.clear();
         let window = &self.windows.map;
@@ -1071,6 +1106,22 @@ impl Ui {
         window.move_to(0, 0);
 
         window.set_style(self.text_color);
+        if let Mode::Inventory(InvMode::Actions(ch)) = self.mode {
+            let item = player.items_backpack.get(&ch).or_else(|| {
+                player
+                    .items_equipped
+                    .values()
+                    .find_map(|(letter, item)| (*letter == ch).then_some(item))
+            });
+            if let Some(item) = item {
+                window.write(&format!("{} - {}\n\n", ch, item.description()));
+                for (shortcut, label, _) in self.inventory_actions(ch) {
+                    window.write(&format!(" [{}] {}\n", shortcut, label));
+                }
+            }
+            window.write("\n[ESC] back to inventory\n");
+            return;
+        }
         if !player.items_equipped.is_empty() {
             window.write("Equipped: \n");
             let mut equipped: Vec<_> = player.items_equipped.iter().collect();
@@ -1090,7 +1141,11 @@ impl Ui {
             }
         }
 
-        window.write("\n[ESC] to close...\n");
+        if self.mode == Mode::Inventory(InvMode::View) {
+            window.write("\nLetter: actions | ESC: close\n");
+        } else {
+            window.write("\n[ESC] to close...\n");
+        }
     }
 
     fn draw_stats(&self) {
@@ -1374,7 +1429,7 @@ impl Ui {
         window.write("Go to exit: G, then > or <\n");
         window.write("Examine: x\n");
         window.write("Interact in front (pick item, else open/close door): ,\n");
-        window.write("Look at Inventory: I\n");
+        window.write("Inventory: I, item letter, then action (ESC goes back)\n");
         window.write("Equip/Use: E\n");
         window.write("Drop: D\n");
         window.write("Ranged/Throw: f (not fully working)\n");
