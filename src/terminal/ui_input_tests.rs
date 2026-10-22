@@ -2,6 +2,47 @@ use super::*;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 #[test]
+fn shifted_strafing_uses_shared_moves_in_both_modes_and_all_facings() {
+    use hex2d::{XY, XZ, YX, YZ, ZX, ZY};
+
+    for (facing, left, right) in [
+        (YZ, YX, XZ),
+        (XZ, YZ, XY),
+        (XY, XZ, ZY),
+        (ZY, XY, ZX),
+        (ZX, ZY, YX),
+        (YX, ZX, YZ),
+    ] {
+        for mode in [InputMode::Normal, InputMode::Vi] {
+            for (lower, upper, angle, direction) in
+                [('h', 'H', Left, left), ('l', 'L', Right, right)]
+            {
+                for (ch, modifiers) in [
+                    (upper, KeyModifiers::NONE),
+                    (upper, KeyModifiers::SHIFT),
+                    (lower, KeyModifiers::SHIFT),
+                ] {
+                    let key = input::game_key(KeyEvent::new(KeyCode::Char(ch), modifiers)).unwrap();
+                    let Some(Game(action)) = Ui::key_to_action_normal(mode, key) else {
+                        panic!("strafe key did not produce a game action");
+                    };
+                    assert_eq!(action, Move(angle));
+                    let mut loc = game::fixtures::room();
+                    loc.actors_byid.get_mut(&0).unwrap().pos.dir = facing;
+                    let origin = loc.player().coord();
+                    loc.act(0, action);
+                    assert_eq!(
+                        loc.player().pos,
+                        Position::new(origin + Coordinate::from(direction), facing)
+                    );
+                    game::fixtures::occupancy(&loc);
+                }
+            }
+        }
+    }
+}
+
+#[test]
 fn left_and_right_keys_rotate_actor_in_opposite_directions() {
     use hex2d::{XY, XZ, YX, YZ, ZX, ZY};
 
@@ -130,7 +171,7 @@ fn ui_commands_are_not_game_actions() {
 
 #[test]
 fn unmapped_keys_do_not_gain_vi_or_global_commands() {
-    for (mode, keys) in [(InputMode::Normal, "uiHLK"), (InputMode::Vi, "adwseW")] {
+    for (mode, keys) in [(InputMode::Normal, "uiK"), (InputMode::Vi, "adwseW")] {
         for key in keys.chars().chain(['z', ' ', '\n']) {
             assert!(
                 Ui::key_to_action_normal(mode, key as i32).is_none(),

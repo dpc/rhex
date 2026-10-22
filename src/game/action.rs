@@ -4,6 +4,7 @@ use hex2d::{Angle, Coordinate};
 pub enum Action {
     Wait,
     Turn(Angle),
+    /// Step relative to facing without turning; Left/Right strafe front-left/right.
     Move(Angle),
     Charge,
     Spin(Angle),

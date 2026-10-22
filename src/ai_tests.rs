@@ -8,6 +8,31 @@ use hex2d::{Position, XY};
 use rand::{SeedableRng, rngs::SmallRng};
 
 #[test]
+fn creatures_strafe_toward_forward_diagonal_cues_without_turning() {
+    for &facing in hex2d::Direction::all() {
+        for angle in [Left, Right] {
+            let mut loc = fixtures::room();
+            let origin = Coordinate::new(2, -1);
+            let id = loc.spawn(Actor::new(actor::Race::Rat, Position::new(origin, facing)));
+            let target = origin + Coordinate::from(facing + angle);
+            let actor = loc.actors_byid.get_mut(&id).unwrap();
+            actor.visible.clear();
+            actor.heard.clear();
+            actor
+                .heard
+                .insert(target, Noise::Creature(actor::Race::Human));
+            let mut rng = SmallRng::seed_from_u64(0);
+            let action = Simple.action(id, &loc, &mut rng);
+            assert_eq!(action, Action::Move(angle));
+            loc.act(id, action);
+            assert_eq!(loc.actors_byid[&id].pos, Position::new(target, facing));
+            assert!(loc.actors_byid[&id].acted);
+            fixtures::occupancy(&loc);
+        }
+    }
+}
+
+#[test]
 fn visible_player_precedes_items_and_heard_targets() {
     let mut loc = fixtures::room();
     let coord = Coordinate::new(-1, 1);

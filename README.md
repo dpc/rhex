@@ -29,11 +29,14 @@ or a separate `tput` program. Run from a writable directory: the game writes
 Press any key at the introduction, then choose a race (`a` for human).
 In either input mode, use `h`/`l` or the Left/Right arrows to turn left/right, and
 `k`/`j` or the Up/Down arrows to move forward/backward.
+In either input mode, press Shift-H/Shift-L to strafe front-left/front-right
+without changing your facing. Creatures use the same `Move` actions to approach
+targets.
 In normal input mode, you can also use `w`/`s` to move forward/backward, `a`/`d`
 to turn, and `q`/`e` to sidestep. Press `.` to wait, `,` to interact in front,
 `I` to open inventory, and `?` for help.
 Press F2 to toggle additional Vi-style controls (`u`/`i` spin,
-`H`/`L` sidestep, `K` walks automatically, and `q` quits instead of sidestepping).
+`K` walks automatically, and `q` quits instead of sidestepping).
 Use these movement aliases during gameplay; in menus and inventory, use letters
 to select entries.
 

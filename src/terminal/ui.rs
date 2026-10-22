@@ -628,8 +628,8 @@ impl Ui {
             (KEY_LOWC, _) => Game(Charge),
             (KEY_LOWU, true) => Game(Spin(Left)),
             (KEY_LOWI, true) => Game(Spin(Right)),
-            (KEY_CAPH, true) | (KEY_LOWQ, false) => Game(Move(Left)),
-            (KEY_CAPL, true) | (KEY_LOWE, false) => Game(Move(Right)),
+            (KEY_CAPH, _) | (KEY_LOWQ, false) => Game(Move(Left)),
+            (KEY_CAPL, _) | (KEY_LOWE, false) => Game(Move(Right)),
             (KEY_LOWJ, _) | (KEY_LOWS, false) | (input::DOWN, _) => Game(Move(Back)),
             (KEY_DOT, _) => Game(Wait),
             (KEY_COMMA, _) => Game(Interact),
@@ -1334,9 +1334,9 @@ impl Ui {
         ));
         window.write("Turn left/right: h/l or Left/Right arrows\n");
         window.write("Move forward/back: k/j or Up/Down arrows\n");
+        window.write("Strafe/attack front-left/right: Shift + h/l (keep facing)\n");
         if self.in_vi_input_mode() {
             window.write("Move/attack: hjklui\n");
-            window.write("Strafe/attack: Shift + h/l\n");
             window.write("Automove: shift + k\n");
         } else {
             window.write("Move/attack: awsdqe\n");

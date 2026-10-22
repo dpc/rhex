@@ -18,6 +18,73 @@ fn ready_act(loc: &mut Location, action: Action) {
 }
 
 #[test]
+fn strafing_preserves_shared_movement_collision_cost_and_sound_rules() {
+    for &facing in Direction::all() {
+        for angle in [Angle::Left, Angle::Right] {
+            for player in [true, false] {
+                for obstacle in ["floor", "wall", "door", "creature", "thicket"] {
+                    let mut loc = fixtures::room();
+                    let id = if player {
+                        loc.actors_byid.get_mut(&0).unwrap().pos.dir = facing;
+                        0
+                    } else {
+                        loc.spawn(Actor::new(
+                            Race::Rat,
+                            Position::new(Coordinate::new(2, -1), facing),
+                        ))
+                    };
+                    let before = loc.actors_byid[&id].pos;
+                    let target = before.coord + Coordinate::from(facing + angle);
+                    match obstacle {
+                        "wall" => loc.map[target].type_ = tile::Wall,
+                        "door" => loc.map[target].feature = Some(tile::Door(false)),
+                        "thicket" => loc.map[target].type_ = tile::Thicket,
+                        "creature" => {
+                            loc.spawn(Actor::new(Race::Troll, Position::new(target, facing)));
+                        }
+                        _ => {}
+                    }
+                    let sp = loc.actors_byid[&id].sp;
+                    loc.act(id, Action::Move(angle));
+                    let actor = &loc.actors_byid[&id];
+                    assert_eq!(actor.pos.dir, facing);
+                    assert_eq!(
+                        actor.coord(),
+                        if obstacle == "floor" {
+                            target
+                        } else {
+                            before.coord
+                        }
+                    );
+                    assert!(actor.acted);
+                    assert_eq!(actor.action_cd, 0);
+                    match obstacle {
+                        "floor" => {
+                            assert_eq!(actor.sp, sp);
+                            assert!(actor.heard.contains_key(&target));
+                            assert!(actor.did_attack.is_empty());
+                        }
+                        "wall" => {
+                            assert_eq!(actor.sp, sp);
+                            assert!(loc.sound_events.is_empty());
+                        }
+                        "door" => {
+                            assert_eq!(actor.sp, sp);
+                            assert_eq!(loc.map[target].feature, Some(tile::Door(true)));
+                            assert!(actor.heard.contains_key(&before.coord));
+                        }
+                        "creature" => assert_eq!(actor.did_attack.len(), 1),
+                        "thicket" => assert_eq!(loc.map[target].type_, tile::Ground),
+                        _ => unreachable!(),
+                    }
+                    fixtures::occupancy(&loc);
+                }
+            }
+        }
+    }
+}
+
+#[test]
 fn observed_hit_events_require_both_visible_participants_and_survive_removal() {
     let mut loc = fixtures::room();
     let source = Actor::new(Race::Troll, Position::new(Coordinate::new(1, -1), XY));

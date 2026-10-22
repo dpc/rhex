@@ -123,6 +123,10 @@ fn go_to(
             return game::Action::Move(Forward);
         } else {
             let rdir = ndir - astate.pos.dir;
+            // Forward diagonals share the player's facing-preserving movement.
+            if matches!(rdir, Left | Right) {
+                return game::Action::Move(rdir);
+            }
             let rdir = match rdir {
                 Left | LeftBack => Left,
                 Back => {
