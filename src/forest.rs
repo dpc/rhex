@@ -21,6 +21,8 @@ pub const RADIUS: i32 = 16;
 /// Generate a forest without retries; routes may cross shallows, never deep water.
 pub fn generate(depth: u32, seed: u64) -> (Map, Actors, Items) {
     let mut rng = SmallRng::seed_from_u64(seed);
+    // Shape draws must not move the creek, grove candidates, or trail RNG stream.
+    let mut shapes = rng.clone();
     let origin = Coordinate::new(0, 0);
     let mut map = Map::default();
     for c in origin.range_iter(RADIUS) {
@@ -40,7 +42,7 @@ pub fn generate(depth: u32, seed: u64) -> (Map, Actors, Items) {
             continue;
         }
         groves.push((center, radius));
-        paint(&mut map, center, radius, tile::TreeTrunk);
+        paint_formation(&mut map, center, radius, tile::TreeTrunk, &mut shapes);
     }
 
     // A meandering creek has a shallow bank and intermittent deep channel.
@@ -58,7 +60,7 @@ pub fn generate(depth: u32, seed: u64) -> (Map, Actors, Items) {
         map[c] = Tile::new(tile::Water);
     }
     let pond = Coordinate::new(-8, 7 + rng.random_range(-1..=1));
-    paint(&mut map, pond, 3, tile::ShallowWater);
+    paint_formation(&mut map, pond, 3, tile::ShallowWater, &mut shapes);
     paint(&mut map, pond, 1, tile::Water);
 
     let clearings = [
@@ -70,7 +72,7 @@ pub fn generate(depth: u32, seed: u64) -> (Map, Actors, Items) {
     ];
     // Openings have dark edges and a single small source of canopy light.
     for &center in &clearings {
-        paint(&mut map, center, 2, tile::Ground);
+        paint_formation(&mut map, center, 2, tile::Ground, &mut shapes);
         map[center].light = 5;
     }
     // Water and openings can clip a grove; don't leave isolated trunk pixels.
@@ -133,6 +135,29 @@ fn paint(map: &mut Map, center: Coordinate, radius: i32, terrain: tile::Type) {
         if Coordinate::new(0, 0).distance(c) <= RADIUS {
             map[c] = Tile::new(terrain);
         }
+    }
+}
+
+/// Overlapping lobes give larger formations uneven edges without pixel noise.
+/// Keep a solid radius-one core for spawns/light, and stay inside the original
+/// envelope so separated groves and the pond's shallow bank remain intact.
+fn paint_formation(
+    map: &mut Map,
+    center: Coordinate,
+    radius: i32,
+    terrain: tile::Type,
+    rng: &mut SmallRng,
+) {
+    if radius == 1 {
+        paint(map, center, radius, terrain);
+        return;
+    }
+    paint(map, center, radius - 1, terrain);
+    let neighbors = center.neighbors();
+    let first = rng.random_range(0..6);
+    let second = (first + rng.random_range(1..=2)) % 6;
+    for index in [first, second] {
+        paint(map, neighbors[index], radius - 1, terrain);
     }
 }
 

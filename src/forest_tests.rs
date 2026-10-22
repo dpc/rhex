@@ -44,6 +44,11 @@ fn check(seed: u64) {
             }
         }
     }
+    assert!(actors.keys().all(|c| reached.contains(c)));
+    assert_eq!(
+        cells.iter().filter(|&&c| map[c].feature.is_some()).count(),
+        1
+    );
     for &c in &cells {
         if map[c].light > 0 || map[c].feature == Some(tile::ForestPath) {
             assert!(
@@ -65,6 +70,44 @@ fn check(seed: u64) {
             assert_eq!(loc.light_map[c], 5);
             assert!(c.neighbors().iter().all(|&n| loc.light_map[n] > 0));
         }
+    }
+}
+
+#[test]
+fn formations_have_connected_irregular_edges_and_solid_cores() {
+    let center = Coordinate::new(0, 0);
+    for radius in [2, 3] {
+        let mut outlines = HashSet::new();
+        for seed in 0..64 {
+            let mut map = Map::default();
+            paint_formation(
+                &mut map,
+                center,
+                radius,
+                tile::Ground,
+                &mut SmallRng::seed_from_u64(seed),
+            );
+            let cells: Vec<_> = center.range_iter(radius + 1).collect();
+            let painted = |c| map[c].type_ == tile::Ground;
+            assert!(center.range_iter(radius - 1).all(painted));
+            assert!(cells.iter().filter(|&&c| painted(c)).all(|&c| {
+                center.distance(c) <= radius
+                    && c.neighbors()
+                        .iter()
+                        .any(|&n| painted(n) && center.distance(n) < center.distance(c))
+                    || c == center
+            }));
+            // Every outer ring has both lobes and recesses, not a regular hex.
+            let edge: Vec<_> = cells
+                .iter()
+                .filter(|&&c| center.distance(c) == radius)
+                .map(|&c| painted(c))
+                .collect();
+            assert!(edge.iter().any(|&v| v));
+            assert!(edge.iter().any(|&v| !v));
+            outlines.insert(edge);
+        }
+        assert!(outlines.len() >= 6, "seeded outlines should vary");
     }
 }
 
