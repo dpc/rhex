@@ -45,6 +45,8 @@ pub struct Location {
     pub items: Items, // items on the floor
     /// Persistent containers, independent of loose ground items.
     pub chests: HashMap<Coordinate, super::chest::Chest>,
+    /// Last player-observed container glyphs, retained with this level.
+    pub remembered_chests: HashMap<Coordinate, char>,
     /// Player interaction feedback awaiting presentation.
     pub messages: Vec<String>,
     pub light_map: LightMap, // light intensity at a given coordinate
@@ -93,6 +95,7 @@ impl Location {
             map,
             items: Default::default(),
             chests: Default::default(),
+            remembered_chests: Default::default(),
             messages: Vec::new(),
             light_map: Default::default(),
             level: 0,
@@ -141,6 +144,7 @@ impl Location {
             actors_dead: Default::default(),
             items,
             chests: Default::default(),
+            remembered_chests: Default::default(),
             messages: Vec::new(),
             map,
             level: level as i32,
@@ -413,6 +417,24 @@ impl Location {
             actor.refresh_sight(self);
             self.actors_byid.insert(id, actor);
         }
+        self.remember_visible_chests();
+    }
+
+    /// Snapshot only current sight, never the swept LOS from a previous facing.
+    fn remember_visible_chests(&mut self) {
+        let Some(player) = self.player_id.and_then(|id| self.actors_byid.get(&id)) else {
+            return;
+        };
+        if player.is_dead() {
+            return;
+        }
+        for coord in &player.visible {
+            if let Some(chest) = self.chests.get(coord) {
+                self.remembered_chests.insert(*coord, chest.glyph());
+            } else {
+                self.remembered_chests.remove(coord);
+            }
+        }
     }
 
     pub fn post_any_tick(&mut self) {
@@ -454,6 +476,7 @@ impl Location {
         );
 
         self.refresh_changed_light();
+        self.remember_visible_chests();
         self.resolve_player_sight();
         self.resolve_sounds();
     }

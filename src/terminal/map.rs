@@ -445,9 +445,14 @@ impl MapRenderer {
                         Some(tile::ForestPath) => glyph = '>',
                         Some(tile::Entrance) => glyph = '<',
                     }
-                    // Unseen containers reveal only their presence, never contents.
-                    if let Some(chest) = cur_loc.chests.get(&c) {
-                        glyph = if visible { chest.glyph() } else { '%' };
+                    // Hidden containers use observations, not live contents or presence.
+                    let chest_glyph = if visible {
+                        cur_loc.chests.get(&c).map(|chest| chest.glyph())
+                    } else {
+                        cur_loc.remembered_chests.get(&c).copied()
+                    };
+                    if let Some(chest_glyph) = chest_glyph {
+                        glyph = chest_glyph;
                         if t.is_some_and(|t| t.feature.is_none()) {
                             fg = color::EMPTY_FG;
                         }

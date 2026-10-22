@@ -368,12 +368,17 @@ fn opened_partial_and_closed_chests_survive_actual_return_travel() {
     }
     loc.act(0, Action::Interact);
     let expected = loc.chests.clone();
+    let remembered = loc.remembered_chests.clone();
+    assert_eq!(remembered[&head], '[');
     let mut engine = Engine::fixture(loc);
     for _ in 0..3 {
         traverse(&mut engine);
+        assert_eq!(engine.locations[0].remembered_chests, remembered);
+        assert!(engine.current_location().remembered_chests.is_empty());
         let old_rng = engine.locations[0].rng.clone().random::<u64>();
         traverse(&mut engine);
         assert_eq!(engine.current_location().chests, expected);
+        assert_eq!(engine.current_location().remembered_chests, remembered);
         assert_eq!(
             engine.current_location().rng.clone().random::<u64>(),
             old_rng

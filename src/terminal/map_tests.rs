@@ -152,6 +152,89 @@ fn empty_tile_chests_keep_their_palette_in_every_light_band() {
 }
 
 #[test]
+fn chest_memory_survives_turning_without_observing_hidden_mutations() {
+    use crate::game::{Action, chest::Chest};
+    use hex2d::Angle;
+
+    for (opened, has_item, glyph) in [(false, true, "%"), (true, true, "["), (true, false, "_")] {
+        let mut loc = crate::game::fixtures::room();
+        let coord = Coordinate::new(2, 0);
+        let mut chest =
+            Chest::new(has_item.then(|| Box::new(Item::new(item::Type::Whistle, vec![]))));
+        chest.opened = opened;
+        loc.chests.insert(coord, chest);
+        loc.post_any_tick();
+        assert!(loc.player().sees(coord));
+        let mut renderer = MapRenderer::new(UNICODE_DOT);
+        renderer.resize(20, 12);
+        let visible = render(&mut renderer, &loc, Mode::Normal, None, 0, 20, 12);
+        let (x, y) = renderer.coord_to_glyph_xy(coord).unwrap();
+        let xy = (x as u16, y as u16);
+        assert_eq!(visible[xy].symbol(), glyph);
+
+        loc.act(0, Action::Turn(Angle::Back));
+        assert!(!loc.player().sees(coord));
+        let hidden = render(&mut renderer, &loc, Mode::Normal, None, 0, 20, 12);
+        cell(
+            &hidden,
+            xy,
+            glyph,
+            color::REMEMBERED_TERRAIN_FG,
+            color::EMPTY_BG[3],
+            false,
+        );
+        assert!(
+            !renderer
+                .sight_entries(&loc)
+                .iter()
+                .any(|e| e.name.contains("chest"))
+        );
+        while loc.player().action_cd > 0 {
+            loc.skip_act(0);
+        }
+        loc.act(0, Action::Turn(Angle::Back));
+        let returned = render(&mut renderer, &loc, Mode::Normal, None, 0, 20, 12);
+        assert_eq!(returned[xy].symbol(), glyph);
+        while loc.player().action_cd > 0 {
+            loc.skip_act(0);
+        }
+        loc.act(0, Action::Turn(Angle::Back));
+
+        // Neither changing contents nor removing the hidden container changes memory.
+        let chest = loc.chests.get_mut(&coord).unwrap();
+        chest.opened = true;
+        chest.contents.clear();
+        loc.post_any_tick();
+        let mutated = render(&mut renderer, &loc, Mode::Normal, None, 0, 20, 12);
+        assert_eq!(hidden, mutated);
+        loc.chests.remove(&coord);
+        loc.post_any_tick();
+        let removed = render(&mut renderer, &loc, Mode::Normal, None, 0, 20, 12);
+        assert_eq!(hidden, removed);
+
+        // A new hidden container on known terrain must not appear either.
+        let other = Coordinate::new(3, 0);
+        loc.chests.insert(other, Chest::new([]));
+        loc.post_any_tick();
+        assert!(!loc.remembered_chests.contains_key(&other));
+        let added = render(&mut renderer, &loc, Mode::Normal, None, 0, 20, 12);
+        assert_eq!(hidden, added);
+
+        // Looking back observes the removal and the newly closed chest.
+        while loc.player().action_cd > 0 {
+            loc.skip_act(0);
+        }
+        loc.act(0, Action::Turn(Angle::Back));
+        assert!(loc.player().sees(coord));
+        let returned = render(&mut renderer, &loc, Mode::Normal, None, 0, 20, 12);
+        assert_eq!(returned[xy].symbol(), "•");
+        let (x, y) = renderer.coord_to_glyph_xy(other).unwrap();
+        assert_eq!(returned[(x as u16, y as u16)].symbol(), "%");
+        assert!(!loc.remembered_chests.contains_key(&coord));
+    }
+}
+
+#[test]
 fn actor_bodies_inherit_terrain_background_through_facing_and_overlays() {
     for terrain in [tile::Empty, tile::Ground, tile::ShallowWater] {
         for light in [1, 4] {
