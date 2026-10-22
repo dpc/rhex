@@ -412,7 +412,7 @@ fn unlit_dots_and_remembered_terrain_are_subdued_without_recoloring_other_terrai
             [16, 16, 22],
             false,
         ),
-        (tile::Thicket, None, "%", [22, 22, 28], [16, 16, 22], false),
+        (tile::Thicket, None, "+", [22, 22, 28], [16, 16, 22], false),
         (
             tile::TreeTrunk,
             None,

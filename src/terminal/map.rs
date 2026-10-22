@@ -503,7 +503,7 @@ impl MapRenderer {
                 bold = true;
                 (color::TRUNK_FG, color::FOREST_BG, WALL_CH)
             }
-            Some(tile::Thicket) => (color::THICKET_FG, color::FOREST_BG, '%'),
+            Some(tile::Thicket) => (color::THICKET_FG, color::FOREST_BG, '+'),
             None => (color::EMPTY_FG, color::EMPTY_BG, '?'),
         };
 

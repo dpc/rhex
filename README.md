@@ -135,7 +135,7 @@ while standing on a passage to use it. Check the tile readout for its destinatio
 Press `G`, then `>` or `<`, to route to the nearest known passage without using it.
 
 Dark Forests have narrow paths through dense undergrowth and large brown tree
-trunks, with small lit canopy openings, a winding creek and a pond. Green `%`
+trunks, with small lit canopy openings, a winding creek and a pond. Green `+`
 thickets block movement and sight. Hit them by moving forward or diagonally
 forward into them. The hit consumes an action and makes noise, leaving ground
 you can enter on the next move. You can clear thickets unarmed, subject to the
