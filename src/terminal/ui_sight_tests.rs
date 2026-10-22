@@ -269,7 +269,7 @@ fn common_terrain_stays_on_the_map_but_not_in_the_legend() {
         (tile::Water, '~'),
         (tile::ShallowWater, ','),
         (tile::TreeTrunk, '#'),
-        (tile::Thicket, '+'),
+        (tile::Thicket, 'γ'),
     ] {
         let c = Coordinate::new(0, 2);
         let mut loc = fixtures::room();

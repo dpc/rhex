@@ -139,6 +139,7 @@ fn full_lines_consume_one_newline_and_preserve_explicit_blank_lines() {
         ("abcd\n\nZ", ["abcd", "    ", "Z   ", "    "]),
         ("abcd\n\n\nZ", ["abcd", "    ", "    ", "Z   "]),
         ("•é@b\nZ", ["•é@b", "Z   ", "    ", "    "]),
+        ("γγγγ\nZ", ["γγγγ", "Z   ", "    ", "    "]),
         ("界界\nZ", ["界 界 ", "Z   ", "    ", "    "]),
     ] {
         let window = Window::new(4, 4, 0, 0);

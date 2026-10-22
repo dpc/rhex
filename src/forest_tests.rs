@@ -85,7 +85,7 @@ proptest! {
 fn print_forest_atlas() {
     for seed in [0, 7, 42] {
         let (map, _, _) = generate(1, seed);
-        println!("seed {seed}: # trunk, + thicket, . ground, , shallow, ~ deep, * clearing");
+        println!("seed {seed}: # trunk, γ thicket, . ground, , shallow, ~ deep, * clearing");
         for y in -RADIUS..=RADIUS {
             let mut line = " ".repeat((y + RADIUS) as usize);
             for x in -RADIUS..=RADIUS {
@@ -98,7 +98,7 @@ fn print_forest_atlas() {
                 } else {
                     match t.type_ {
                         tile::Ground => '.',
-                        tile::Thicket => '+',
+                        tile::Thicket => 'γ',
                         tile::TreeTrunk => '#',
                         tile::ShallowWater => ',',
                         tile::Water => '~',

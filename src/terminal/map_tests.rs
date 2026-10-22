@@ -447,7 +447,7 @@ fn terrain_has_graduated_rgb_shading_but_memory_ignores_live_light() {
         (
             tile::Thicket,
             None,
-            "+",
+            "γ",
             [22, 28, 70, 71, 77, 119],
             [16, 16, 16, 22, 22, 22],
             false,
