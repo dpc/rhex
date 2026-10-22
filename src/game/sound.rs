@@ -37,7 +37,7 @@ pub struct Cell {
 /// Player-permitted presentation data, independent of actor lifetime.
 #[derive(Clone, Debug)]
 pub struct ObservedSound {
-    /// Only cells visible when the sound was resolved.
+    /// Cells visible at resolution, excluding this emission's own source.
     pub cells: Vec<Cell>,
     /// Audible origin unseen at capture; reveals no underlying world content.
     pub hidden_source: Option<Coordinate>,

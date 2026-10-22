@@ -273,13 +273,14 @@ fn descent_discards_staged_and_playing_sounds_before_first_new_level_action() {
     let origin = ui.player().coord();
     ui.queue_action(game::Action::Turn(Angle::Right));
     ui.advance((24, 60), now);
-    assert!(
+    // Source exclusion can leave the early phases empty; check the whole wave.
+    assert!((0..5).any(|tick| {
         ui.map_renderer
             .animations
-            .sound_cells(Duration::ZERO)
+            .sound_cells(Duration::from_millis(tick * 100))
             .next()
             .is_some()
-    );
+    }));
     ui.engine.current_location_mut().map[origin].feature = Some(tile::Stairs);
     ui.queue_action(game::Action::Descend);
     ui.advance((24, 60), now + Duration::from_millis(100));
@@ -288,22 +289,22 @@ fn descent_discards_staged_and_playing_sounds_before_first_new_level_action() {
     assert!(ui.current_location().sound_events.is_empty());
     assert!(ui.player().heard.is_empty());
     assert!(ui.player().pending_noises.is_empty());
-    assert!(
+    assert!((0..5).all(|tick| {
         ui.map_renderer
             .animations
-            .sound_cells(Duration::ZERO)
+            .sound_cells(Duration::from_millis(tick * 100))
             .next()
             .is_none()
-    );
+    }));
     ui.queue_action(game::Action::Turn(Angle::Right));
     ui.advance((24, 60), now + Duration::from_millis(200));
-    assert!(
+    assert!((2..7).any(|tick| {
         ui.map_renderer
             .animations
-            .sound_cells(Duration::from_millis(200))
+            .sound_cells(Duration::from_millis(tick * 100))
             .next()
             .is_some()
-    );
+    }));
 }
 
 #[test]

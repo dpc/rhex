@@ -56,17 +56,11 @@ fn lethal_melee_keeps_resolved_geometry_after_occupancy_and_actor_removal() {
     player_mut(&mut loc).stats.melee_dmg = 1000;
     ready_act(&mut loc, Action::Move(Angle::Forward));
     assert!(loc.actors_byid[&id].is_dead());
-    assert_eq!(loc.sound_events.len(), 1);
+    assert_eq!(loc.sound_events.len(), 2);
     assert!(loc.player().heard.contains_key(&impact));
-    assert_eq!(
-        loc.sound_events[0]
-            .cells
-            .iter()
-            .find(|c| c.hops == 0)
-            .unwrap()
-            .coord,
-        impact
-    );
+    assert!(loc.player().heard.contains_key(&source));
+    assert!(loc.sound_events[1].cells.iter().all(|c| c.coord != impact));
+    assert!(loc.sound_events[1].cells.iter().any(|c| c.coord == source));
     assert!(!loc.actors_coord_to_id.contains_key(&impact));
     loc.remove(id);
     ready_act(&mut loc, Action::Move(Angle::Forward));
@@ -226,12 +220,11 @@ fn melee_samples_hit_miss_armor_stamina_and_cooldown() {
         ready_act(&mut loc, Action::Move(Angle::Forward));
         let result = &loc.player().did_attack[0];
         assert_eq!(loc.combat_events.len(), usize::from(result.success));
-        assert_eq!(loc.sound_events.len(), usize::from(result.success));
-        if let Some(sound) = loc.sound_events.first() {
-            assert_eq!(
-                sound.cells.iter().find(|c| c.hops == 0).unwrap().coord,
-                head
-            );
+        assert_eq!(loc.sound_events.len(), 1 + usize::from(result.success));
+        assert!(loc.player().heard.contains_key(&loc.player().coord()));
+        if result.success {
+            assert!(loc.player().heard.contains_key(&head));
+            assert!(loc.sound_events[1].cells.iter().all(|c| c.coord != head));
         }
         if let Some(event) = loc.combat_events.first() {
             assert_eq!(event.source, loc.player().coord());
@@ -251,6 +244,7 @@ fn melee_samples_hit_miss_armor_stamina_and_cooldown() {
         let hp = loc.actors_byid[&target].hp;
         loc.act(loc.player_id(), Action::Move(Angle::Forward));
         assert_eq!(loc.actors_byid[&target].hp, hp);
+        assert!(loc.sound_events.is_empty());
     }
     assert!(hits > 0 && misses > 0);
     assert!(damages.len() > 1);
@@ -264,13 +258,16 @@ fn ranged_requires_ready_bow_and_occupied_target_and_records_damage() {
     let hp = loc.actors_byid[&target].hp;
     ready_act(&mut loc, Action::Ranged(target_coord));
     assert!(loc.player().did_attack.is_empty());
+    assert!(loc.sound_events.is_empty());
     assert_eq!(loc.actors_byid[&target].hp, hp);
     player_mut(&mut loc).equip(Box::new(Item::new(Type::Bow, vec![])), 'b');
     player_mut(&mut loc).action_cd = 2;
     loc.act(loc.player_id(), Action::Ranged(target_coord));
     assert_eq!(loc.actors_byid[&target].hp, hp);
+    assert!(loc.sound_events.is_empty());
     ready_act(&mut loc, Action::Ranged(Coordinate::new(-4, 0)));
     assert!(loc.player().did_attack.is_empty());
+    assert!(loc.sound_events.is_empty());
     let mut hits = 0;
     for seed in 0..16 {
         loc.rng = SmallRng::seed_from_u64(seed);
@@ -284,11 +281,15 @@ fn ranged_requires_ready_bow_and_occupied_target_and_records_damage() {
             hp - if result.success { result.dmg } else { 0 }
         );
         hits += usize::from(result.success);
-        assert_eq!(loc.sound_events.len(), usize::from(result.success));
-        if let Some(sound) = loc.sound_events.first() {
-            assert_eq!(
-                sound.cells.iter().find(|c| c.hops == 0).unwrap().coord,
-                target_coord
+        assert_eq!(loc.sound_events.len(), 1 + usize::from(result.success));
+        assert!(loc.player().heard.contains_key(&loc.player().coord()));
+        if result.success {
+            assert!(loc.player().heard.contains_key(&target_coord));
+            assert!(
+                loc.sound_events[1]
+                    .cells
+                    .iter()
+                    .all(|c| c.coord != target_coord)
             );
         }
         let events = std::mem::take(&mut loc.combat_events);

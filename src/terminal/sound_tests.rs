@@ -23,6 +23,63 @@ fn composed(renderer: &MapRenderer, coord: Coordinate) -> DisplayCharacter {
 }
 
 #[test]
+fn real_source_only_sound_never_blinks_but_another_wave_can_cross_its_source() {
+    let mut loc = fixtures::room();
+    let origin = loc.player().coord();
+    let other = loc.player().head();
+    let id = loc.spawn(crate::game::Actor::new(
+        crate::game::actor::Race::Human,
+        Position::new(other, hex2d::XY),
+    ));
+    let mut renderer = MapRenderer::new('.');
+    renderer.resize(21, 11);
+    // Only the origin is visible: hearing remains, but no own-source animation.
+    loc.actors_byid.get_mut(&0).unwrap().visible = [origin].into_iter().collect();
+    loc.actors_byid.get_mut(&0).unwrap().noise_makes(1);
+    loc.resolve_sounds();
+    assert!(loc.player().heard.contains_key(&origin));
+    assert_eq!(loc.sound_events.len(), 1);
+    assert!(loc.sound_events[0].cells.is_empty());
+    renderer
+        .animations
+        .enqueue_sounds(std::mem::take(&mut loc.sound_events), Duration::ZERO);
+    for ms in [0, 100, 200, 300, 400, 500] {
+        assert!(
+            renderer
+                .animations
+                .sound_cells(Duration::from_millis(ms))
+                .next()
+                .is_none()
+        );
+    }
+    loc.actors_byid.get_mut(&0).unwrap().visible.insert(other);
+    loc.actors_byid.get_mut(&0).unwrap().noise_makes(1);
+    loc.actors_byid.get_mut(&id).unwrap().noise_makes(1);
+    loc.resolve_sounds();
+    assert_eq!(loc.sound_events.len(), 2);
+    assert!(loc.sound_events[0].cells.iter().all(|c| c.coord != origin));
+    assert!(loc.sound_events[1].cells.iter().all(|c| c.coord != other));
+    assert!(loc.sound_events[0].cells.iter().any(|c| c.coord == other));
+    assert!(loc.sound_events[1].cells.iter().any(|c| c.coord == origin));
+    renderer
+        .animations
+        .enqueue_sounds(std::mem::take(&mut loc.sound_events), Duration::ZERO);
+    let cells: Vec<_> = renderer
+        .animations
+        .sound_cells(Duration::from_millis(300))
+        .collect();
+    assert!(cells.contains(&(origin, false)));
+    assert!(cells.contains(&(other, false)));
+    assert!(
+        renderer
+            .animations
+            .sound_cells(Duration::from_millis(500))
+            .next()
+            .is_none()
+    );
+}
+
+#[test]
 fn waves_add_only_bold_preserve_facing_hit_and_natural_bold_and_restore_cleanly() {
     let mut loc = fixtures::room();
     let origin = loc.player().coord();

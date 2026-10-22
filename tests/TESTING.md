@@ -10,12 +10,30 @@ PTY tests check the real terminal boundary, not the correctness of a random dung
 ground-item absorption, doors, walls, water, detours, immutable action origins,
 spawn silence, and one-time hearing. Tests compare random small fields with an
 independent repeated-relaxation oracle and check loudness and absorption
-monotonicity. Existing melee, ranged, and digging fixtures also check sound capture.
+monotonicity. Melee, ranged, and digging fixtures also check sound capture.
+
+Attack attempts emit sound at the attacker, including misses: unarmed 2, knife 3,
+bow 4, sword 6, axe 8, `pickaxe` 9. Landed impacts emit a separate level 7 at the target.
+Tests cover each weapon, rejected attacks, exhausted attacks, and player awareness
+from a missed attack without treating enemy-origin noise as player noise.
+
+Equipped armor adds to displacement noise only: leather, helmet, boots and cloak add 1
+each, buckler adds 2, and plate adds 4. A full leather outfit moves at level 8;
+a full plate outfit moves at 11, below the supported cap of 16. In-place turning
+stays at 2. Tests check individual and combined equipment, exclusion of backpack
+and ground items, equipment changes, and sound origins for charge steps and
+attacks. Absorption remains independent of these emitted levels.
 
 Terminal sound tests check additive bold over ordinary styles and hit glyphs,
 red `!` markers at other actors' audible unseen origins without terrain
 disclosure, display visibility, simultaneous sources, exact phase boundaries,
 and rapid-input coalescing.
+
+Each wave omits its own source cell from the animation without affecting hearing
+or awareness there.
+Source-only observations produce no bold blink; another wave may still cross
+that cell. Tests check that unseen-source red markers and yellow awareness behavior
+remain intact.
 Waves use four 100ms onset phases lasting 200ms each. Time-bucket unions retain
 all active sources without a source-count cap. Rounding the start down to a
 100ms boundary shortens playback by less than 100ms. Markers last 400–500ms.

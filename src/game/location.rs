@@ -185,7 +185,9 @@ impl Location {
                                 .then_some(emission.source),
                             cells: cells
                                 .into_iter()
-                                .filter(|cell| player.sees(cell.coord))
+                                .filter(|cell| {
+                                    cell.coord != emission.source && player.sees(cell.coord)
+                                })
                                 .collect(),
                         });
                     }

@@ -248,10 +248,8 @@ fn charge_keeps_both_origins_and_door_uses_post_action_geometry() {
     loc.act(0, Action::Move(Angle::Forward));
     assert_eq!(loc.map[first].feature, Some(tile::Door(true)));
     let sound = &loc.sound_events[0];
-    assert_eq!(
-        sound.cells.iter().find(|c| c.hops == 0).unwrap().coord,
-        origin
-    );
+    assert!(sound.cells.iter().all(|c| c.coord != origin));
+    assert!(loc.player().heard.contains_key(&origin));
     assert_eq!(
         sound.cells.iter().find(|c| c.coord == first).unwrap().spent,
         4
@@ -275,6 +273,177 @@ fn action_capture_keeps_existing_levels_even_while_actor_is_removed() {
     loc.map[head] = tile::Tile::new(tile::Wall);
     player.dig(Angle::Forward, &mut loc);
     assert_eq!(player.pending_noises[0].level, 9);
+}
+
+#[test]
+fn every_weapon_attempt_emits_at_attacker_and_only_landed_hits_emit_at_target() {
+    use rand::{SeedableRng, rngs::SmallRng};
+    for (weapon, level) in [
+        (None, 2),
+        (Some(item::Type::Knife), 3),
+        (Some(item::Type::Bow), 4),
+        (Some(item::Type::Sword), 6),
+        (Some(item::Type::Axe), 8),
+        (Some(item::Type::Pickaxe), 9),
+    ] {
+        let mut outcomes = [false; 2];
+        for seed in 0..32 {
+            let mut loc = fixtures::room();
+            loc.rng = SmallRng::seed_from_u64(seed);
+            let source = loc.player().coord();
+            let impact = loc.player().head();
+            let id = loc.spawn(Actor::new(Race::Troll, Position::new(impact, XY)));
+            let mut player = loc.actors_byid.remove(&0).unwrap();
+            if let Some(weapon) = weapon {
+                player.equip(Box::new(item::Item::new(weapon, vec![])), 'w');
+            }
+            player.action_cd = 0;
+            // Exhaustion weakens an attempt, but does not reject it.
+            player.sp = 0;
+            let action = if weapon == Some(item::Type::Bow) {
+                Action::Ranged(impact)
+            } else {
+                Action::Move(Angle::Forward)
+            };
+            player.act(&mut loc, action);
+            let landed = player.did_attack[0].success;
+            outcomes[usize::from(landed)] = true;
+            assert_eq!(player.pending_noises.len(), 1);
+            let attack = &player.pending_noises[0];
+            assert_eq!((attack.source, attack.level), (source, level));
+            let target = &loc.actors_byid[&id];
+            assert_eq!(target.pending_noises.len(), usize::from(landed));
+            if landed {
+                assert_eq!(
+                    (
+                        target.pending_noises[0].source,
+                        target.pending_noises[0].level
+                    ),
+                    (impact, 7)
+                );
+            }
+        }
+        assert_eq!(outcomes, [true, true], "{weapon:?}");
+    }
+}
+
+#[test]
+fn equipped_armor_adds_exact_steps_not_backpack_ground_turns_or_equipment_actions() {
+    for (armor, extra) in [
+        (item::Type::Leather, 1),
+        (item::Type::Plate, 4),
+        (item::Type::Helmet, 1),
+        (item::Type::Boots, 1),
+        (item::Type::Buckler, 2),
+        (item::Type::Cloak, 1),
+    ] {
+        for equipped in [false, true] {
+            let mut loc = fixtures::room();
+            let mut player = loc.actors_byid.remove(&0).unwrap();
+            player
+                .items_backpack
+                .insert('a', Box::new(item::Item::new(armor, vec![])));
+            loc.items.insert(
+                Coordinate::new(-3, 0),
+                Box::new(item::Item::new(armor, vec![])),
+            );
+            if equipped {
+                player.act(&mut loc, Action::Equip('a'));
+                assert!(player.pending_noises.is_empty());
+            }
+            player.action_cd = 0;
+            player.act(&mut loc, Action::Move(Angle::Forward));
+            assert_eq!(player.pending_noises.len(), 1);
+            assert_eq!(player.pending_noises[0].source, player.coord());
+            assert_eq!(
+                player.pending_noises[0].level,
+                2 + if equipped { extra } else { 0 }
+            );
+            player.pending_noises.clear();
+            player.act(&mut loc, Action::Turn(Angle::Left));
+            assert_eq!(player.pending_noises[0].level, 2);
+            player.pending_noises.clear();
+            player.act(&mut loc, Action::Drop_('a'));
+            player.act(&mut loc, Action::Wait);
+            assert!(player.pending_noises.is_empty());
+            player.act(&mut loc, Action::Move(Angle::Forward));
+            assert_eq!(player.pending_noises[0].level, 2);
+        }
+    }
+}
+
+#[test]
+fn maximum_outfit_stays_below_cap_and_charge_keeps_step_and_attack_origins() {
+    for (body, level) in [(item::Type::Leather, 8), (item::Type::Plate, 11)] {
+        let mut loc = fixtures::room();
+        let first = loc.player().head();
+        let impact = first + XY;
+        loc.spawn(Actor::new(Race::Troll, Position::new(impact, XY)));
+        let mut player = loc.actors_byid.remove(&0).unwrap();
+        for (i, armor) in [
+            body,
+            item::Type::Helmet,
+            item::Type::Boots,
+            item::Type::Buckler,
+            item::Type::Cloak,
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            player.equip(
+                Box::new(item::Item::new(armor, vec![])),
+                char::from(b'a' + i as u8),
+            );
+        }
+        player.equip(Box::new(item::Item::new(item::Type::Axe, vec![])), 'w');
+        player.action_cd = 0;
+        player.sp = 100;
+        player.act(&mut loc, Action::Charge);
+        let emissions: Vec<_> = player
+            .pending_noises
+            .iter()
+            .map(|e| (e.source, e.level))
+            .collect();
+        assert_eq!(emissions, [(first, level), (first, 8)]);
+        let cells = propagate(
+            &floor(18),
+            &Items::default(),
+            &Emission {
+                source: Coordinate::new(0, 0),
+                ..player.pending_noises[0].clone()
+            },
+        );
+        assert_eq!(cells.iter().map(|c| c.hops).max(), Some(level as u16));
+        assert!(level < 16);
+    }
+}
+
+#[test]
+fn missed_player_attack_acquires_awareness_but_enemy_attack_does_not() {
+    use rand::{SeedableRng, rngs::SmallRng};
+    for player_attacks in [false, true] {
+        let mut loc = fixtures::room();
+        loc.rng = SmallRng::seed_from_u64(0);
+        let source = loc.player().coord();
+        let impact = loc.player().head();
+        let id = loc.spawn(Actor::new(Race::Human, Position::new(impact, XY)));
+        loc.set_player_awareness(id, false);
+        loc.awareness_events.clear();
+        let attacker = if player_attacks { 0 } else { id };
+        let victim = if player_attacks { id } else { 0 };
+        loc.actors_byid.get_mut(&victim).unwrap().stats.base.ev = 1_000_000;
+        let actor = loc.actors_byid.get_mut(&attacker).unwrap();
+        actor.equip(Box::new(item::Item::new(item::Type::Bow, vec![])), 'w');
+        actor.action_cd = 0;
+        loc.act(
+            attacker,
+            Action::Ranged(if player_attacks { impact } else { source }),
+        );
+        assert!(!loc.actors_byid[&attacker].did_attack[0].success);
+        assert_eq!(loc.actors_byid[&id].aware_of_player, player_attacks);
+        assert_eq!(loc.awareness_events.len(), usize::from(player_attacks));
+        assert_eq!(loc.sound_events.len(), 1);
+    }
 }
 
 #[test]

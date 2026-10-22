@@ -115,6 +115,31 @@ pub struct Item {
 }
 
 impl Item {
+    /// Attacker-origin loudness for a weapon attempt, independent of hit impact.
+    pub fn attack_noise(&self) -> Option<i32> {
+        match self.type_ {
+            Knife => Some(3),
+            Bow => Some(4),
+            Sword => Some(6),
+            Axe => Some(8),
+            Pickaxe => Some(9),
+            _ => None,
+        }
+    }
+
+    /// Added footstep loudness while equipped, not environmental absorption.
+    ///
+    /// A full plate outfit adds 9 (11 including the base step);
+    /// all legal outfits stay below the supported sound level of 16.
+    pub fn movement_noise(&self) -> i32 {
+        match self.type_ {
+            Plate => 4,
+            Buckler => 2,
+            Leather | Helmet | Boots | Cloak => 1,
+            _ => 0,
+        }
+    }
+
     /// Ground-item quarter-level absorption, including a one-cell halo.
     pub fn sound_dampening(&self) -> u16 {
         match self.type_ {

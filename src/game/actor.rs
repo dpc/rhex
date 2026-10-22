@@ -358,6 +358,7 @@ impl Actor {
             None => return,
             Some(target) => target,
         };
+        self.noise_makes(self.attack_noise());
         let mut acc = self.stats.melee_acc;
         let mut dmg = self.stats.melee_dmg;
 
@@ -706,6 +707,7 @@ impl Actor {
         target: &mut Actor,
         rng: &mut impl rand::Rng,
     ) -> bool {
+        self.noise_makes(self.attack_noise());
         let mut acc = self.stats.melee_acc;
         let mut dmg = self.stats.melee_dmg;
 
@@ -803,10 +805,27 @@ impl Actor {
         }
     }
 
+    /// Weapon attempts emit at the attacker; unarmed attempts use level 2.
+    fn attack_noise(&self) -> i32 {
+        self.equipped_in_slot(Slot::RHand)
+            .and_then(Item::attack_noise)
+            .unwrap_or(2)
+    }
+
     pub fn moved(&mut self, loc: &Location, new_pos: Position) {
+        // Armor adds to displacement only, including each successful charge step.
+        // In-place turns retain their existing level 2.
+        let armor_noise = if self.pos.coord != new_pos.coord {
+            self.items_equipped
+                .values()
+                .map(|(_, item)| item.movement_noise())
+                .sum()
+        } else {
+            0
+        };
         self.pos = new_pos;
         self.add_current_los_to_temporary_los(loc);
-        self.noise_makes(2);
+        self.noise_makes(2 + armor_noise);
     }
 
     pub fn is_player(&self) -> bool {
