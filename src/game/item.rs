@@ -24,9 +24,14 @@ pub enum Type {
     Knife,
     Bow,
     Sword,
+    ShortSword,
+    Club,
     Pickaxe,
     Axe,
     HealthPotion,
+    StaminaPotion,
+    HandLantern,
+    Whistle,
     Junk,
     Leather,
     Plate,
@@ -43,6 +48,11 @@ impl Type {
             Knife => "knife",
             Bow => "bow",
             Sword => "sword",
+            ShortSword => "short sword",
+            Club => "club",
+            StaminaPotion => "stamina potion",
+            HandLantern => "hand lantern",
+            Whistle => "whistle",
             Axe => "axe",
             HealthPotion => "health potion",
             Plate => "plate armor",
@@ -115,10 +125,31 @@ pub struct Item {
 }
 
 impl Item {
+    /// Explain the tactical tradeoff of exploration equipment in its action menu.
+    pub fn usage_hint(&self) -> Option<&'static str> {
+        match self.type_ {
+            ShortSword => Some("Damage +2, strength need 3.\nAttack noise 4."),
+            Club => Some("Damage +2, strength need 2.\nAttack noise 7."),
+            HandLantern => Some(
+                "Light 5 while in left hand.\nReplaces a buckler; shuttered\nin your backpack or on ground.",
+            ),
+            Whistle => Some(
+                "Reusable loud call (noise 12)\nat your current position.\nMay attract nearby creatures.",
+            ),
+            StaminaPotion => Some("Drink to restore up to 5 SP."),
+            Buckler => {
+                Some("Left hand: AC +1, EV +1.\nAdds 2 footstep noise.\nCannot hold a lantern too.")
+            }
+            _ => None,
+        }
+    }
+
     /// Attacker-origin loudness for a weapon attempt, independent of hit impact.
     pub fn attack_noise(&self) -> Option<i32> {
         match self.type_ {
             Knife => Some(3),
+            ShortSword => Some(4),
+            Club => Some(7),
             Bow => Some(4),
             Sword => Some(6),
             Axe => Some(8),
@@ -143,7 +174,7 @@ impl Item {
     /// Ground-item quarter-level absorption, including a one-cell halo.
     pub fn sound_dampening(&self) -> u16 {
         match self.type_ {
-            HealthPotion => 0,
+            HealthPotion | StaminaPotion => 0,
             Cloak | Leather => 2,
             _ => 1,
         }
@@ -163,11 +194,11 @@ impl Item {
 
     pub fn category(&self) -> Category {
         match self.type_ {
-            Knife | Sword | Axe | Pickaxe => Weapon,
+            Knife | Sword | ShortSword | Club | Axe | Pickaxe => Weapon,
             Bow => RangedWeapon,
             Leather | Plate | Helmet | Boots | Buckler | Cloak => Armor,
-            HealthPotion => Consumable,
-            Junk => Misc,
+            HealthPotion | StaminaPotion => Consumable,
+            Junk | HandLantern | Whistle => Misc,
         }
     }
 
@@ -181,13 +212,13 @@ impl Item {
 
     pub fn slot(&self) -> Option<Slot> {
         match self.type_ {
-            Axe | Sword | Knife => Some(Slot::RHand),
+            Axe | Sword | ShortSword | Club | Knife => Some(Slot::RHand),
             Pickaxe => Some(Slot::RHand),
             Bow => Some(Slot::RHand),
             Leather | Plate => Some(Slot::Body),
             Helmet => Some(Slot::Head),
             Boots => Some(Slot::Feet),
-            Buckler => Some(Slot::LHand),
+            Buckler | HandLantern => Some(Slot::LHand),
             Cloak => Some(Slot::Cloak),
             _ => None,
         }
@@ -221,6 +252,11 @@ impl Item {
                 s.melee_dmg = 1;
                 s.melee_str_req = 2;
             }
+            ShortSword | Club => {
+                s.melee_dmg = 2;
+                s.melee_str_req = if self.type_ == Club { 2 } else { 3 };
+            }
+            HandLantern => s.light_emision = 5,
             Sword => {
                 s.melee_dmg += 3;
                 s.melee_str_req = 4;
@@ -243,13 +279,13 @@ impl Item {
     }
 
     pub fn is_usable(&self) -> bool {
-        self.category() == Consumable
+        self.category() == Consumable || self.type_ == Whistle
     }
 
     /// Describe activating this item without implying that every use consumes it.
     pub fn use_label(&self) -> &'static str {
         match self.type_ {
-            HealthPotion => "Drink",
+            HealthPotion | StaminaPotion => "Drink",
             _ => "Use",
         }
     }
@@ -259,6 +295,14 @@ impl Item {
     /// Returns: true if the item was consumed in the process.
     pub fn use_(&self, astate: &mut Actor) -> bool {
         match self.type_ {
+            Whistle => {
+                astate.noise_makes(12);
+                false
+            }
+            StaminaPotion => {
+                astate.sp = cmp::min(astate.sp + 5, astate.stats.base.max_sp);
+                true
+            }
             HealthPotion => {
                 astate.hp += 5;
                 astate.hp = cmp::min(astate.hp, astate.stats.base.max_hp);
@@ -267,6 +311,18 @@ impl Item {
             _ => false,
         }
     }
+}
+
+/// Roll useful, unenchanted exploration loot without adding new item subsystems.
+pub fn exploration_loot(level: i32, rng: &mut impl rand::Rng) -> Box<Item> {
+    let choices: &[Type] = match rng.random_range(0..10) {
+        0..5 => &[HealthPotion, StaminaPotion, HandLantern, Whistle],
+        5..8 if level < 3 => &[Knife, Club, ShortSword],
+        5..8 => &[ShortSword, Sword, Bow, Pickaxe, Axe],
+        _ if level < 5 => &[Buckler, Leather, Cloak, Boots],
+        _ => &[Buckler, Leather, Cloak, Boots, Plate],
+    };
+    Box::new(Item::new(*choices.choose(rng).unwrap(), vec![]))
 }
 
 impl fmt::Display for Item {
@@ -282,6 +338,9 @@ impl fmt::Display for Item {
 }
 
 pub fn random(level: i32, mut rng: &mut impl rand::Rng) -> Box<Item> {
+    if rng.random_bool(0.35) {
+        return exploration_loot(level, rng);
+    }
     let a = -(level / 2);
     let b = level + 2;
     let lvrange = rand::distr::Uniform::new(a, b).expect("nonempty item level range");

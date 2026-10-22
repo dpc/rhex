@@ -42,7 +42,11 @@ pub struct Location {
     pub actors_dead: HashSet<actor::Id>,
     pub actors_counter: u32,
     pub map: Map,
-    pub items: Items,        // items on the floor
+    pub items: Items, // items on the floor
+    /// Persistent containers, independent of loose ground items.
+    pub chests: HashMap<Coordinate, super::chest::Chest>,
+    /// Player interaction feedback awaiting presentation.
+    pub messages: Vec<String>,
     pub light_map: LightMap, // light intensity at a given coordinate
     pub level: i32,
     player_id: Option<actor::Id>,
@@ -88,6 +92,8 @@ impl Location {
             actors_counter: 1,
             map,
             items: Default::default(),
+            chests: Default::default(),
+            messages: Vec::new(),
             light_map: Default::default(),
             level: 0,
             player_id: Some(0),
@@ -122,7 +128,7 @@ impl Location {
             actors_counter += 1;
         }
 
-        Location {
+        let mut location = Location {
             id,
             biome,
             exits: Default::default(),
@@ -134,6 +140,8 @@ impl Location {
             actors_counter,
             actors_dead: Default::default(),
             items,
+            chests: Default::default(),
+            messages: Vec::new(),
             map,
             level: level as i32,
             light_map: Default::default(),
@@ -141,7 +149,9 @@ impl Location {
             combat_events: Vec::new(),
             sound_events: Vec::new(),
             awareness_events: Vec::new(),
-        }
+        };
+        super::content::populate(&mut location);
+        location
     }
 
     pub fn player_id(&self) -> actor::Id {
@@ -243,6 +253,17 @@ impl Location {
         self.recalculate_light_with_actor(None);
     }
 
+    /// Keep existing observers in sync when carried light changes, including arrival.
+    fn refresh_changed_light(&mut self) {
+        let previous_light = self.light_map.clone();
+        self.recalculate_light_map();
+        if previous_light.iter().any(|(&c, &v)| self.light_map[c] != v)
+            || self.light_map.iter().any(|(&c, &v)| previous_light[c] != v)
+        {
+            self.refresh_sight();
+        }
+    }
+
     /// Include the acting actor while it is temporarily outside the actor table.
     pub(crate) fn recalculate_light_with_actor(&mut self, acting: Option<&Actor>) {
         let mut light_map: SimpleMap<Coordinate, u32, BuildHasherDefault<FnvHasher>> =
@@ -299,6 +320,7 @@ impl Location {
             }
         }
 
+        light_map.compact();
         self.light_map = light_map;
     }
 
@@ -314,7 +336,7 @@ impl Location {
         self.actors_coord_to_id.insert(astate.pos.coord, id);
         astate.pre_spawn(self);
         self.actors_byid.insert(id, astate);
-        self.recalculate_light_map();
+        self.refresh_changed_light();
 
         self.pre_any_tick();
         let mut astate = self.actors_byid.remove(&id).unwrap();
@@ -374,6 +396,7 @@ impl Location {
     }
 
     pub fn pre_any_tick(&mut self) {
+        self.messages.clear();
         self.sound_events.clear();
         self.awareness_events.clear();
         for id in self.actors_alive_ids() {
@@ -430,7 +453,7 @@ impl Location {
                 .all(|(coord, id)| self.actors_byid[id].coord() == *coord)
         );
 
-        self.recalculate_light_map();
+        self.refresh_changed_light();
         self.resolve_player_sight();
         self.resolve_sounds();
     }

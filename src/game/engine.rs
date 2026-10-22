@@ -151,11 +151,13 @@ impl Engine {
         old.explored_areas = std::mem::take(&mut player.known_areas);
         old.combat_events.clear();
         old.sound_events.clear();
+        old.messages.clear();
         old.awareness_events.clear();
         self.location_cur = link.destination.0;
         let destination = self.current_location_mut();
         destination.combat_events.clear();
         destination.sound_events.clear();
+        destination.messages.clear();
         destination.awareness_events.clear();
         player.pos.coord = arrival;
         destination.spawn_player(player);

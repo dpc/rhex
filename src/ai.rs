@@ -46,6 +46,7 @@ fn closest_reachable<F>(
     gstate: &game::Location,
     start: Coordinate,
     max_distance: i32,
+    beast: bool,
     cond: F,
 ) -> Option<(Coordinate, Coordinate)>
 where
@@ -55,6 +56,7 @@ where
         |pos| {
             pos == start
                 || (gstate.at(pos).tile().is_passable()
+                    && (!beast || gstate.map[pos].feature != Some(game::tile::Door(false)))
                     && pos.distance(start) < max_distance
                     && !gstate.at(pos).is_occupied())
         },
@@ -78,16 +80,16 @@ fn grue(astate: &actor::Actor, gstate: &game::Location, rng: &mut impl rand::Rng
         }
     }
 
-    if gstate.at(astate.head()).item_map_or(false, |_| true) {
+    if !astate.race.is_beast() && gstate.at(astate.head()).item_map_or(false, |_| true) {
         return game::Action::Pick;
     }
 
-    if gstate.at(astate.pos.coord).item_map_or(false, |_| true) {
+    if !astate.race.is_beast() && gstate.at(astate.pos.coord).item_map_or(false, |_| true) {
         return game::Action::Move(Back);
     }
 
     for &visible_coord in &visible {
-        if gstate.at(visible_coord).item_map_or(false, |_| true) {
+        if !astate.race.is_beast() && gstate.at(visible_coord).item_map_or(false, |_| true) {
             return go_to(visible_coord, astate, gstate, rng);
         }
     }
@@ -118,7 +120,11 @@ fn go_to(
     };
 
     let n_pos = astate.pos + Coordinate::from(ndir);
-    if gstate.at(n_pos.coord).tile().type_.is_passable() {
+    let can_step = |pos| {
+        gstate.at(pos).tile().is_passable()
+            && (!astate.race.is_beast() || gstate.map[pos].feature != Some(game::tile::Door(false)))
+    };
+    if can_step(n_pos.coord) {
         if ndir == astate.pos.dir {
             return game::Action::Move(Forward);
         } else {
@@ -142,11 +148,17 @@ fn go_to(
         }
     }
     // TODO: fallaback to A* instead of BFS
-    let reachable = closest_reachable(gstate, astate.pos.coord, 10, |pos| pos == c);
+    let reachable = closest_reachable(
+        gstate,
+        astate.pos.coord,
+        10,
+        astate.race.is_beast(),
+        |pos| pos == c,
+    );
 
     // BFS may accept a blocked goal before checking traversability. Recursing
     // on that adjacent wall would retry the same step forever.
-    if let Some((_, n)) = reachable.filter(|(_, n)| gstate.at(*n).tile().type_.is_passable()) {
+    if let Some((_, n)) = reachable.filter(|(_, n)| can_step(*n)) {
         go_to(n, astate, gstate, rng)
     } else {
         roam(rng)
@@ -160,14 +172,14 @@ fn _pony_follow(
 ) -> game::Action {
     let start = astate.pos.coord;
 
-    let player_pos = closest_reachable(gstate, start, 10, |pos| {
+    let player_pos = closest_reachable(gstate, start, 10, astate.race.is_beast(), |pos| {
         gstate.at(pos).actor_map_or(false, |a| a.is_player())
     });
 
     let player_pos = if let Some((dst, _)) = player_pos {
         let distance = dst.distance(start);
         if distance < 3 {
-            closest_reachable(gstate, start, 10, |pos| {
+            closest_reachable(gstate, start, 10, astate.race.is_beast(), |pos| {
                 pos.distance(dst) == 3 && gstate.at(pos).is_passable()
             })
         } else if distance < 5 {

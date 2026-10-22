@@ -40,12 +40,14 @@ Press `Esc` to quit in either mode. In menus and inventory, letters still select
 entries and actions.
 
 Press comma to interact with the tile in front of you without moving or turning.
-You pick up an item first; if there is no item, you open or close a door. This
+You pick up an item first; otherwise you interact with a chest, then a door. This
 matches the item-first “In front” readout. A full inventory leaves the item and
 door unchanged; an actor in an open doorway prevents you from closing it.
 Each permitted attempt takes one normal action, even when there is nothing to
-do. Opening or closing a door makes the same noise as bump-opening it; pickup
-and unsuccessful interactions are silent.
+do. Opening a closed chest adds two recovery ticks. Taking its contents or
+interacting with an open chest adds no extra recovery ticks, including attempts
+with an empty chest or a full backpack. Opening or closing a door makes the same
+noise as bump-opening it; pickup and unsuccessful interactions are silent.
 Moving into a closed door still opens it without entering. Comma does not clear
 thickets or use items, exits, or objects underfoot. Use `E` for inventory items
 and `<`/`>` for the passage you are standing on.
@@ -53,8 +55,8 @@ and `<`/`>` for the passage you are standing on.
 ### Inventory actions
 
 Press `I`, then an item's letter to see its available actions. You can equip
-backpack equipment, unequip equipped items, drink health potions, or drop any
-owned item. Press the shortcut beside the action: `e` for Equip/Unequip,
+backpack equipment, unequip equipped items, drink potions, use a whistle, or drop
+any owned item. Press the shortcut beside the action: `e` for Equip/Unequip,
 `u` for Drink/Use, or `d` for Drop.
 
 Press `Esc` to return to inventory, then `Esc` again to close it. You spend no
@@ -62,6 +64,35 @@ turns opening menus, selecting an item, or cancelling. Actions follow the same
 game rules and costs as `E` (equip/use or unequip) and `D` (drop). You can still
 press either shortcut followed by an item letter.
 Use inventory letters in either movement input mode.
+
+### Exploration finds
+
+Face a closed chest (`%`) and press comma to open it. Opening takes extra time
+and makes noise, and some chests contain nothing. You can see the contents of
+an open chest with loot (`[`); each further comma moves one item into your
+backpack. If the backpack is full, the item stays in the chest. Empty chests
+(`_`) remain in place. Revisiting a chest does not generate new contents. Its
+state and remaining loot persist when you leave a level and return during the same
+run, without saving to disk. Outside current sight, you see remembered chests
+as the generic `%` symbol.
+
+Short swords sit between knives and swords; clubs need less strength but make
+more attack noise. A buckler offers protection at the cost of louder footsteps.
+Equip a hand lantern in your left hand instead of a buckler to light nearby
+space. The lantern stays shuttered in a backpack or on the ground
+and needs no fuel. Light helps you scout but can expose you to other creatures.
+
+Select Use on a reusable whistle to make a loud sound at your current position.
+Nearby creatures may investigate, but the whistle cannot act as a remote decoy
+or guarantee a distraction. Drink a stamina potion to consume it and restore
+up to five SP.
+The inventory action menu explains these items' tradeoffs.
+
+Forests have scattered finds and can contain wolves and armored, short-sighted
+cave beetles. These beasts cannot collect equipment, open doors, or cut thickets.
+Dungeons introduce beetles from difficulty one and armed skeletons from
+difficulty two, alongside the existing enemies. Skeletons carry ordinary short
+swords and bucklers and leave that equipment behind when killed.
 
 ### Reading the sidebar
 
@@ -71,8 +102,9 @@ since the previous turn; green values indicate an increase.
 Below the equipment, tile readouts and turn counter, use the compact sight
 legend to identify entries by `X - name`. Each entry uses its ordinary map glyph
 and lighting colors, without transient facing, targeting or animation effects.
-The legend lists visible creatures, items, doors, passages, statues, water and
-forest obstacles. It excludes the player and remembered or hidden contents.
+The legend lists visible creatures, items, chests, doors, passages, statues,
+water and forest obstacles. It excludes the player and remembered or hidden
+contents.
 It follows the map's topmost-occupant priority: an actor or item can obscure a
 feature.
 

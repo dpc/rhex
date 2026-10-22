@@ -5,7 +5,7 @@ use std::ops::{Add, Sub};
 use crate::hex2dext::algo;
 use hex2d::{Angle, Coordinate, Direction, Forward, Left, Position, Right};
 
-use super::item::Item;
+use super::item::{self, Item};
 use crate::game::tile::Feature;
 use crate::game::{self, Action, tile};
 use crate::util;
@@ -31,9 +31,17 @@ pub enum Race {
     Rat,
     Goblin,
     Troll,
+    Wolf,
+    CaveBeetle,
+    Skeleton,
 }
 
 impl Race {
+    /// These beasts cannot manipulate equipment, doors, or vegetation.
+    pub fn is_beast(self) -> bool {
+        matches!(self, Self::Wolf | Self::CaveBeetle)
+    }
+
     pub fn description(&self) -> String {
         match *self {
             Race::Human => "human",
@@ -42,6 +50,9 @@ impl Race {
             Race::Rat => "rat",
             Race::Goblin => "goblin",
             Race::Troll => "troll",
+            Race::Wolf => "wolf",
+            Race::CaveBeetle => "cave beetle",
+            Race::Skeleton => "skeleton",
         }
         .to_owned()
     }
@@ -80,6 +91,33 @@ impl Stats {
             Human => HUMAN_STATS,
             Dwarf => DWARF_STATS,
             Troll => TROLL_STATS,
+            Wolf => Stats {
+                max_hp: 10,
+                str_: 3,
+                dex: 3,
+                vision: 8,
+                infravision: 2,
+                max_sp: 10,
+                ..RAT_STATS
+            },
+            CaveBeetle => Stats {
+                max_hp: 12,
+                str_: 3,
+                dex: 1,
+                ac: 3,
+                ev: 0,
+                vision: 4,
+                infravision: 0,
+                max_sp: 10,
+                ..RAT_STATS
+            },
+            Skeleton => Stats {
+                max_hp: 12,
+                str_: 3,
+                ev: 1,
+                max_sp: 10,
+                ..RAT_STATS
+            },
         }
     }
 
@@ -247,7 +285,7 @@ impl Actor {
     pub fn new(race: Race, pos: Position) -> Self {
         let stats = Stats::new(race);
 
-        Actor {
+        let mut actor = Actor {
             race,
             player: false,
             aware_of_player: false,
@@ -280,7 +318,13 @@ impl Actor {
             acted: false,
             changed_door: false,
             descended: false,
+        };
+        if race == Skeleton {
+            actor.equip(Box::new(Item::new(item::Type::ShortSword, vec![])), 'a');
+            actor.equip(Box::new(Item::new(item::Type::Buckler, vec![])), 'b');
+            actor.action_cd = 0;
         }
+        actor
     }
 
     pub fn sees(&self, pos: Coordinate) -> bool {
@@ -879,6 +923,9 @@ impl Actor {
                 // no movement
                 match action {
                     Action::Pick | Action::Interact => {
+                        if self.race.is_beast() {
+                            continue;
+                        }
                         let head = self.head();
                         let item = loc.at_mut(head).pick_item();
                         // Items take precedence, even when the backpack is full.
@@ -887,6 +934,12 @@ impl Actor {
                                 // Restore exactly where it was, including on a
                                 // closed door; dropping searches for free floor.
                                 loc.items.insert(head, item);
+                            }
+                        } else if action == Action::Interact && loc.chests.contains_key(&head) {
+                            let chest = loc.chests.get_mut(&head).unwrap();
+                            let message = chest.interact(self);
+                            if self.is_player() {
+                                loc.messages.push(message);
                             }
                         } else if action == Action::Interact
                             && let Some(tile::Door(open)) = loc.map[head].feature
@@ -897,7 +950,9 @@ impl Actor {
                         }
                     }
                     Action::Equip(ch) => {
-                        self.equip_switch(ch);
+                        if !self.race.is_beast() {
+                            self.equip_switch(ch);
+                        }
                     }
                     Action::Drop_(ch) => {
                         if let Some(item) = self.equip_drop(ch) {
@@ -924,7 +979,11 @@ impl Actor {
             {
                 // A bump in a melee direction is a hit, not a movement. Even a
                 // charge stops here; never attack an occupant through vegetation.
-                if self.could_be_attack(action) && self.can_attack() && self.can_attack_sp() {
+                if !self.race.is_beast()
+                    && self.could_be_attack(action)
+                    && self.can_attack()
+                    && self.can_attack_sp()
+                {
                     loc.map[new_pos.coord].type_ = tile::Ground;
                     self.substract_melee_sp_cost();
                     self.noise_makes(self.attack_noise().max(5));
@@ -955,6 +1014,9 @@ impl Actor {
                 // Can't attack twice
                 break;
             } else if loc.at(new_pos.coord).tile().feature == Some(tile::Door(false)) {
+                if self.race.is_beast() {
+                    break;
+                }
                 // walked into door: open it
                 loc.map[new_pos.coord].add_feature(tile::Door(true));
                 self.changed_door(loc);
@@ -995,6 +1057,9 @@ impl Actor {
     }
 
     pub fn can_dig(&self) -> bool {
+        if self.race.is_beast() {
+            return false;
+        }
         self.can_attack_sp()
             && self
                 .equipped_in_slot(Slot::RHand)

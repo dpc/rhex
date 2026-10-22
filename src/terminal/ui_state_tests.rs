@@ -83,6 +83,71 @@ fn comma_production_dispatch_picks_then_toggles_without_moving() {
 }
 
 #[test]
+fn chest_feedback_survives_enemy_ticks_through_production_dispatch() {
+    use crate::game::chest::Chest;
+    for (opened, full, has_item, expected) in [
+        (
+            false,
+            false,
+            true,
+            "You open the chest. open chest: whistle.",
+        ),
+        (true, false, true, "You take whistle from the chest."),
+        (
+            true,
+            true,
+            true,
+            "Your backpack is full; the item stays in the chest.",
+        ),
+        (true, false, false, "The chest is empty."),
+    ] {
+        let now = Instant::now();
+        let mut ui = fixture(now);
+        let head = ui.player().head();
+        let mut chest = Chest::new(has_item.then(|| Box::new(Item::new(Type::Whistle, vec![]))));
+        chest.opened = opened;
+        let loc = ui.engine.current_location_mut();
+        loc.chests.insert(head, chest);
+        let id = loc.spawn(Actor::new(
+            actor::Race::Wolf,
+            Position::new(Coordinate::new(-3, 0), hex2d::XY),
+        ));
+        loc.actors_byid.get_mut(&id).unwrap().action_cd = 100;
+        if full {
+            for ch in (b'a'..=b'y').chain(b'A'..=b'Y') {
+                player_mut(&mut ui)
+                    .items_backpack
+                    .insert(ch as char, Box::new(Item::new(Type::Junk, vec![])));
+            }
+        }
+        chars(&mut ui, ",", now);
+        ui.advance((24, 60), now + Duration::from_secs(1));
+        assert_eq!(ui.engine.turn(), 1);
+        assert_eq!(ui.current_location().actors_byid[&id].action_cd, 99);
+        assert_eq!(
+            ui.log
+                .borrow()
+                .iter()
+                .filter(|e| e.text == expected)
+                .count(),
+            1
+        );
+        assert!(ui.current_location().messages.is_empty());
+        // Redrawing cannot replay already consumed interaction feedback.
+        let _ = frame(&mut ui, 60, 24);
+        let _ = frame(&mut ui, 60, 24);
+        assert_eq!(
+            ui.log
+                .borrow()
+                .iter()
+                .filter(|e| e.text == expected)
+                .count(),
+            1
+        );
+    }
+}
+
+#[test]
 fn comma_does_not_escape_modal_input_or_select_inventory_items() {
     let now = Instant::now();
     for input_mode in [InputMode::Normal, InputMode::Vi] {
@@ -1027,6 +1092,11 @@ fn inventory_letters_offer_only_valid_actions_without_spending_turns() {
             ('D', Type::Plate, false, "Equip", 'e'),
             ('q', Type::Knife, true, "Unequip", 'e'),
             ('h', Type::HealthPotion, false, "Drink", 'u'),
+            ('s', Type::StaminaPotion, false, "Drink", 'u'),
+            ('w', Type::Whistle, false, "Use", 'u'),
+            ('l', Type::HandLantern, false, "Equip", 'e'),
+            ('c', Type::Club, false, "Equip", 'e'),
+            ('S', Type::ShortSword, false, "Equip", 'e'),
             ('e', Type::Junk, false, "Drop", 'd'),
         ] {
             let now = Instant::now();
@@ -1078,8 +1148,11 @@ fn inventory_letters_offer_only_valid_actions_without_spending_turns() {
             if equipped {
                 assert!(ui.player().items_backpack.contains_key(&letter));
                 assert!(ui.player().items_equipped.is_empty());
-            } else if type_ == Type::HealthPotion || type_ == Type::Junk {
+            } else if matches!(type_, Type::HealthPotion | Type::StaminaPotion | Type::Junk) {
                 assert!(!ui.player().item_letter_taken(letter));
+            } else if type_ == Type::Whistle {
+                assert!(ui.player().items_backpack.contains_key(&letter));
+                assert_eq!(ui.player().action_cd, 2);
             } else {
                 assert!(!ui.player().items_backpack.contains_key(&letter));
                 assert!(

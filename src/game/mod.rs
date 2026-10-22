@@ -13,7 +13,9 @@ pub mod awareness_event;
 pub use self::actor::Actor;
 pub mod action;
 pub use self::action::Action;
+pub mod chest;
 pub mod consts;
+mod content;
 pub mod engine;
 pub mod item;
 pub use self::engine::*;
@@ -26,6 +28,8 @@ pub use self::location::Location;
 #[cfg(test)]
 pub(crate) mod fixtures;
 
+#[cfg(test)]
+mod content_tests;
 #[cfg(test)]
 mod forest_tests;
 #[cfg(test)]

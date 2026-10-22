@@ -416,6 +416,10 @@ impl Ui {
     }
 
     fn engine_change(&mut self, actor_id: actor::Id) {
+        let messages = std::mem::take(&mut self.engine.current_location_mut().messages);
+        for message in messages {
+            self.log(&message);
+        }
         let level = self.current_location().id;
         if self.animation_level != level {
             self.map_renderer.animations.clear();
@@ -1115,6 +1119,9 @@ impl Ui {
                 for (shortcut, label, _) in self.inventory_actions(ch) {
                     window.write(&format!(" [{}] {}\n", shortcut, label));
                 }
+                if let Some(hint) = item.usage_hint() {
+                    window.write(&format!("\n{hint}\n"));
+                }
             }
             window.write("\n[ESC] back to inventory\n");
             return;
@@ -1306,6 +1313,9 @@ impl Ui {
                         Race::Human => "Human",
                         Race::Elf => "Elf",
                         Race::Dwarf => "Dwarf",
+                        Race::Wolf => "Wolf",
+                        Race::CaveBeetle => "Cave beetle",
+                        Race::Skeleton => "Skeleton",
                     }
                     .to_owned(),
                 )
@@ -1323,6 +1333,13 @@ impl Ui {
         let tile = at.tile();
         if let Some(item) = at.item() {
             return item.description();
+        }
+        if let Some(chest) = gstate.chests.get(&coord) {
+            return if gstate.player().sees(coord) {
+                chest.description()
+            } else {
+                "chest".to_owned()
+            };
         }
         if let Some(feature) = tile.feature {
             if feature == tile::Entrance {
@@ -1421,7 +1438,7 @@ impl Ui {
         window.write("Autoexplore: o\n");
         window.write("Go to exit: G, then > or <\n");
         window.write("Examine: x\n");
-        window.write("Interact in front (pick item, else open/close door): ,\n");
+        window.write("Interact in front (item, chest, then door): ,\n");
         window.write("Inventory: I, item letter, then action (ESC goes back)\n");
         window.write("Equip/Use: E\n");
         window.write("Drop: D\n");

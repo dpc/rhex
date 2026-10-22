@@ -345,3 +345,85 @@ fn occupied_return_searches_without_overwrite_and_full_arrival_refuses() {
         engine.one_actor_tick();
     }
 }
+
+#[test]
+fn opened_partial_and_closed_chests_survive_actual_return_travel() {
+    use crate::game::chest::Chest;
+    let mut loc = fixtures::room();
+    let origin = Coordinate::new(0, 0);
+    let head = loc.player().head();
+    let closed = Coordinate::new(-2, 0);
+    loc.map[origin].feature = Some(tile::Stairs);
+    loc.chests.insert(
+        head,
+        Chest::new([
+            Box::new(Item::new(Type::Whistle, vec![])),
+            Box::new(Item::new(Type::StaminaPotion, vec![])),
+        ]),
+    );
+    loc.chests.insert(closed, Chest::new([]));
+    loc.act(0, Action::Interact);
+    while loc.player().action_cd > 0 {
+        loc.skip_act(0);
+    }
+    loc.act(0, Action::Interact);
+    let expected = loc.chests.clone();
+    let mut engine = Engine::fixture(loc);
+    for _ in 0..3 {
+        traverse(&mut engine);
+        let old_rng = engine.locations[0].rng.clone().random::<u64>();
+        traverse(&mut engine);
+        assert_eq!(engine.current_location().chests, expected);
+        assert_eq!(
+            engine.current_location().rng.clone().random::<u64>(),
+            old_rng
+        );
+        assert!(engine.current_location().chests[&head].opened);
+        assert_eq!(engine.current_location().chests[&head].contents.len(), 1);
+        assert!(!engine.current_location().chests[&closed].opened);
+        assert_eq!(
+            engine.player().items_backpack[&'a'].description(),
+            "whistle"
+        );
+    }
+}
+
+#[test]
+fn arriving_with_changed_lantern_refreshes_retained_enemy_sight() {
+    let mut loc = fixtures::room();
+    let origin = Coordinate::new(0, 0);
+    for c in origin.range_iter(5) {
+        loc.map[c].light = 0;
+    }
+    loc.map[origin].feature = Some(tile::Stairs);
+    loc.map.compact();
+    loc.recalculate_light_map();
+    loc.refresh_sight();
+    let id = loc.spawn(Actor::new(
+        actor::Race::Human,
+        Position::new(Coordinate::new(3, 0), XY + Angle::Back),
+    ));
+    assert!(!loc.actors_byid[&id].sees(origin));
+    let mut engine = Engine::fixture(loc);
+    traverse(&mut engine);
+    let player_id = engine.current_location().player_id();
+    engine
+        .current_location_mut()
+        .actors_byid
+        .get_mut(&player_id)
+        .unwrap()
+        .items_backpack
+        .insert('a', Box::new(Item::new(Type::HandLantern, vec![])));
+    for lit in [true, false, true] {
+        let loc = engine.current_location_mut();
+        let player_id = loc.player_id();
+        loc.act(player_id, Action::Equip('a'));
+        while loc.player().action_cd > 0 {
+            loc.skip_act(player_id);
+        }
+        traverse(&mut engine);
+        assert_eq!(engine.current_location().actors_byid[&id].sees(origin), lit);
+        assert_eq!(engine.player().light_emision() > 0, lit);
+        traverse(&mut engine);
+    }
+}

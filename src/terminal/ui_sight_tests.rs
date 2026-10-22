@@ -22,6 +22,71 @@ fn row(buffer: &Buffer, y: u16) -> String {
 }
 
 #[test]
+fn chest_map_legend_and_readout_reveal_only_open_visible_contents() {
+    use crate::game::chest::Chest;
+    let mut loc = fixtures::room();
+    let c = loc.player().head();
+    loc.chests
+        .insert(c, Chest::new([Box::new(Item::new(Type::Whistle, vec![]))]));
+    let mut ui = fixture(loc);
+    let entries = ui.map_renderer.sight_entries(ui.current_location());
+    assert!(
+        entries
+            .iter()
+            .any(|e| e.glyph == '%' && e.name == "closed chest")
+    );
+    assert!(!entries.iter().any(|e| e.name.contains("whistle")));
+    assert_eq!(
+        Ui::tile_surface_description(c, ui.current_location()),
+        "closed chest"
+    );
+    ui.engine
+        .current_location_mut()
+        .act(0, game::Action::Interact);
+    ui.update_changes();
+    let entries = ui.map_renderer.sight_entries(ui.current_location());
+    assert!(
+        entries
+            .iter()
+            .any(|e| e.glyph == '[' && e.name == "open chest: whistle")
+    );
+    assert_eq!(
+        Ui::tile_surface_description(c, ui.current_location()),
+        "open chest: whistle"
+    );
+    let loc = ui.engine.current_location_mut();
+    while loc.player().action_cd > 0 {
+        loc.skip_act(0);
+    }
+    loc.act(0, game::Action::Interact);
+    ui.update_changes();
+    assert!(
+        ui.map_renderer
+            .sight_entries(ui.current_location())
+            .iter()
+            .any(|e| e.glyph == '_' && e.name == "empty chest")
+    );
+    ui.engine
+        .current_location_mut()
+        .actors_byid
+        .get_mut(&0)
+        .unwrap()
+        .visible
+        .remove(&c);
+    assert!(
+        !ui.map_renderer
+            .sight_entries(ui.current_location())
+            .iter()
+            .any(|e| e.name.contains("chest"))
+    );
+    assert_eq!(
+        Ui::tile_surface_description(c, ui.current_location()),
+        "chest"
+    );
+    let _ = frame(&mut ui);
+}
+
+#[test]
 fn resources_share_one_row_and_preserve_change_colors() {
     let mut ui = fixture(fixtures::room());
     let player = ui

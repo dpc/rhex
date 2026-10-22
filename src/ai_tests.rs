@@ -8,6 +8,36 @@ use hex2d::{Position, XY};
 use rand::{SeedableRng, rngs::SmallRng};
 
 #[test]
+fn beasts_ignore_loot_and_route_around_closed_doors() {
+    for race in [actor::Race::Wolf, actor::Race::CaveBeetle] {
+        let mut loc = fixtures::room();
+        let c = Coordinate::new(-2, 0);
+        let id = loc.spawn(Actor::new(race, Position::new(c, XY)));
+        let head = loc.actors_byid[&id].head();
+        loc.items
+            .insert(head, Box::new(Item::new(Type::Whistle, vec![])));
+        let beast = loc.actors_byid.get_mut(&id).unwrap();
+        beast.visible.clear();
+        beast.visible.insert(head);
+        beast.heard.clear();
+        let mut rng = SmallRng::seed_from_u64(0);
+        for _ in 0..32 {
+            assert_ne!(Simple.action(id, &loc, &mut rng), Action::Pick);
+        }
+        loc.map[head].feature = Some(tile::Door(false));
+        let player_coord = loc.player().coord();
+        let beast = loc.actors_byid.get_mut(&id).unwrap();
+        beast.visible.insert(player_coord);
+        let action = Simple.action(id, &loc, &mut rng);
+        assert!(matches!(action, Action::Move(Left | Right)), "{action:?}");
+        loc.act(id, action);
+        assert_ne!(loc.actors_byid[&id].coord(), c);
+        assert_eq!(loc.map[head].feature, Some(tile::Door(false)));
+        assert!(loc.actors_byid[&id].items_backpack.is_empty());
+    }
+}
+
+#[test]
 fn creatures_strafe_toward_forward_diagonal_cues_without_turning() {
     for &facing in hex2d::Direction::all() {
         for angle in [Left, Right] {

@@ -282,6 +282,8 @@ fn every_weapon_attempt_emits_at_attacker_and_only_landed_hits_emit_at_target() 
     for (weapon, level) in [
         (None, 2),
         (Some(item::Type::Knife), 3),
+        (Some(item::Type::ShortSword), 4),
+        (Some(item::Type::Club), 7),
         (Some(item::Type::Bow), 4),
         (Some(item::Type::Sword), 6),
         (Some(item::Type::Axe), 8),

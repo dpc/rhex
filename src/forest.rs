@@ -113,7 +113,12 @@ pub fn generate(depth: u32, seed: u64) -> (Map, Actors, Items) {
         actors.insert(
             c,
             Actor::new(
-                if depth < 3 { Race::Rat } else { Race::Goblin },
+                match rng.random_range(0..4) {
+                    0 => Race::Wolf,
+                    1 => Race::CaveBeetle,
+                    _ if depth < 3 => Race::Rat,
+                    _ => Race::Goblin,
+                },
                 Position::new(c, Direction::XY),
             ),
         );

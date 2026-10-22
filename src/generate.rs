@@ -220,6 +220,11 @@ impl DungeonGenerator {
                     1 => Race::Goblin,
                     _ => Race::Troll,
                 };
+                let race = match self.rng.random_range(0..5) {
+                    0 if self.level >= 1 => Race::CaveBeetle,
+                    1 if self.level >= 2 => Race::Skeleton,
+                    _ => race,
+                };
                 self.actors.insert(c, Actor::new(race, pos));
             }
         }

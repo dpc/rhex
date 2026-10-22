@@ -158,6 +158,8 @@ impl MapRenderer {
             } else if let Some(item) = at.item() {
                 scratch.draw_items(loc, 0, 0, c, true);
                 (1, item.description(), scratch.items.at(0, 0).unwrap())
+            } else if let Some(chest) = loc.chests.get(&c) {
+                (2, chest.description(), base.base)
             } else if let Some(feature) = at.tile().feature {
                 (2, feature.description().to_owned(), base.base)
             } else if matches!(
@@ -442,6 +444,10 @@ impl MapRenderer {
                         Some(tile::Stairs) => glyph = STAIRS_DOWN_CH,
                         Some(tile::ForestPath) => glyph = '>',
                         Some(tile::Entrance) => glyph = '<',
+                    }
+                    // Unseen containers reveal only their presence, never contents.
+                    if let Some(chest) = cur_loc.chests.get(&c) {
+                        glyph = if visible { chest.glyph() } else { '%' };
                     }
 
                     if tt == Some(tile::Ground) {
@@ -779,6 +785,9 @@ pub fn race_to_char(race: Race) -> char {
         Race::Rat => 'r',
         Race::Goblin => 'g',
         Race::Troll => 'T',
+        Race::Wolf => 'w',
+        Race::CaveBeetle => 'b',
+        Race::Skeleton => 's',
     }
 }
 
