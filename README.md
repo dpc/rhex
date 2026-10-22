@@ -28,16 +28,17 @@ or a separate `tput` program. Run from a writable directory: the game writes
 
 Press any key at the introduction, then choose a race (`a` for human).
 In either input mode, use `h`/`l` or the Left/Right arrows to turn left/right.
-Use `k`/`j` or the Up/Down arrows to move forward/backward, and Shift-H/Shift-L
-to strafe front-left/front-right without changing your facing. You never attack
+Use `k`/`j` (with or without Shift) or the Up/Down arrows to move
+forward/backward. Use Shift-H/Shift-L to strafe front-left/front-right without
+changing your facing. You never attack
 creatures while strafing. You can open doors and clear thickets while strafing
 if your character has those capabilities.
 Creatures use the same `Move` actions to approach targets.
 These replace the old `a`/`s`/`d`/`w`/`q`/`e` movement bindings.
 You can no longer use Shift-W for automatic walking or `u`/`i` to spin.
 Press `.` to wait, `,` to interact in front, `I` to open inventory, and `?` for help.
-Press F2 to toggle Vi input mode. Only in Vi mode, use `K` for automatic walking
-and `q` to quit.
+Press F2 to toggle Vi input mode. Only in Vi mode, use `q` to quit.
+Shift-K no longer starts automatic walking in Vi mode.
 Press `Esc` to quit in either mode. In menus and inventory, letters still select
 entries and actions.
 

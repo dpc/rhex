@@ -321,18 +321,9 @@ impl Ui {
     }
 
     pub fn automove_action(&self, movetype: AutoMoveType) -> AutoMoveAction {
-        let player = self.player();
-        let cur_loc = self.current_location();
         match movetype {
             AutoMoveType::Explore => self.autoexplore_action(),
             AutoMoveType::GoTo(gototype) => self.goto_action(gototype),
-            AutoMoveType::Walk => {
-                if cur_loc.at(player.head()).tile().is_passable() {
-                    AutoMoveAction::Action(game::Action::Move(Angle::Forward))
-                } else {
-                    AutoMoveAction::Finish
-                }
-            }
         }
     }
 
@@ -506,12 +497,7 @@ impl Ui {
                 }) {
                     match self.automove_action(movetype) {
                         AutoMoveAction::Blocked => {
-                            match movetype {
-                                AutoMoveType::Explore | AutoMoveType::GoTo(_) => {
-                                    self.event(Event::Log(LogEvent::AutoExploreBlocked));
-                                }
-                                _ => {}
-                            }
+                            self.event(Event::Log(LogEvent::AutoExploreBlocked));
                             self.automoving_stop();
                         }
                         AutoMoveAction::Action(action) => {
@@ -665,16 +651,15 @@ impl Ui {
         let action = match (key, input_mode == InputMode::Vi) {
             (KEY_LOWH, _) | (input::LEFT, _) => Game(Turn(Left)),
             (KEY_LOWL, _) | (input::RIGHT, _) => Game(Turn(Right)),
-            (KEY_LOWK, _) | (input::UP, _) => Game(Move(Forward)),
+            (KEY_LOWK | KEY_CAPK, _) | (input::UP, _) => Game(Move(Forward)),
             (KEY_LOWC, _) => Game(Charge),
             (KEY_CAPH, _) => Game(Move(Left)),
             (KEY_CAPL, _) => Game(Move(Right)),
-            (KEY_LOWJ, _) | (input::DOWN, _) => Game(Move(Back)),
+            (KEY_LOWJ | KEY_CAPJ, _) | (input::DOWN, _) => Game(Move(Back)),
             (KEY_DOT, _) => Game(Wait),
             (KEY_COMMA, _) => Game(Interact),
             (KEY_DESCEND | KEY_RETURN, _) => Game(Descend),
             (KEY_LOWO, _) => AutoMove(AutoMoveType::Explore),
-            (KEY_CAPK, true) => AutoMove(AutoMoveType::Walk),
             (KEY_LOWQ, true) | (KEY_ESC, _) => ModeSwitch(Mode::FullScreen(FSMode::Quit)),
             (KEY_CAPI, _) => ModeSwitch(Mode::Inventory(InvMode::View)),
             (KEY_CAPE, _) => ModeSwitch(Mode::Inventory(InvMode::Equip)),
@@ -1465,11 +1450,9 @@ impl Ui {
         ));
         window.write("Turn left/right: h/l or Left/Right arrows\n");
         window.write("Move forward/back: k/j or Up/Down arrows\n");
+        window.write("  Shift + k/j also move forward/back.\n");
         window.write("Strafe front-left/right: Shift + h/l\n");
         window.write("  Keep facing; no attacks. Doors/thickets still work.\n");
-        if self.in_vi_input_mode() {
-            window.write("Automove: shift + k\n");
-        }
         window.write("Charge: c\n");
         window.write("Wait: .\n");
         window.write("Use exit: > or < (on its tile)\n");

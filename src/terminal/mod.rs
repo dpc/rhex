@@ -53,6 +53,5 @@ pub enum GoToType {
 #[derive(Copy, Clone, PartialEq, Eq)]
 pub enum AutoMoveType {
     Explore,
-    Walk,
     GoTo(GoToType),
 }

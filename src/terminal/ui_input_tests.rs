@@ -90,6 +90,8 @@ fn movement_and_commands_in_both_input_modes() {
             (KeyCode::Char('l'), Turn(Right)),
             (KeyCode::Char('k'), Move(Forward)),
             (KeyCode::Char('j'), Move(Back)),
+            (KeyCode::Char('K'), Move(Forward)),
+            (KeyCode::Char('J'), Move(Back)),
             (KeyCode::Char('H'), Move(Left)),
             (KeyCode::Char('L'), Move(Right)),
             (KeyCode::Char('c'), Charge),
@@ -133,10 +135,6 @@ fn ui_commands_are_not_game_actions() {
         assert!(Ui::key_to_action_normal(mode, input::F2).is_none());
     }
     assert!(matches!(
-        Ui::key_to_action_normal(InputMode::Vi, 'K' as i32),
-        Some(AutoMove(AutoMoveType::Walk))
-    ));
-    assert!(matches!(
         Ui::key_to_action_normal(InputMode::Vi, 'q' as i32),
         Some(ModeSwitch(Mode::FullScreen(FSMode::Quit)))
     ));
@@ -154,7 +152,7 @@ fn ui_commands_are_not_game_actions() {
 #[test]
 fn unmapped_keys_do_not_gain_vi_or_global_commands() {
     for (mode, keys) in [
-        (InputMode::Normal, "asdwqeuiWK"),
+        (InputMode::Normal, "asdwqeuiW"),
         (InputMode::Vi, "asdweuiW"),
     ] {
         for key in keys.chars().chain(['z', ' ', '\n']) {

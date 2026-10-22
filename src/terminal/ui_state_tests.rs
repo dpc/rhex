@@ -431,7 +431,7 @@ fn actual_propagated_hearing_interrupts_automove_but_inaudible_noise_does_not() 
         player.visible.clear();
         player.discovered.clear();
         player.discovered_areas.clear();
-        ui.automoving = Some(AutoMoveType::Walk);
+        ui.automoving = Some(AutoMoveType::Explore);
         ui.automoving_stopped_turn = u64::MAX;
         ui.engine
             .current_location_mut()
@@ -954,11 +954,78 @@ fn automove_stairs_occupancy_and_perception_interruptions() {
     player_mut(&mut ui).discovered.insert(head);
     assert!(ui.should_stop_automoving(), "new items interrupt travel");
     player_mut(&mut ui).discovered.clear();
-    ui.engine.current_location_mut().map[head] = tile::Tile::new(tile::Wall);
-    assert!(matches!(
-        ui.automove_action(AutoMoveType::Walk),
-        AutoMoveAction::Finish
-    ));
+}
+
+#[test]
+fn shifted_forward_back_dispatch_moves_once_without_turning_or_automoving() {
+    use hex2d::{XY, XZ, YX, YZ, ZX, ZY};
+
+    for input_mode in [InputMode::Normal, InputMode::Vi] {
+        for facing in [XY, XZ, YX, YZ, ZX, ZY] {
+            for (lower, upper, direction) in [('k', 'K', facing), ('j', 'J', -facing)] {
+                for (ch, modifiers) in [
+                    (upper, KeyModifiers::NONE),
+                    (upper, KeyModifiers::SHIFT),
+                    (lower, KeyModifiers::SHIFT),
+                ] {
+                    let now = Instant::now();
+                    let mut ui = fixture(now);
+                    ui.input_mode = input_mode;
+                    player_mut(&mut ui).pos.dir = facing;
+                    ui.advance((24, 60), now);
+                    let origin = ui.player().coord();
+                    ui.handle_event(
+                        TerminalEvent::Key(KeyEvent::new(KeyCode::Char(ch), modifiers)),
+                        now,
+                    );
+                    ui.advance((24, 60), now);
+                    assert_eq!(
+                        ui.player().pos,
+                        Position::new(origin + Coordinate::from(direction), facing),
+                        "{input_mode:?} {facing:?} {ch} {modifiers:?}"
+                    );
+                    assert!(ui.game_action_queue.is_empty());
+                    assert!(!ui.is_automoving());
+                    let after = game::fixtures::outcome(ui.current_location());
+                    ui.advance((24, 60), now + Duration::from_secs(1));
+                    assert_eq!(game::fixtures::outcome(ui.current_location()), after);
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn shifted_movement_letters_remain_case_sensitive_inventory_selections() {
+    for input_mode in [InputMode::Normal, InputMode::Vi] {
+        for (lower, upper) in [('j', 'J'), ('k', 'K')] {
+            for (ch, modifiers) in [
+                (upper, KeyModifiers::NONE),
+                (upper, KeyModifiers::SHIFT),
+                (lower, KeyModifiers::SHIFT),
+            ] {
+                let now = Instant::now();
+                let mut ui = fixture(now);
+                ui.input_mode = input_mode;
+                for letter in [lower, upper] {
+                    player_mut(&mut ui)
+                        .items_backpack
+                        .insert(letter, Box::new(Item::new(Type::Knife, vec![])));
+                }
+                ui.advance((24, 60), now);
+                chars(&mut ui, "I", now);
+                let before = game::fixtures::outcome(ui.current_location());
+                ui.handle_event(
+                    TerminalEvent::Key(KeyEvent::new(KeyCode::Char(ch), modifiers)),
+                    now,
+                );
+                assert_eq!(ui.mode, Mode::Inventory(InvMode::Actions(upper)));
+                assert_eq!(game::fixtures::outcome(ui.current_location()), before);
+                assert!(ui.game_action_queue.is_empty());
+                assert!(!ui.is_automoving());
+            }
+        }
+    }
 }
 
 #[test]
@@ -972,13 +1039,10 @@ fn help_lists_only_supported_movement_keys_in_both_modes() {
         let text: String = buffer.content.iter().map(|cell| cell.symbol()).collect();
         assert!(text.contains("Turn left/right: h/l or Left/Right arrows"));
         assert!(text.contains("Move forward/back: k/j or Up/Down arrows"));
+        assert!(text.contains("Shift + k/j also move forward/back."));
         assert!(text.contains("Strafe front-left/right: Shift + h/l"));
         assert!(text.contains("Keep facing; no attacks. Doors/thickets still work."));
-        assert_eq!(
-            text.contains("Automove: shift + k"),
-            input_mode == InputMode::Vi
-        );
-        for retired in ["awsdqe", "hjklui", "shift + w"] {
+        for retired in ["awsdqe", "hjklui", "shift + w", "Automove: shift + k"] {
             assert!(!text.contains(retired));
         }
     }
@@ -1087,7 +1151,7 @@ fn unsupported_events_cannot_act_select_or_cancel() {
             assert!(ui.player().items_backpack.contains_key(&'a'));
         }
     }
-    ui.automoving = Some(AutoMoveType::Walk);
+    ui.automoving = Some(AutoMoveType::Explore);
     for event in events {
         ui.handle_event(event, now);
         assert!(ui.is_automoving());
@@ -1402,7 +1466,7 @@ fn auto_movement_cannot_overtake_a_pending_inventory_action() {
             .items_backpack
             .insert('w', Box::new(Item::new(Type::Whistle, vec![])));
         let mut pose = ui.player().pos;
-        chars(&mut ui, &format!("{prefix}IwuK"), now);
+        chars(&mut ui, &format!("{prefix}Iwuo"), now);
         ui.advance((24, 60), now);
         let preceding_turns = u64::from(!prefix.is_empty());
         if !prefix.is_empty() {
@@ -1549,7 +1613,7 @@ fn automove_cancel_consumes_key_and_goto_selects_exits() {
     let now = Instant::now();
     let mut ui = fixture(now);
     key(&mut ui, KeyCode::F(2), now);
-    chars(&mut ui, "K", now);
+    chars(&mut ui, "o", now);
     assert!(ui.is_automoving());
     chars(&mut ui, "h", now);
     assert!(!ui.is_automoving());
@@ -1640,7 +1704,7 @@ fn below_minimum_pauses_queue_and_automove_and_recovers_each_mode() {
             let _ = frame(&mut ui, 60, 24);
             ui.frame_drawn(now);
             ui.queue_action(Turn(Left));
-            ui.automoving = Some(AutoMoveType::Walk);
+            ui.automoving = Some(AutoMoveType::Explore);
             let pose = ui.player().pos;
             ui.handle_event(TerminalEvent::Resize(size.0, size.1), now);
             key(&mut ui, KeyCode::Char('h'), now);
@@ -1705,7 +1769,8 @@ fn scheduling_uses_supplied_instants_and_rendering_does_not_advance_world() {
     assert!(ui.frame_due(now + Duration::from_secs(1)));
     ui.mode_switch_to(Mode::Normal);
     player_mut(&mut ui).discovered.clear();
-    ui.automoving = Some(AutoMoveType::Walk);
+    ui.engine.current_location_mut().map[Coordinate::new(4, -4)].feature = Some(tile::Stairs);
+    ui.automoving = Some(AutoMoveType::GoTo(GoToType::Stairs));
     ui.advance((24, 60), now + Duration::from_secs(2));
     assert_eq!(ui.player().pos.coord, Coordinate::new(1, -1));
     ui.advance((24, 60), now + Duration::from_millis(2049));
