@@ -101,6 +101,8 @@ pub const REMEMBERED_TERRAIN_FG: u8 = GRAY[10];
 
 // in light, shaded (barely visible), in LoS but not visible (dark), not in LoS
 pub const EMPTY_FG: [u8; 4] = [GRAY[17], GRAY[10], NOT_IN_LOS_FG, REMEMBERED_TERRAIN_FG];
+/// Plain floor dots brighten with illumination without recoloring containers.
+pub const EMPTY_DOT_FG: [u8; 4] = [250, 243, 240, REMEMBERED_TERRAIN_FG];
 pub const EMPTY_BG: [u8; 4] = [GRAY[24], GRAY[16], GRAY[4], NOT_IN_LOS_BG];
 pub const WATER_FG: [u8; 4] = EMPTY_FG;
 pub const WATER_BG: [u8; 4] = [4, 74, 67, NOT_IN_LOS_BG];
@@ -113,7 +115,9 @@ pub const FOREST_BG: [u8; 4] = [22, 16, 16, NOT_IN_LOS_BG];
 pub const THICKET_FG: [u8; 4] = [28, 22, 22, REMEMBERED_TERRAIN_FG];
 // Use neutral dark bark when unlit; cube index 52 is saturated dark red.
 pub const TRUNK_FG: [u8; 4] = [94, 58, GRAY[8], REMEMBERED_TERRAIN_FG];
-pub const CHAR_SELF_FG: [u8; 4] = [19, 18, NOT_IN_LOS_FG, NOT_IN_LOS_FG];
+/// Player body: lit, shaded, dark and unseen; brighter light gives brighter gray.
+pub const CHAR_SELF_FG: [u8; 4] = [250, 243, 240, 240];
+pub const CHAR_HUMANOID_FG: [u8; 4] = [19, 18, NOT_IN_LOS_FG, NOT_IN_LOS_FG];
 pub const _CHAR_ALLY_FG: [u8; 4] = [28, 22, NOT_IN_LOS_FG, NOT_IN_LOS_FG];
 pub const CHAR_ENEMY_FG: [u8; 4] = [124, 88, NOT_IN_LOS_FG, NOT_IN_LOS_FG];
 pub const CHAR_GRAY_FG: u8 = GRAY[17];

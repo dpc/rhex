@@ -429,7 +429,7 @@ impl MapRenderer {
                     match t.and_then(|t| t.feature) {
                         None => {
                             glyph = self.dot;
-                            fg = color::EMPTY_FG;
+                            fg = color::EMPTY_DOT_FG;
                             bg = color::EMPTY_BG;
                         }
                         Some(tile::Door(open)) => {
@@ -448,10 +448,17 @@ impl MapRenderer {
                     // Unseen containers reveal only their presence, never contents.
                     if let Some(chest) = cur_loc.chests.get(&c) {
                         glyph = if visible { chest.glyph() } else { '%' };
+                        if t.is_some_and(|t| t.feature.is_none()) {
+                            fg = color::EMPTY_FG;
+                        }
                     }
 
                     if tt == Some(tile::Ground) {
-                        fg = color::GROUND_FG;
+                        fg = if glyph == self.dot {
+                            color::EMPTY_DOT_FG
+                        } else {
+                            color::GROUND_FG
+                        };
                         bg = color::FOREST_BG;
                     }
                     if visible && cur_loc.at(c).tile().light > 0 {
@@ -556,8 +563,6 @@ impl MapRenderer {
             .map(|(id, a)| (*id, a.pos))
             .collect();
 
-        let player = cur_loc.player();
-
         actors.sort_by_key(|(id, _)| *id);
         // Collect before painting: overlapping heads must not depend on draw order.
         let mut heads = HashMap::<Coordinate, (bool, Option<Color>)>::new();
@@ -576,7 +581,11 @@ impl MapRenderer {
             if let Some((vx, vy)) = self.coord_to_glyph_xy(actor_coord) {
                 let base = self.base.at(vx, vy);
                 debug_assert!(base.known);
-                let fg_palete = race_to_palete(race);
+                let fg_palete = if actor.is_player() {
+                    color::CHAR_SELF_FG
+                } else {
+                    race_to_palete(race)
+                };
                 let fg = color_by_visibility(fg_palete, base.visible, base.light);
                 let bg = base.base.bg;
                 *self.actors.at_mut(vx, vy) = Some(DisplayCharacter {
@@ -611,7 +620,7 @@ impl MapRenderer {
                 let fg = if shared {
                     occupied_color.into()
                 } else if player_head {
-                    race_to_palete(player.race)[0].into()
+                    color::SELF_HEAD_ACTOR_FG.into()
                 } else {
                     enemy_color.unwrap()
                 };
@@ -675,7 +684,11 @@ impl MapRenderer {
                 self.effects.at_mut(vx, vy).push(
                     if cur_loc.at(c).tile().is_passable() && base.known {
                         DisplayCharacter {
-                            fg: color_by_visibility(color::CHAR_SELF_FG, base.visible, base.light),
+                            fg: color_by_visibility(
+                                color::CHAR_HUMANOID_FG,
+                                base.visible,
+                                base.light,
+                            ),
                             bg: base.base.bg,
                             bold: base.base.bold,
                             glyph: '*',
@@ -805,10 +818,9 @@ pub fn color_by_visibility(color: [u8; 4], visible: bool, light: u32) -> Color {
     Color::from(fg)
 }
 
-// TODO: actor to palete, not race, and use is_player()
 pub fn race_to_palete(race: Race) -> [u8; 4] {
     match race {
-        Race::Human | Race::Elf | Race::Dwarf => color::CHAR_SELF_FG,
+        Race::Human | Race::Elf | Race::Dwarf => color::CHAR_HUMANOID_FG,
         _ => color::CHAR_ENEMY_FG,
     }
 }

@@ -19,6 +19,19 @@ fn palette_examples() {
 }
 
 #[test]
+fn player_grays_brighten_with_light() {
+    let [lit, shaded, dark, unseen] = CHAR_SELF_FG;
+    assert!(
+        CHAR_SELF_FG
+            .into_iter()
+            .all(|index| (232..=255).contains(&index))
+    );
+    // Indexed grays increase in brightness; the RGB helper rounds these away.
+    assert!(dark < shaded && shaded < lit);
+    assert_eq!(unseen, dark);
+}
+
+#[test]
 fn styles_preserve_indexed_foreground_and_background_without_attributes() {
     let style = style(196, 21);
     assert_eq!(style.fg, Some(TerminalColor::Indexed(196)));
