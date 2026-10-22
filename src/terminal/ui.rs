@@ -137,6 +137,8 @@ pub struct Ui {
     game_action_queue: VecDeque<game::Action>,
 
     map_renderer: MapRenderer,
+    /// Level owning the current effects; descent invalidates their coordinates.
+    animation_level: i32,
 
     /// Time supplied by the runner at each scheduling/event boundary.
     now: Instant,
@@ -193,6 +195,7 @@ impl Ui {
             next_anim_frame_ts: now,
             game_action_queue: VecDeque::new(),
             map_renderer: MapRenderer::new(UNICODE_DOT),
+            animation_level: 0,
             now,
             presentation_started: now,
         };
@@ -202,6 +205,7 @@ impl Ui {
     }
 
     pub fn initial_spawn(&mut self, race: actor::Race) {
+        self.map_renderer.animations.clear();
         self.engine.initial_spawn(race);
         let player_id = self.engine.current_location().player_id();
         self.engine_change(player_id);
@@ -400,6 +404,17 @@ impl Ui {
     }
 
     fn engine_change(&mut self, actor_id: actor::Id) {
+        let level = self.current_location().level;
+        if self.animation_level != level {
+            self.map_renderer.animations.clear();
+            self.animation_level = level;
+        }
+        let events = std::mem::take(&mut self.engine.current_location_mut().combat_events);
+        self.map_renderer.animations.enqueue(
+            events,
+            self.now
+                .saturating_duration_since(self.presentation_started),
+        );
         if self.automoving.is_some()
             && self.automoving_stopped_turn != self.engine.turn()
             && self.should_stop_automoving()
@@ -495,6 +510,9 @@ impl Ui {
     /// Reconcile size and advance simulation before the runner drains input.
     pub fn advance(&mut self, size: (i32, i32), now: Instant) {
         self.now = now;
+        self.map_renderer
+            .animations
+            .advance(now.saturating_duration_since(self.presentation_started));
         if self.windows.full.size() != size {
             self.resize(size);
         }

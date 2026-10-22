@@ -18,6 +18,55 @@ fn ready_act(loc: &mut Location, action: Action) {
 }
 
 #[test]
+fn observed_hit_events_require_both_visible_participants_and_survive_removal() {
+    let mut loc = fixtures::room();
+    let source = Actor::new(Race::Troll, Position::new(Coordinate::new(1, -1), XY));
+    let mut target = Actor::new(Race::Rat, Position::new(Coordinate::new(2, -2), XY));
+    target.hp = 0;
+    loc.record_hit(&source, &target, false);
+    assert!(loc.combat_events.is_empty());
+    for hidden in [source.coord(), target.coord()] {
+        player_mut(&mut loc).visible.remove(&hidden);
+        loc.record_hit(&source, &target, true);
+        assert!(loc.combat_events.is_empty());
+        player_mut(&mut loc).visible.insert(hidden);
+    }
+    loc.record_hit(&source, &target, true);
+    target.pos.coord = Coordinate::new(4, -4);
+    assert_eq!(
+        loc.combat_events,
+        [super::super::combat_event::CombatEvent {
+            source: source.coord(),
+            impact: Coordinate::new(2, -2)
+        }]
+    );
+    let events = std::mem::take(&mut loc.combat_events);
+    assert_eq!(events.len(), 1);
+    assert!(loc.combat_events.is_empty());
+}
+
+#[test]
+fn lethal_melee_keeps_resolved_geometry_after_occupancy_and_actor_removal() {
+    let mut loc = fixtures::room();
+    let source = loc.player().coord();
+    let impact = loc.player().head();
+    let id = loc.spawn(Actor::new(Race::Rat, Position::new(impact, XY)));
+    loc.actors_byid.get_mut(&id).unwrap().hp = 1;
+    player_mut(&mut loc).stats.melee_acc = 100_000;
+    player_mut(&mut loc).stats.melee_dmg = 1000;
+    ready_act(&mut loc, Action::Move(Angle::Forward));
+    assert!(loc.actors_byid[&id].is_dead());
+    assert!(!loc.actors_coord_to_id.contains_key(&impact));
+    loc.remove(id);
+    ready_act(&mut loc, Action::Move(Angle::Forward));
+    assert_eq!(loc.player().coord(), impact);
+    assert_eq!(
+        loc.combat_events,
+        [super::super::combat_event::CombatEvent { source, impact }]
+    );
+}
+
+#[test]
 fn six_directions_do_not_rotate_and_turning_does_not_translate() {
     for dir in Direction::all() {
         for angle in [
@@ -164,6 +213,11 @@ fn melee_samples_hit_miss_armor_stamina_and_cooldown() {
         player_mut(&mut loc).sp = 0;
         ready_act(&mut loc, Action::Move(Angle::Forward));
         let result = &loc.player().did_attack[0];
+        assert_eq!(loc.combat_events.len(), usize::from(result.success));
+        if let Some(event) = loc.combat_events.first() {
+            assert_eq!(event.source, loc.player().coord());
+            assert_eq!(event.impact, head);
+        }
         assert_eq!(
             loc.actors_byid[&target].hp,
             hp - if result.success { result.dmg } else { 0 }
@@ -211,6 +265,15 @@ fn ranged_requires_ready_bow_and_occupied_target_and_records_damage() {
             hp - if result.success { result.dmg } else { 0 }
         );
         hits += usize::from(result.success);
+        let events = std::mem::take(&mut loc.combat_events);
+        assert_eq!(
+            events.len(),
+            usize::from(loc.player().did_attack[0].success)
+        );
+        for event in events {
+            assert_eq!(event.source, loc.player().coord());
+            assert_eq!(event.impact, target_coord);
+        }
         assert_eq!(loc.player().sp, 100 - cost);
     }
     assert!(hits > 0 && hits < 16);

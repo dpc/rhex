@@ -10,9 +10,11 @@ use crate::game::actor::{self, Race};
 use crate::game::{Location, item, tile};
 use hex2d::{Coordinate, Direction, Position};
 
-use rand::prelude::IndexedRandom;
-use rand::{SeedableRng, rngs::SmallRng};
 use ratatui::style::Modifier;
+
+#[cfg(test)]
+#[path = "hit_tests.rs"]
+mod hit_tests;
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
 struct DisplayCharacter {
@@ -80,8 +82,8 @@ where
 }
 
 pub struct MapRenderer {
-    /// Cosmetic randomness must not consume the simulation's streams.
-    rng: SmallRng,
+    /// Presentation-owned hit lifecycle; never consumes simulation randomness.
+    pub(super) animations: super::animations::Animations,
     base: Array2d<ExtendedCharacter>,
     items: Array2d<Option<DisplayCharacter>>,
     actors: Array2d<Option<DisplayCharacter>>,
@@ -97,7 +99,7 @@ pub struct MapRenderer {
 impl MapRenderer {
     pub fn new(dot: char) -> Self {
         MapRenderer {
-            rng: SmallRng::from_rng(&mut rand::rng()),
+            animations: Default::default(),
             base: Array2d::new(0, 0),
             items: Array2d::new(0, 0),
             actors: Array2d::new(0, 0),
@@ -153,6 +155,22 @@ impl MapRenderer {
         // Facing colors animate even while the simulation and terrain are idle.
         self.actors.reset();
         self.draw_actors(cur_loc, presentation_elapsed);
+        self.animations.advance(presentation_elapsed);
+        let glyphs: Vec<_> = self.animations.glyphs(presentation_elapsed).collect();
+        for (coord, glyph) in glyphs {
+            if !player.sees(coord) {
+                continue;
+            }
+            if let Some((vx, vy)) = self.coord_to_glyph_xy(coord) {
+                let mut ch = self
+                    .actors
+                    .at(vx, vy)
+                    .or(*self.items.at(vx, vy))
+                    .unwrap_or(self.base.at(vx, vy).base);
+                ch.glyph = glyph;
+                *self.actors.at_mut(vx, vy) = Some(ch);
+            }
+        }
 
         self.effects.reset();
         self.draw_effects(cur_loc);
@@ -504,7 +522,7 @@ impl MapRenderer {
         let (max_x, max_y) = (self.base.width, self.base.height);
         for vx in 0..max_x {
             for vy in 0..max_y {
-                let ch = match self.effects.at(vx, vy).choose(&mut self.rng) {
+                let ch = match self.effects.at(vx, vy).last() {
                     Some(ch) => ch,
                     _ => {
                         if let Some(ref ch) = *self.actors.at(vx, vy) {

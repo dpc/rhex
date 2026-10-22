@@ -5,6 +5,7 @@ mod color;
 
 mod consts;
 
+mod animations;
 mod input;
 mod map;
 

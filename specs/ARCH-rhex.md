@@ -45,6 +45,13 @@ The simulation does not run on a separate thread or wall-clock timer.
 The interface advances it and renders its state; animation timing differs
 from game turns. A terminal below the minimum supported size pauses simulation.
 
+Locations retain geometry for observed, resolved hits until `Ui` consumes it
+after each actor action. The map renderer owns active animations independently
+of actor lifetimes and advances them using `Ui`'s elapsed presentation time.
+Effects at the same impact cell play in resolution order; effects at different
+cells play concurrently. Visibility gates both capture and display, and descent
+clears old effects. Animation playback neither advances turns nor consumes game RNG.
+
 [`terminal::Session`](../src/terminal/session.rs) owns raw mode and the alternate
 screen, using Crossterm for terminal operations and Ratatui for buffered output.
 Its guard restores terminal modes on drop, and its panic hook restores them
@@ -58,9 +65,9 @@ event dispatcher. Hand-built test levels isolate controller and cell-buffer
 expectations from procedural generation.
 
 The engine owns the random stream for level seeds, player facing, and AI.
-Each location owns its tactical stream; the map renderer owns a separate
-cosmetic stream. Drawing cannot consume simulation randomness. Explicit seeds
-reproduce worlds and action outcomes within the current RNG implementation,
+Each location owns its tactical stream; rendering is deterministic and
+does not consume randomness. Explicit seeds reproduce worlds and action
+outcomes within the current RNG implementation,
 not across versions or platforms.
 
 The player acts first, followed by living actors in ascending spawn-ID order.

@@ -347,10 +347,10 @@ impl Actor {
     pub fn attack_ranged(&mut self, loc: &mut Location, target_coord: Coordinate) {
         let target_id = match loc.actors_coord_to_id.get(&target_coord) {
             None => return,
-            Some(id) => id,
+            Some(id) => *id,
         };
 
-        let mut target = match loc.actors_byid.remove(target_id) {
+        let mut target = match loc.actors_byid.remove(&target_id) {
             None => return,
             Some(target) => target,
         };
@@ -405,7 +405,8 @@ impl Actor {
             behind: from_behind,
         });
 
-        loc.actors_byid.insert(*target_id, target);
+        loc.record_hit(self, &target, success);
+        loc.actors_byid.insert(target_id, target);
     }
 
     pub fn try_attack_ranged(&mut self, loc: &mut Location, target_coord: Coordinate) {
@@ -676,7 +677,13 @@ impl Actor {
         self.stats.base.max_mp += self.stats.base.int * 2;
     }
 
-    pub fn attacks(&mut self, dir: Direction, target: &mut Actor, rng: &mut impl rand::Rng) {
+    /// Resolve melee damage and report whether the attack landed for event capture.
+    pub fn attacks(
+        &mut self,
+        dir: Direction,
+        target: &mut Actor,
+        rng: &mut impl rand::Rng,
+    ) -> bool {
         let mut acc = self.stats.melee_acc;
         let mut dmg = self.stats.melee_dmg;
 
@@ -723,6 +730,7 @@ impl Actor {
             who: target.description(),
             behind: from_behind,
         });
+        success
     }
 
     pub fn discovered_stairs(&self, loc: &Location) -> bool {
@@ -860,7 +868,8 @@ impl Actor {
                 let target_id = loc.actors_coord_to_id[&new_pos.coord];
 
                 let mut target = loc.actors_byid.remove(&target_id).unwrap();
-                self.attacks(dir, &mut target, &mut loc.rng);
+                let success = self.attacks(dir, &mut target, &mut loc.rng);
+                loc.record_hit(self, &target, success);
                 loc.actors_byid.insert(target_id, target);
                 // Can't attack twice
                 break;

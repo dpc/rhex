@@ -42,6 +42,109 @@ fn frame(ui: &mut Ui, width: u16, height: u16) -> Buffer {
 }
 
 #[test]
+fn production_turn_consumes_all_hits_once_and_idle_time_finishes_them() {
+    let now = Instant::now();
+    let mut loc = game::fixtures::room();
+    let origin = loc.player().coord();
+    loc.actors_byid.get_mut(&0).unwrap().hp = 1000;
+    loc.actors_byid.get_mut(&0).unwrap().stats.base.ev = 0;
+    for dir in [hex2d::XY, hex2d::XZ] {
+        let id = loc.spawn(Actor::new(Race::Troll, Position::new(origin + dir, -dir)));
+        loc.actors_byid.get_mut(&id).unwrap().stats.melee_acc = 100_000;
+    }
+    let mut ui = Ui::new(game::Engine::fixture(loc), (24, 60), now);
+    ui.spawned = true;
+    ui.mode_switch_to(Mode::Normal);
+    ui.queue_action(game::Action::Wait);
+    ui.advance((24, 60), now);
+    assert!(ui.current_location().combat_events.is_empty());
+    let hits: usize = ui
+        .current_location()
+        .actors_byid
+        .values()
+        .flat_map(|a| &a.did_attack)
+        .filter(|r| r.success)
+        .count();
+    assert_eq!(hits, 2);
+    assert_eq!(
+        ui.map_renderer
+            .animations
+            .glyphs(Duration::ZERO)
+            .collect::<Vec<_>>(),
+        [(origin, '-')]
+    );
+    let after_turn = game::fixtures::outcome(ui.current_location());
+    frame(&mut ui, 60, 24);
+    ui.frame_drawn(now);
+    assert!(!ui.frame_due(now + Duration::from_millis(99)));
+    assert!(ui.frame_due(now + Duration::from_millis(100)));
+    for (ms, glyph) in [
+        (199, '-'),
+        (200, '*'),
+        (399, '*'),
+        (400, '/'),
+        (600, '*'),
+        (799, '*'),
+    ] {
+        ui.advance((24, 60), now + Duration::from_millis(ms));
+        frame(&mut ui, 60, 24);
+        ui.redraw();
+        frame(&mut ui, 60, 24);
+        assert_eq!(
+            ui.map_renderer
+                .animations
+                .glyphs(Duration::from_millis(ms))
+                .collect::<Vec<_>>(),
+            [(origin, glyph)],
+            "elapsed={ms}, turn={}, hp={}",
+            ui.engine.turn(),
+            ui.player().hp
+        );
+        assert_eq!(game::fixtures::outcome(ui.current_location()), after_turn);
+    }
+    ui.mode_switch_to(Mode::FullScreen(FSMode::Help));
+    ui.advance((24, 60), now + Duration::from_millis(800));
+    assert!(
+        ui.map_renderer
+            .animations
+            .glyphs(Duration::from_millis(800))
+            .next()
+            .is_none()
+    );
+    assert!(ui.current_location().combat_events.is_empty());
+
+    // A new location invalidates pending coordinates before its first draw.
+    ui.map_renderer.animations.enqueue(
+        vec![game::combat_event::CombatEvent {
+            source: origin + hex2d::XY,
+            impact: origin,
+        }],
+        Duration::from_millis(800),
+    );
+    ui.engine.current_location_mut().map[origin].feature = Some(tile::Stairs);
+    ui.mode_switch_to(Mode::Normal);
+    ui.queue_action(game::Action::Descend);
+    ui.advance((24, 60), now + Duration::from_millis(800));
+    assert_eq!(ui.current_location().level, 1);
+    assert!(
+        ui.map_renderer
+            .animations
+            .glyphs(Duration::from_millis(800))
+            .next()
+            .is_none()
+    );
+    let fresh = fixture(now);
+    assert!(
+        fresh
+            .map_renderer
+            .animations
+            .glyphs(Duration::ZERO)
+            .next()
+            .is_none()
+    );
+}
+
+#[test]
 fn below_describes_ground_items_features_and_terrain_not_the_player() {
     let now = Instant::now();
     let origin = Coordinate::new(0, 0);
@@ -243,6 +346,7 @@ fn stochastic_world_trace_is_independent_of_zero_one_or_many_renders() {
             } else {
                 ui.engine.player_skip_act();
             }
+            ui.engine_change(ui.current_location().player_id());
             attacks += ui.player().did_attack.len();
             damage += ui
                 .player()
@@ -262,7 +366,8 @@ fn stochastic_world_trace_is_independent_of_zero_one_or_many_renders() {
                 if ui.engine.is_turn_done() {
                     break;
                 }
-                ui.engine.one_actor_tick();
+                let actor_id = ui.engine.one_actor_tick();
+                ui.engine_change(actor_id);
             }
             occupancy(ui.current_location());
             trace.push(outcome(ui.current_location()));

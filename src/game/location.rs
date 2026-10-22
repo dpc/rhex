@@ -33,9 +33,27 @@ pub struct Location {
     pub light_map: LightMap, // light intensity at a given coordinate
     pub level: i32,
     player_id: Option<actor::Id>,
+    /// Observed resolved hits awaiting one-time presentation consumption.
+    pub combat_events: Vec<super::combat_event::CombatEvent>,
 }
 
 impl Location {
+    /// Capture visible hit geometry while both participants still exist.
+    pub fn record_hit(&mut self, source: &Actor, target: &Actor, success: bool) {
+        let player = if source.is_player() {
+            source
+        } else if target.is_player() {
+            target
+        } else {
+            self.player()
+        };
+        if success && player.sees(source.coord()) && player.sees(target.coord()) {
+            self.combat_events.push(super::combat_event::CombatEvent {
+                source: source.coord(),
+                impact: target.coord(),
+            });
+        }
+    }
     /// Build an explicitly populated test level without procedural generation.
     #[cfg(test)]
     pub(crate) fn fixture(map: Map, mut player: Actor) -> Self {
@@ -51,6 +69,7 @@ impl Location {
             light_map: Default::default(),
             level: 0,
             player_id: Some(0),
+            combat_events: Vec::new(),
         }
     }
     pub fn new(level: u32, seed: u64) -> Location {
@@ -81,6 +100,7 @@ impl Location {
             level: level as i32,
             light_map: Default::default(),
             player_id: None,
+            combat_events: Vec::new(),
         }
     }
 
