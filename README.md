@@ -8,6 +8,9 @@ hexagonal map and tactical positioning, written in Rust. It uses
 
 [Watch the gameplay recording](https://asciinema.org/a/34224).
 
+See the [core game design](GAME_DESIGN.md) for the intended horror and stealth
+experience and its foundations in the current game.
+
 ## Run with Nix
 
 Use a UTF-8 locale and a terminal with at least 256 colors and a Unicode font.
