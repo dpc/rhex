@@ -13,6 +13,9 @@ use hex2d::{Coordinate, Direction, Position};
 use ratatui::style::Modifier;
 
 #[cfg(test)]
+#[path = "awareness_tests.rs"]
+mod awareness_tests;
+#[cfg(test)]
 #[path = "hit_tests.rs"]
 mod hit_tests;
 #[cfg(test)]
@@ -195,6 +198,28 @@ impl MapRenderer {
                     ch.fg = color::RED_FG.into();
                 }
                 *self.actors.at_mut(vx, vy) = Some(ch);
+            }
+        }
+
+        // Awareness wins over facing, hits and sound bolding; targeting remains above it.
+        let aware: Vec<_> = self.animations.aware_actors(presentation_elapsed).collect();
+        for id in aware {
+            let Some(enemy) = cur_loc.actors_byid.get(&id) else {
+                continue;
+            };
+            if player.is_dead()
+                || enemy.is_dead()
+                || enemy.is_player()
+                || !player.sees(enemy.coord())
+            {
+                continue;
+            }
+            if let Some((vx, vy)) = self.coord_to_glyph_xy(enemy.coord())
+                && let Some(ch) = self.actors.at_mut(vx, vy)
+            {
+                ch.glyph = '!';
+                ch.fg = color::YELLOW.into();
+                ch.bold = true;
             }
         }
 

@@ -9,6 +9,7 @@ use crate::game::item::Item;
 
 pub mod actor;
 pub mod area;
+pub mod awareness_event;
 pub use self::actor::Actor;
 pub mod action;
 pub use self::action::Action;

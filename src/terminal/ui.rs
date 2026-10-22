@@ -417,6 +417,12 @@ impl Ui {
         let events = std::mem::take(&mut self.engine.current_location_mut().combat_events);
         self.pending_sounds
             .append(&mut self.engine.current_location_mut().sound_events);
+        let awareness = std::mem::take(&mut self.engine.current_location_mut().awareness_events);
+        self.map_renderer.animations.enqueue_awareness(
+            awareness,
+            self.now
+                .saturating_duration_since(self.presentation_started),
+        );
         self.map_renderer.animations.enqueue(
             events,
             self.now

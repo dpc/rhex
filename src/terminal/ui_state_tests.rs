@@ -41,6 +41,116 @@ fn frame(ui: &mut Ui, width: u16, height: u16) -> Buffer {
     buffer
 }
 
+/// Build an unaware, visible enemy that cannot act during the tested turn.
+fn awareness_fixture(now: Instant, sight: bool) -> (Ui, actor::Id) {
+    let mut loc = game::fixtures::room();
+    let id = loc.spawn(Actor::new(
+        Race::Human,
+        Position::new(Coordinate::new(1, 0), hex2d::XY),
+    ));
+    let enemy = loc.actors_byid.get_mut(&id).unwrap();
+    assert!(!enemy.aware_of_player);
+    enemy.action_cd = 100;
+    if sight {
+        enemy.pos.dir = hex2d::XY + Angle::Back;
+    }
+    let mut ui = Ui::new(game::Engine::fixture(loc), (24, 60), now);
+    ui.spawned = true;
+    ui.mode_switch_to(Mode::Normal);
+    (ui, id)
+}
+
+#[test]
+fn awareness_production_sight_and_sound_drain_once_independently_of_rendering() {
+    fn run(draws: usize, sight: bool) -> String {
+        let now = Instant::now();
+        let (mut ui, id) = awareness_fixture(now, sight);
+        ui.queue_action(if sight {
+            game::Action::Wait
+        } else {
+            game::Action::Turn(Angle::Left)
+        });
+        ui.advance((24, 60), now);
+        assert!(ui.current_location().actors_byid[&id].aware_of_player);
+        assert!(ui.current_location().awareness_events.is_empty());
+        assert_eq!(
+            ui.map_renderer
+                .animations
+                .aware_actors(Duration::ZERO)
+                .collect::<Vec<_>>(),
+            [id]
+        );
+        let state = game::fixtures::outcome(ui.current_location());
+        for _ in 0..draws {
+            frame(&mut ui, 60, 24);
+        }
+        assert_eq!(state, game::fixtures::outcome(ui.current_location()));
+        // Draining again later must not restart a consumed transition.
+        ui.now = now + Duration::from_millis(200);
+        ui.engine_change(id);
+        assert!(
+            ui.map_renderer
+                .animations
+                .aware_actors(Duration::from_millis(500))
+                .next()
+                .is_none()
+        );
+        ui.mode_switch_to(Mode::FullScreen(FSMode::Help));
+        ui.advance((10, 20), now + Duration::from_millis(500));
+        assert!(
+            ui.map_renderer
+                .animations
+                .aware_actors(Duration::ZERO)
+                .next()
+                .is_none()
+        );
+        assert_eq!(state, game::fixtures::outcome(ui.current_location()));
+        state
+    }
+    for sight in [false, true] {
+        assert_eq!(run(0, sight), run(1, sight));
+        assert_eq!(run(0, sight), run(7, sight));
+    }
+}
+
+#[test]
+fn awareness_descent_and_session_reset_discard_old_actor_id_markers() {
+    for descend in [false, true] {
+        let now = Instant::now();
+        let (mut ui, id) = awareness_fixture(now, true);
+        ui.queue_action(game::Action::Wait);
+        ui.advance((24, 60), now);
+        assert_eq!(
+            ui.map_renderer
+                .animations
+                .aware_actors(Duration::ZERO)
+                .collect::<Vec<_>>(),
+            [id]
+        );
+        if descend {
+            let origin = ui.player().coord();
+            ui.engine.current_location_mut().map[origin].feature = Some(tile::Stairs);
+            ui.queue_action(game::Action::Descend);
+            ui.advance((24, 60), now + Duration::from_millis(100));
+            assert_eq!(ui.current_location().level, 1);
+            assert!(ui.current_location().awareness_events.is_empty());
+        } else {
+            let mut loc = fixtures::room();
+            loc.actors_byid.clear();
+            loc.actors_coord_to_id.clear();
+            ui.engine = game::Engine::fixture(loc);
+            ui.initial_spawn(Race::Human);
+        }
+        assert!(
+            ui.map_renderer
+                .animations
+                .aware_actors(Duration::from_millis(100))
+                .next()
+                .is_none()
+        );
+    }
+}
+
 #[test]
 fn real_same_turn_sounds_are_concurrent_and_expire_behind_menus_and_tiny_windows() {
     let now = Instant::now();

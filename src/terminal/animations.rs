@@ -11,6 +11,8 @@ pub(super) struct Animations {
     active: Vec<Hit>,
     /// Time-bucket unions retain every source without per-source playback queues.
     sounds: BTreeMap<u128, SoundMask>,
+    /// Actor-bound acquisition markers, concurrent with hits and sound waves.
+    awareness: BTreeMap<crate::game::actor::Id, Duration>,
 }
 
 /// One 100ms presentation slice, coalescing overlapping waves and origins.
@@ -34,6 +36,29 @@ const STRIKE: Duration = Duration::from_millis(200);
 const TOTAL: Duration = Duration::from_millis(400);
 
 impl Animations {
+    /// Start visible acquisition markers together, without adding gameplay delays.
+    pub(super) fn enqueue_awareness(
+        &mut self,
+        events: Vec<crate::game::awareness_event::AwarenessEvent>,
+        now: Duration,
+    ) {
+        self.advance(now);
+        for event in events {
+            self.awareness
+                .insert(event.actor, now + Duration::from_millis(500));
+        }
+    }
+
+    /// Yield identities while their brief yellow marker is active.
+    pub(super) fn aware_actors(
+        &self,
+        now: Duration,
+    ) -> impl Iterator<Item = crate::game::actor::Id> + '_ {
+        self.awareness
+            .iter()
+            .filter_map(move |(&id, &end)| (now < end).then_some(id))
+    }
+
     /// Start every sound in a turn together; bucket quantization shortens by <100ms.
     pub(super) fn enqueue_sounds(
         &mut self,
@@ -112,12 +137,14 @@ impl Animations {
     pub(super) fn advance(&mut self, now: Duration) {
         self.active.retain(|hit| now < hit.start + TOTAL);
         self.sounds.retain(|&tick, _| tick >= now.as_millis() / 100);
+        self.awareness.retain(|_, end| now < *end);
     }
 
     /// Discard effects when their location or session is replaced.
     pub(super) fn clear(&mut self) {
         self.active.clear();
         self.sounds.clear();
+        self.awareness.clear();
     }
 
     /// Yield the current glyph of each playing effect in resolution order.

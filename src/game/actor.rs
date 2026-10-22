@@ -188,6 +188,8 @@ pub struct Actor {
     pub saved_sp: i32,
 
     pub player: bool,
+    /// Current player awareness; future loss-of-contact policies may reset it.
+    pub(crate) aware_of_player: bool,
     pub pre_pos: Option<Position>,
     pub pre_head: Option<Coordinate>,
     pub pos: Position,
@@ -248,6 +250,7 @@ impl Actor {
         Actor {
             race,
             player: false,
+            aware_of_player: false,
             pos,
             pre_pos: None,
             pre_head: None,
@@ -479,6 +482,12 @@ impl Actor {
         self.visible = visible;
     }
 
+    /// Test current sight without changing cached AI cues or discovery history.
+    pub(crate) fn currently_sees(&self, loc: &Location, coord: Coordinate) -> bool {
+        self.los_to_visible(loc, &self.current_los(loc))
+            .contains(&coord)
+    }
+
     #[cfg(test)]
     pub fn prev_pos(&self) -> Position {
         self.pre_pos.unwrap_or(self.pos)
@@ -636,19 +645,25 @@ impl Actor {
         }
     }
 
-    // TODO: change to be `add_current_los_to(..., Visibility)`
     fn add_current_los_to_temporary_los(&mut self, loc: &Location) {
+        self.temporary_los.extend(self.current_los(loc));
+    }
+
+    /// Compute the same directional sight geometry used by cached perception.
+    fn current_los(&self, loc: &Location) -> Visibility {
+        let mut los = Visibility::default();
         let pos = self.pos;
         let vision = self.stats.base.vision;
         algo::los2::los(
             &|coord| loc.at(coord).tile().opaqueness(),
             &mut |coord, _| {
-                let _ = self.temporary_los.insert(coord);
+                let _ = los.insert(coord);
             },
             vision,
             pos.coord,
             &[pos.dir],
         );
+        los
     }
 
     pub fn unequip_slot(&mut self, slot: Slot) {

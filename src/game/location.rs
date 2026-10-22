@@ -16,6 +16,9 @@ use super::tile;
 use super::{Items, LightMap, Map};
 
 #[cfg(test)]
+#[path = "awareness_tests.rs"]
+mod awareness_tests;
+#[cfg(test)]
 #[path = "location_tests.rs"]
 mod tests;
 
@@ -36,6 +39,8 @@ pub struct Location {
     pub combat_events: Vec<super::combat_event::CombatEvent>,
     /// Action-scoped observations; consumers drain these after each action.
     pub sound_events: Vec<super::sound::ObservedSound>,
+    /// Visible awareness transitions, drained once or expired at the next action.
+    pub awareness_events: Vec<super::awareness_event::AwarenessEvent>,
 }
 
 impl Location {
@@ -72,6 +77,7 @@ impl Location {
             player_id: Some(0),
             combat_events: Vec::new(),
             sound_events: Vec::new(),
+            awareness_events: Vec::new(),
         }
     }
     pub fn new(level: u32, seed: u64) -> Location {
@@ -104,6 +110,7 @@ impl Location {
             player_id: None,
             combat_events: Vec::new(),
             sound_events: Vec::new(),
+            awareness_events: Vec::new(),
         }
     }
 
@@ -113,6 +120,43 @@ impl Location {
 
     pub fn player(&self) -> &Actor {
         &self.actors_byid[&self.player_id.unwrap()]
+    }
+
+    /// Change current awareness; resetting permits a later acquisition event.
+    pub fn set_player_awareness(&mut self, id: actor::Id, aware: bool) {
+        let Some(player_id) = self.player_id else {
+            return;
+        };
+        let player = &self.actors_byid[&player_id];
+        let enemy = &self.actors_byid[&id];
+        if id == player_id || enemy.is_player() || enemy.is_dead() || player.is_dead() {
+            return;
+        }
+        let observed = player.sees(enemy.coord());
+        let enemy = self.actors_byid.get_mut(&id).unwrap();
+        if aware && !enemy.aware_of_player && observed {
+            self.awareness_events
+                .push(super::awareness_event::AwarenessEvent { actor: id });
+        }
+        enemy.aware_of_player = aware;
+    }
+
+    /// Acquire sight immediately after world changes, not at the next AI action.
+    fn resolve_player_sight(&mut self) {
+        let Some(player_id) = self.player_id else {
+            return;
+        };
+        let player = &self.actors_byid[&player_id];
+        if player.is_dead() {
+            return;
+        }
+        let coord = player.coord();
+        for id in self.actors_alive_ids() {
+            let enemy = &self.actors_byid[&id];
+            if id != player_id && !enemy.aware_of_player && enemy.currently_sees(self, coord) {
+                self.set_player_awareness(id, true);
+            }
+        }
     }
 
     /// Resolve discrete emissions once against post-action geometry.
@@ -128,6 +172,9 @@ impl Location {
                             .get_mut(&listener)
                             .unwrap()
                             .noise_hears(emission.source, emission.kind);
+                        if Some(id) == self.player_id {
+                            self.set_player_awareness(listener, true);
+                        }
                     }
                 }
                 if let Some(player_id) = self.player_id {
@@ -249,7 +296,9 @@ impl Location {
 
     pub fn spawn_player(&mut self, actor: Actor) -> actor::Id {
         assert!(actor.is_player());
-        self.player_id = Some(self.spawn(actor));
+        // Publish identity before spawn's perception boundary, including first contact.
+        self.player_id = Some(self.actors_counter);
+        self.spawn(actor);
         self.player_id.unwrap()
     }
 
@@ -282,6 +331,7 @@ impl Location {
 
     pub fn pre_any_tick(&mut self) {
         self.sound_events.clear();
+        self.awareness_events.clear();
         for id in self.actors_alive_ids() {
             let mut actor = self.actors_byid.remove(&id).unwrap();
             actor.pre_any_tick();
@@ -328,6 +378,7 @@ impl Location {
         );
 
         self.recalculate_light_map();
+        self.resolve_player_sight();
         self.resolve_sounds();
     }
 

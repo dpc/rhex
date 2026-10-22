@@ -67,6 +67,20 @@ current position. These markers reveal the origin without revealing terrain or
 actors. Sound observations that the interface has not drained expire at the next
 action boundary, and descent discards old-level presentation state.
 
+Actors retain current awareness of the player, separate from transient hearing
+cues. After each action and the initial player spawn, the location checks whether
+unaware enemies can see the player. It uses the same geometry and lighting rules
+as cached perception without changing AI cues or discovery. Enemies also acquire
+awareness by hearing sound from the player; emitter identity, not race or later
+cell occupancy, identifies the source. There is no forgetting policy or change
+to pursuit policy. An explicit reset allows future reacquisition.
+Visible unaware-to-aware transitions produce actor-bound presentation events.
+The interface drains each event once and shows a yellow `!` for 500 ms, following
+the living actor only while visible. Hidden transitions never replay when an
+enemy becomes visible. The marker overrides facing, hits and sound bold styling;
+target and examine effects remain above it. Expiry, modal screens, resizing
+and location/session reset share the existing animation lifecycle.
+
 [`terminal::Session`](../src/terminal/session.rs) owns raw mode and the alternate
 screen, using Crossterm for terminal operations and Ratatui for buffered output.
 Its guard restores terminal modes on drop, and its panic hook restores them
