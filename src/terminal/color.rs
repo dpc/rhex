@@ -97,12 +97,12 @@ pub const VISIBLE_FG: u8 = WHITE;
 
 pub const NOT_IN_LOS_FG: u8 = GRAY[16];
 pub const NOT_IN_LOS_BG: u8 = GRAY[1];
-pub const REMEMBERED_TERRAIN_FG: u8 = GRAY[10];
+pub const REMEMBERED_TERRAIN_FG: u8 = GRAY[5];
 
 // in light, shaded (barely visible), in LoS but not visible (dark), not in LoS
 pub const EMPTY_FG: [u8; 4] = [GRAY[17], GRAY[10], NOT_IN_LOS_FG, REMEMBERED_TERRAIN_FG];
-/// Plain floor dots brighten with illumination without recoloring containers.
-pub const EMPTY_DOT_FG: [u8; 4] = [250, 243, 240, REMEMBERED_TERRAIN_FG];
+/// Unlit floor dots stay subdued below shaded dots and the readable player body.
+pub const EMPTY_DOT_FG: [u8; 4] = [250, 243, 238, REMEMBERED_TERRAIN_FG];
 pub const EMPTY_BG: [u8; 4] = [GRAY[24], GRAY[16], GRAY[4], NOT_IN_LOS_BG];
 pub const WATER_FG: [u8; 4] = EMPTY_FG;
 pub const WATER_BG: [u8; 4] = [4, 74, 67, NOT_IN_LOS_BG];

@@ -91,7 +91,14 @@ fn player_body_is_gray_but_facing_stays_blue_in_every_light_band() {
                 true,
             );
             if terrain != tile::ShallowWater {
-                cell(&buffer, (8, 4), "•", gray, backgrounds[band], false);
+                cell(
+                    &buffer,
+                    (8, 4),
+                    "•",
+                    [250, 243, 238][band],
+                    backgrounds[band],
+                    false,
+                );
                 player_mut(&mut loc).visible.remove(&Coordinate::new(0, 2));
                 let remembered = render(&mut renderer, &loc, Mode::Normal, None, 0, 20, 12);
                 cell(
@@ -356,7 +363,7 @@ fn death_lights_remembered_terrain_without_revealing_unknown_cells() {
 }
 
 #[test]
-fn remembered_terrain_is_darker_without_changing_visible_styles_or_backgrounds() {
+fn unlit_dots_and_remembered_terrain_are_subdued_without_recoloring_other_terrain() {
     // Literal indexed colors keep this independent of the production palette.
     // Each visible style is ordered: unlit, shaded, fully lit.
     for (terrain, feature, glyph, fg, bg, bold) in [
@@ -364,7 +371,7 @@ fn remembered_terrain_is_darker_without_changing_visible_styles_or_backgrounds()
             tile::Empty,
             None,
             "•",
-            [240, 243, 250],
+            [238, 243, 250],
             [235, 247, 255],
             false,
         ),
@@ -382,7 +389,7 @@ fn remembered_terrain_is_darker_without_changing_visible_styles_or_backgrounds()
             tile::Ground,
             None,
             "•",
-            [240, 243, 250],
+            [238, 243, 250],
             [16, 16, 22],
             false,
         ),
@@ -459,8 +466,14 @@ fn remembered_terrain_is_darker_without_changing_visible_styles_or_backgrounds()
             cell(&buffer, (8, 4), glyph, fg[band], bg[band], bold);
         }
         player_mut(&mut loc).visible.remove(&coord);
-        let buffer = render(&mut renderer, &loc, Mode::Normal, None, 0, 20, 12);
-        cell(&buffer, (8, 4), glyph, 241, 232, bold);
+        // Current lighting must not brighten terrain outside sight.
+        for light in [0, 1, 3] {
+            for lit_coord in Coordinate::new(0, 0).range_iter(8) {
+                loc.light_map[lit_coord] = light;
+            }
+            let buffer = render(&mut renderer, &loc, Mode::Normal, None, 0, 20, 12);
+            cell(&buffer, (8, 4), glyph, 236, 232, bold);
+        }
     }
 }
 
@@ -493,7 +506,7 @@ fn shoreline_glue_matches_ground_light_in_both_directions() {
 
                 player_mut(&mut loc).visible.remove(&wet);
                 let remembered = render(&mut renderer, &loc, Mode::Normal, None, 0, 20, 12);
-                cell(&remembered, (9, 4), " ", 241, 232, false);
+                cell(&remembered, (9, 4), " ", 236, 232, false);
                 player_mut(&mut loc).known.remove(&ground);
                 player_mut(&mut loc).known.remove(&wet);
                 let unknown = render(&mut renderer, &loc, Mode::Normal, None, 0, 20, 12);
@@ -532,7 +545,7 @@ fn adjacent_water_keeps_tile_glyphs_and_continuous_background_without_glue_glyph
                         ((9, 4), " ", left_seen || right_seen),
                         ((10, 4), right_glyph, right_seen),
                     ] {
-                        let (fg, bg) = if seen { (fg, bg) } else { (241, 232) };
+                        let (fg, bg) = if seen { (fg, bg) } else { (236, 232) };
                         cell(&buffer, xy, glyph, fg, bg, false);
                     }
 
