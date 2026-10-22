@@ -64,6 +64,21 @@ pub struct Tile {
 }
 
 impl Tile {
+    /// Walls block transmission; movement restrictions do not define acoustics.
+    pub fn transmits_sound(&self) -> bool {
+        self.type_ != Wall
+    }
+
+    /// Quarter-level absorption, also applied to the six adjacent cells.
+    pub fn sound_dampening(&self) -> u16 {
+        let terrain = if self.type_ == Wall { 1 } else { 0 };
+        terrain.max(match self.feature {
+            Some(Statue) => 4,
+            Some(Door(false)) => 2,
+            _ => 0,
+        })
+    }
+
     pub fn new(t: Type) -> Tile {
         Tile {
             type_: t,

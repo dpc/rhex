@@ -10,7 +10,6 @@ use rand::{SeedableRng, rngs::SmallRng};
 use simplemap::SimpleMap;
 
 use super::Action;
-use super::Noise;
 use super::actor::{self, Actor};
 use super::item::Item;
 use super::tile;
@@ -35,6 +34,8 @@ pub struct Location {
     player_id: Option<actor::Id>,
     /// Observed resolved hits awaiting one-time presentation consumption.
     pub combat_events: Vec<super::combat_event::CombatEvent>,
+    /// Action-scoped observations; consumers drain these after each action.
+    pub sound_events: Vec<super::sound::ObservedSound>,
 }
 
 impl Location {
@@ -70,6 +71,7 @@ impl Location {
             level: 0,
             player_id: Some(0),
             combat_events: Vec::new(),
+            sound_events: Vec::new(),
         }
     }
     pub fn new(level: u32, seed: u64) -> Location {
@@ -101,6 +103,7 @@ impl Location {
             light_map: Default::default(),
             player_id: None,
             combat_events: Vec::new(),
+            sound_events: Vec::new(),
         }
     }
 
@@ -112,18 +115,32 @@ impl Location {
         &self.actors_byid[&self.player_id.unwrap()]
     }
 
-    pub fn recalculate_noise(&mut self) {
-        for id in &self.actors_alive_ids() {
-            let source_emission = self.actors_byid[id].noise_emision;
-            if source_emission > 0 {
-                let source_race = self.actors_byid[id].race;
-                let source_coord = self.actors_byid[id].pos.coord;
-                for coord in source_coord.range_iter(source_emission) {
-                    if let Some(&target_id) = self.actors_coord_to_id.get(&coord) {
+    /// Resolve discrete emissions once against post-action geometry.
+    pub fn resolve_sounds(&mut self) {
+        for id in self.actors_ids() {
+            let emissions =
+                std::mem::take(&mut self.actors_byid.get_mut(&id).unwrap().pending_noises);
+            for emission in emissions {
+                let cells = super::sound::propagate(&self.map, &self.items, &emission);
+                for cell in &cells {
+                    if let Some(&listener) = self.actors_coord_to_id.get(&cell.coord) {
                         self.actors_byid
-                            .get_mut(&target_id)
+                            .get_mut(&listener)
                             .unwrap()
-                            .noise_hears(source_coord, Noise::Creature(source_race));
+                            .noise_hears(emission.source, emission.kind);
+                    }
+                }
+                if let Some(player_id) = self.player_id {
+                    let player = &self.actors_byid[&player_id];
+                    if cells.iter().any(|cell| cell.coord == player.coord()) {
+                        self.sound_events.push(super::sound::ObservedSound {
+                            hidden_source: (id != player_id && !player.sees(emission.source))
+                                .then_some(emission.source),
+                            cells: cells
+                                .into_iter()
+                                .filter(|cell| player.sees(cell.coord))
+                                .collect(),
+                        });
                     }
                 }
             }
@@ -210,7 +227,6 @@ impl Location {
         astate.pre_spawn(self);
         self.actors_byid.insert(id, astate);
         self.recalculate_light_map();
-        self.recalculate_noise();
 
         self.pre_any_tick();
         let mut astate = self.actors_byid.remove(&id).unwrap();
@@ -265,6 +281,7 @@ impl Location {
     }
 
     pub fn pre_any_tick(&mut self) {
+        self.sound_events.clear();
         for id in self.actors_alive_ids() {
             let mut actor = self.actors_byid.remove(&id).unwrap();
             actor.pre_any_tick();
@@ -311,7 +328,7 @@ impl Location {
         );
 
         self.recalculate_light_map();
-        self.recalculate_noise();
+        self.resolve_sounds();
     }
 
     pub fn post_turn(&mut self) {}

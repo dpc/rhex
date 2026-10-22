@@ -47,3 +47,4 @@ pub type Actors = HashMap<Coordinate, Actor, BuildHasherDefault<FnvHasher>>;
 pub type Items = HashMap<Coordinate, Box<Item>, BuildHasherDefault<FnvHasher>>;
 pub type LightMap = SimpleMap<Coordinate, u32, BuildHasherDefault<FnvHasher>>;
 pub mod combat_event;
+pub mod sound;

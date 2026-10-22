@@ -18,8 +18,12 @@ the game, controls, terminal requirements, and development commands.
   generated location on descent.
 - [`game::Location`](../src/game/location.rs) owns a level's terrain, actors,
   ground items, and lighting. It applies actions and coordinates their effects
-  with the actor and item models. Actor state includes perception and discovery
-  information for the player's view.
+  with the actor and item models. Actors capture sound origins when actions
+  emit them. Before the next actor chooses an action, the location resolves
+  bounded sound propagation against post-action terrain and ground items.
+  It uses that result once for gameplay hearing and retains only
+  player-permitted observations for presentation.
+  Actor state includes perception and discovery information for the player's view.
 - [`generate`](../src/generate.rs) builds levels from game types;
   [`ai`](../src/ai.rs) chooses actions from the current location and actor state.
   Neither these modules nor `game` depend on the terminal interface. Shared
@@ -52,6 +56,17 @@ Effects at the same impact cell play in resolution order; effects at different
 cells play concurrently. Visibility gates both capture and display, and descent
 clears old effects. Animation playback neither advances turns nor consumes game RNG.
 
+The interface drains sound observations after each action and starts their
+animations together after the turn, independently of hit ordering. The animation
+owner unions short-lived time masks rather than queueing sounds by source.
+Waves add bold to cells visible at both capture and display. Only other actors'
+audible origins unseen at capture get temporary red `!` markers while still
+unseen, including on unknown cells. The player's own emissions animate waves
+but never get markers, even for earlier charge footsteps behind the player's
+current position. These markers reveal the origin without revealing terrain or
+actors. Sound observations that the interface has not drained expire at the next
+action boundary, and descent discards old-level presentation state.
+
 [`terminal::Session`](../src/terminal/session.rs) owns raw mode and the alternate
 screen, using Crossterm for terminal operations and Ratatui for buffered output.
 Its guard restores terminal modes on drop, and its panic hook restores them
@@ -67,8 +82,7 @@ expectations from procedural generation.
 The engine owns the random stream for level seeds, player facing, and AI.
 Each location owns its tactical stream; rendering is deterministic and
 does not consume randomness. Explicit seeds reproduce worlds and action
-outcomes within the current RNG implementation,
-not across versions or platforms.
+outcomes within the current RNG implementation, not across versions or platforms.
 
 The player acts first, followed by living actors in ascending spawn-ID order.
 Descent transfers the player and discards the old location's pending schedule.

@@ -92,6 +92,7 @@ impl Engine {
             && self.current_location().player().descended()
         {
             let mut player = self.current_location_mut().remove(actor_id).unwrap();
+            self.current_location_mut().sound_events.clear();
             self.location_cur += 1;
             self.locations
                 .push(Location::new(self.location_cur as u32, self.rng.random()));

@@ -115,6 +115,15 @@ pub struct Item {
 }
 
 impl Item {
+    /// Ground-item quarter-level absorption, including a one-cell halo.
+    pub fn sound_dampening(&self) -> u16 {
+        match self.type_ {
+            HealthPotion => 0,
+            Cloak | Leather => 2,
+            _ => 1,
+        }
+    }
+
     pub fn new(t: Type, features: Vec<Feature>) -> Item {
         Item { type_: t, features }
     }

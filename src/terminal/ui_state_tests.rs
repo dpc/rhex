@@ -42,6 +42,193 @@ fn frame(ui: &mut Ui, width: u16, height: u16) -> Buffer {
 }
 
 #[test]
+fn real_same_turn_sounds_are_concurrent_and_expire_behind_menus_and_tiny_windows() {
+    let now = Instant::now();
+    let mut loc = fixtures::room();
+    let origin = loc.player().coord();
+    let sources = [Coordinate::new(1, 0), Coordinate::new(0, 1)];
+    for source in sources {
+        let id = loc.spawn(Actor::new(Race::Rat, Position::new(source, hex2d::XY)));
+        loc.actors_byid.get_mut(&id).unwrap().visible.insert(origin);
+        loc.actors_byid.get_mut(&0).unwrap().visible.remove(&source);
+    }
+    let mut ui = Ui::new(game::Engine::fixture(loc), (24, 60), now);
+    ui.spawned = true;
+    ui.mode_switch_to(Mode::Normal);
+    ui.queue_action(game::Action::Wait);
+    ui.advance((24, 60), now);
+    for source in sources {
+        assert!(ui.player().heard.contains_key(&source));
+        assert!(
+            ui.map_renderer
+                .animations
+                .sound_cells(Duration::ZERO)
+                .any(|c| c == (source, true))
+        );
+    }
+    assert!(ui.current_location().sound_events.is_empty());
+    assert!(ui.pending_sounds.is_empty());
+    assert_eq!(
+        ui.log
+            .borrow()
+            .iter()
+            .filter(|entry| entry.text.contains("You hear"))
+            .count(),
+        2
+    );
+    let state = game::fixtures::outcome(ui.current_location());
+    game::sound::WORK.set((0, 0, 0));
+    for _ in 0..7 {
+        frame(&mut ui, 60, 24);
+    }
+    assert_eq!(game::sound::WORK.get(), (0, 0, 0));
+    assert_eq!(state, game::fixtures::outcome(ui.current_location()));
+    ui.mode_switch_to(Mode::FullScreen(FSMode::Help));
+    ui.advance((10, 20), now + Duration::from_millis(500));
+    assert!(
+        ui.map_renderer
+            .animations
+            .sound_cells(Duration::ZERO)
+            .next()
+            .is_none()
+    );
+    assert!(
+        ui.map_renderer
+            .animations
+            .sound_cells(Duration::from_millis(400))
+            .next()
+            .is_none()
+    );
+    assert_eq!(state, game::fixtures::outcome(ui.current_location()));
+}
+
+#[test]
+fn actual_propagated_hearing_interrupts_automove_but_inaudible_noise_does_not() {
+    let now = Instant::now();
+    for blocked in [false, true] {
+        let mut ui = fixture(now);
+        let source = Coordinate::new(2, 0);
+        let loc = ui.engine.current_location_mut();
+        let id = loc.spawn(Actor::new(Race::Rat, Position::new(source, hex2d::XY)));
+        if blocked {
+            loc.map[Coordinate::new(0, 1)].feature = Some(tile::Statue);
+        }
+        let player = loc.actors_byid.get_mut(&0).unwrap();
+        player.visible.clear();
+        player.discovered.clear();
+        player.discovered_areas.clear();
+        ui.automoving = Some(AutoMoveType::Walk);
+        ui.automoving_stopped_turn = u64::MAX;
+        ui.engine
+            .current_location_mut()
+            .act(id, game::Action::Turn(Angle::Right));
+        ui.engine_change(id);
+        assert_eq!(ui.is_automoving(), blocked);
+        assert_eq!(ui.player().heard.contains_key(&source), !blocked);
+    }
+}
+
+#[test]
+fn sound_playback_frequency_does_not_change_gameplay_or_rng() {
+    fn run(draws: usize) -> String {
+        let now = Instant::now();
+        let mut ui = fixture(now);
+        for (step, action) in [
+            game::Action::Turn(Angle::Right),
+            game::Action::Move(Angle::Forward),
+            game::Action::Wait,
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            let time = now + Duration::from_millis(step as u64 * 1000);
+            ui.queue_action(action);
+            ui.advance((24, 60), time);
+            let before = game::sound::WORK.get();
+            for _ in 0..draws {
+                frame(&mut ui, 60, 24);
+            }
+            assert_eq!(before, game::sound::WORK.get());
+        }
+        game::fixtures::outcome(ui.current_location())
+    }
+    assert_eq!(run(0), run(1));
+    assert_eq!(run(0), run(7));
+}
+
+#[test]
+fn descent_discards_staged_and_playing_sounds_before_first_new_level_action() {
+    let now = Instant::now();
+    let mut ui = fixture(now);
+    let origin = ui.player().coord();
+    ui.queue_action(game::Action::Turn(Angle::Right));
+    ui.advance((24, 60), now);
+    assert!(
+        ui.map_renderer
+            .animations
+            .sound_cells(Duration::ZERO)
+            .next()
+            .is_some()
+    );
+    ui.engine.current_location_mut().map[origin].feature = Some(tile::Stairs);
+    ui.queue_action(game::Action::Descend);
+    ui.advance((24, 60), now + Duration::from_millis(100));
+    assert_eq!(ui.current_location().level, 1);
+    assert!(ui.pending_sounds.is_empty());
+    assert!(ui.current_location().sound_events.is_empty());
+    assert!(ui.player().heard.is_empty());
+    assert!(ui.player().pending_noises.is_empty());
+    assert!(
+        ui.map_renderer
+            .animations
+            .sound_cells(Duration::ZERO)
+            .next()
+            .is_none()
+    );
+    ui.queue_action(game::Action::Turn(Angle::Right));
+    ui.advance((24, 60), now + Duration::from_millis(200));
+    assert!(
+        ui.map_renderer
+            .animations
+            .sound_cells(Duration::from_millis(200))
+            .next()
+            .is_some()
+    );
+}
+
+#[test]
+#[ignore = "manual generated-turn/render measurement, never a timing gate"]
+fn generated_sound_workload_measurement() {
+    let now = Instant::now();
+    let mut ui = Ui::new(game::Engine::seeded(42), (40, 120), now);
+    ui.initial_spawn(Race::Human);
+    ui.mode_switch_to(Mode::Normal);
+    player_mut(&mut ui).hp = 100_000;
+    game::sound::WORK.set((0, 0, 0));
+    let started = Instant::now();
+    for turn in 0..100 {
+        ui.queue_action(game::Action::Turn(Angle::Right));
+        ui.advance((40, 120), now + Duration::from_millis(turn * 1000));
+    }
+    eprintln!(
+        "generated seed42 100 turns / {} actors: elapsed={:?}, (calls, settled, edges)={:?}",
+        ui.current_location().actors_ids().len(),
+        started.elapsed(),
+        game::sound::WORK.get()
+    );
+    let before = game::sound::WORK.get();
+    let started = Instant::now();
+    for _ in 0..1000 {
+        std::hint::black_box(frame(&mut ui, 120, 40));
+    }
+    eprintln!(
+        "1000 composed 120x40 frames with active sound: elapsed={:?}",
+        started.elapsed()
+    );
+    assert_eq!(before, game::sound::WORK.get());
+}
+
+#[test]
 fn production_turn_consumes_all_hits_once_and_idle_time_finishes_them() {
     let now = Instant::now();
     let mut loc = game::fixtures::room();

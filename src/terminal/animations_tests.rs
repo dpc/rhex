@@ -75,3 +75,67 @@ fn same_cell_hits_queue_in_order_other_cells_play_concurrently_and_reset() {
     animations.clear();
     assert!(animations.glyphs(at(1200)).next().is_none());
 }
+
+fn sound(source: Coordinate) -> crate::game::sound::ObservedSound {
+    crate::game::sound::ObservedSound {
+        cells: (0..=3)
+            .map(|hops| crate::game::sound::Cell {
+                coord: source + Coordinate::new(i32::from(hops), 0),
+                spent: 4 * hops,
+                hops,
+            })
+            .collect(),
+        hidden_source: Some(source),
+    }
+}
+
+#[test]
+fn waves_start_concurrently_union_overlaps_and_expire_at_phase_boundaries() {
+    let a = Coordinate::new(0, 0);
+    let b = Coordinate::new(0, 4);
+    let mut animations = Animations::default();
+    animations.enqueue_sounds(vec![sound(a), sound(b), sound(a)], at(0));
+    for ms in [0, 99, 100, 199, 200, 299, 300, 399, 499, 500] {
+        let cells: Vec<_> = animations.sound_cells(at(ms)).collect();
+        for source in [a, b] {
+            assert_eq!(cells.contains(&(source, true)), ms < 500);
+            for phase in 0..=3 {
+                let coord = source + Coordinate::new(phase, 0);
+                assert_eq!(
+                    cells.contains(&(coord, false)),
+                    (phase as u64 * 100..phase as u64 * 100 + 200).contains(&ms)
+                );
+            }
+        }
+        let unique: std::collections::HashSet<_> = cells.iter().collect();
+        assert_eq!(unique.len(), cells.len());
+    }
+    animations.advance(at(500));
+    assert!(animations.sounds.is_empty());
+}
+
+#[test]
+fn rapid_batches_keep_every_source_in_bounded_time_masks_without_fifo() {
+    let mut animations = Animations::default();
+    for ms in 0..1000 {
+        let source = Coordinate::new(ms as i32 % 10, 0);
+        animations.enqueue_sounds(vec![sound(source)], at(ms));
+        assert!(animations.sounds.len() <= 5);
+        // Every source from the last bucket remains, including after >8 batches.
+        if ms >= 10 {
+            for x in 0..10 {
+                assert!(
+                    animations
+                        .sound_cells(at(ms))
+                        .any(|c| c == (Coordinate::new(x, 0), true))
+                );
+            }
+        }
+    }
+    assert!(animations.sound_cells(at(1399)).next().is_some());
+    animations.advance(at(1400));
+    assert!(animations.sounds.is_empty());
+    animations.enqueue_sounds(vec![sound(Coordinate::new(0, 0))], at(1500));
+    animations.clear();
+    assert!(animations.sounds.is_empty());
+}

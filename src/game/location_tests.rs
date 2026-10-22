@@ -56,6 +56,17 @@ fn lethal_melee_keeps_resolved_geometry_after_occupancy_and_actor_removal() {
     player_mut(&mut loc).stats.melee_dmg = 1000;
     ready_act(&mut loc, Action::Move(Angle::Forward));
     assert!(loc.actors_byid[&id].is_dead());
+    assert_eq!(loc.sound_events.len(), 1);
+    assert!(loc.player().heard.contains_key(&impact));
+    assert_eq!(
+        loc.sound_events[0]
+            .cells
+            .iter()
+            .find(|c| c.hops == 0)
+            .unwrap()
+            .coord,
+        impact
+    );
     assert!(!loc.actors_coord_to_id.contains_key(&impact));
     loc.remove(id);
     ready_act(&mut loc, Action::Move(Angle::Forward));
@@ -133,7 +144,8 @@ fn seeded_digging_exercises_success_and_failure_without_moving() {
         outcomes[usize::from(loc.map[head].is_passable())] = true;
         assert_eq!(loc.player().coord(), Coordinate::new(0, 0));
         assert!(loc.player().sp < sp);
-        assert_eq!(loc.player().noise_emision, 9);
+        assert!(!loc.sound_events.is_empty());
+        assert!(loc.player().pending_noises.is_empty());
     }
     assert_eq!(outcomes, [true, true]);
 }
@@ -214,6 +226,13 @@ fn melee_samples_hit_miss_armor_stamina_and_cooldown() {
         ready_act(&mut loc, Action::Move(Angle::Forward));
         let result = &loc.player().did_attack[0];
         assert_eq!(loc.combat_events.len(), usize::from(result.success));
+        assert_eq!(loc.sound_events.len(), usize::from(result.success));
+        if let Some(sound) = loc.sound_events.first() {
+            assert_eq!(
+                sound.cells.iter().find(|c| c.hops == 0).unwrap().coord,
+                head
+            );
+        }
         if let Some(event) = loc.combat_events.first() {
             assert_eq!(event.source, loc.player().coord());
             assert_eq!(event.impact, head);
@@ -265,6 +284,13 @@ fn ranged_requires_ready_bow_and_occupied_target_and_records_damage() {
             hp - if result.success { result.dmg } else { 0 }
         );
         hits += usize::from(result.success);
+        assert_eq!(loc.sound_events.len(), usize::from(result.success));
+        if let Some(sound) = loc.sound_events.first() {
+            assert_eq!(
+                sound.cells.iter().find(|c| c.hops == 0).unwrap().coord,
+                target_coord
+            );
+        }
         let events = std::mem::take(&mut loc.combat_events);
         assert_eq!(
             events.len(),

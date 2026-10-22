@@ -15,6 +15,9 @@ use ratatui::style::Modifier;
 #[cfg(test)]
 #[path = "hit_tests.rs"]
 mod hit_tests;
+#[cfg(test)]
+#[path = "sound_tests.rs"]
+mod sound_tests;
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
 struct DisplayCharacter {
@@ -168,6 +171,29 @@ impl MapRenderer {
                     .or(*self.items.at(vx, vy))
                     .unwrap_or(self.base.at(vx, vy).base);
                 ch.glyph = glyph;
+                *self.actors.at_mut(vx, vy) = Some(ch);
+            }
+        }
+
+        let sounds: Vec<_> = self.animations.sound_cells(presentation_elapsed).collect();
+        for (coord, marker) in sounds {
+            if marker == player.sees(coord) {
+                continue;
+            }
+            if let Some((vx, vy)) = self.coord_to_glyph_xy(coord) {
+                let mut ch = if marker {
+                    self.base.at(vx, vy).base
+                } else {
+                    self.actors
+                        .at(vx, vy)
+                        .or(*self.items.at(vx, vy))
+                        .unwrap_or(self.base.at(vx, vy).base)
+                };
+                ch.bold = true;
+                if marker {
+                    ch.glyph = '!';
+                    ch.fg = color::RED_FG.into();
+                }
                 *self.actors.at_mut(vx, vy) = Some(ch);
             }
         }
@@ -543,7 +569,7 @@ impl MapRenderer {
         }
     }
 
-    fn coord_to_glyph_xy(&mut self, coord: Coordinate) -> Option<(usize, usize)> {
+    fn coord_to_glyph_xy(&self, coord: Coordinate) -> Option<(usize, usize)> {
         let (center_vx, center_vy) = self.coord_center.to_pixel_integer(SPACING);
         let (coord_vx, coord_vy) = coord.to_pixel_integer(SPACING);
 

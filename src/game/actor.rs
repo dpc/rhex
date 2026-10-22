@@ -222,7 +222,8 @@ pub struct Actor {
     pub discovered_areas: Visibility,
 
     pub heard: NoiseMap,
-    pub noise_emision: i32,
+    /// Captured emissions awaiting the action-end resolution boundary.
+    pub pending_noises: Vec<super::sound::Emission>,
 
     pub action_cd: i32,
 
@@ -259,7 +260,7 @@ impl Actor {
             known: Default::default(),
             known_areas: Default::default(),
             heard: Default::default(),
-            noise_emision: 0,
+            pending_noises: Vec::new(),
             discovered: Default::default(),
             discovered_areas: Default::default(),
             items_backpack: Default::default(),
@@ -491,8 +492,12 @@ impl Actor {
     }
 
     pub fn noise_makes(&mut self, noise: i32) {
-        if self.noise_emision < noise {
-            self.noise_emision = noise;
+        if noise > 0 {
+            self.pending_noises.push(super::sound::Emission {
+                source: self.coord(),
+                kind: Noise::Creature(self.race),
+                level: noise,
+            });
         }
     }
 
@@ -519,7 +524,6 @@ impl Actor {
         self.discovered = Default::default();
         self.discovered_areas = Default::default();
 
-        self.noise_emision = 0;
         self.heard = Default::default();
 
         self.acted = false;
@@ -562,6 +566,9 @@ impl Actor {
         self.recalculate_stats();
         let pos = self.pos;
         self.moved(loc, pos);
+        // Initialization and level transfer are not gameplay sounds.
+        self.pending_noises.clear();
+        self.heard.clear();
     }
 
     pub fn post_spawn(&mut self, loc: &Location) {

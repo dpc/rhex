@@ -139,6 +139,8 @@ pub struct Ui {
     map_renderer: MapRenderer,
     /// Level owning the current effects; descent invalidates their coordinates.
     animation_level: i32,
+    /// Per-action observations staged until all actors in this turn have acted.
+    pending_sounds: Vec<game::sound::ObservedSound>,
 
     /// Time supplied by the runner at each scheduling/event boundary.
     now: Instant,
@@ -196,6 +198,7 @@ impl Ui {
             game_action_queue: VecDeque::new(),
             map_renderer: MapRenderer::new(UNICODE_DOT),
             animation_level: 0,
+            pending_sounds: Vec::new(),
             now,
             presentation_started: now,
         };
@@ -206,6 +209,7 @@ impl Ui {
 
     pub fn initial_spawn(&mut self, race: actor::Race) {
         self.map_renderer.animations.clear();
+        self.pending_sounds.clear();
         self.engine.initial_spawn(race);
         let player_id = self.engine.current_location().player_id();
         self.engine_change(player_id);
@@ -407,9 +411,12 @@ impl Ui {
         let level = self.current_location().level;
         if self.animation_level != level {
             self.map_renderer.animations.clear();
+            self.pending_sounds.clear();
             self.animation_level = level;
         }
         let events = std::mem::take(&mut self.engine.current_location_mut().combat_events);
+        self.pending_sounds
+            .append(&mut self.engine.current_location_mut().sound_events);
         self.map_renderer.animations.enqueue(
             events,
             self.now
@@ -495,6 +502,11 @@ impl Ui {
                     let actor_id = self.engine.one_actor_tick();
                     self.engine_change(actor_id);
                 }
+                self.map_renderer.animations.enqueue_sounds(
+                    std::mem::take(&mut self.pending_sounds),
+                    self.now
+                        .saturating_duration_since(self.presentation_started),
+                );
                 self.update_changes();
                 self.redraw();
             }
@@ -863,11 +875,13 @@ impl Ui {
             }
         }
 
-        let noises = player
+        let mut noises: Vec<_> = player
             .heard
             .iter()
             .filter(|&(c, _)| *c != player.pos.coord)
-            .filter(|&(c, _)| !player.sees(*c));
+            .filter(|&(c, _)| !player.sees(*c))
+            .collect();
+        noises.sort_unstable_by_key(|(c, _)| (c.x, c.y));
 
         for (_, &noise) in noises {
             self.log(&format!("You hear {}.", noise.description()));

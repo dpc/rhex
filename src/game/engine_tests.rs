@@ -106,6 +106,7 @@ fn descent_transfers_one_player_and_discards_old_schedule() {
     let mut engine = Engine::fixture(loc);
     engine.start_turn();
     engine.player_act(Action::Descend);
+    assert!(engine.locations[0].sound_events.is_empty());
     assert!(engine.is_turn_done());
     assert!(engine.ids_to_move.is_empty());
     assert_eq!(engine.locations.len(), 2);

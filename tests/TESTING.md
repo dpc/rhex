@@ -4,6 +4,36 @@ The main correctness checks use deterministic controller, engine, and styled-cel
 examples. Bounded generated sequences and three text snapshots complement them.
 PTY tests check the real terminal boundary, not the correctness of a random dungeon.
 
+## Sound propagation and presentation
+
+`game/sound_tests.rs` checks inclusive radii, bounded work, adjacent terrain and
+ground-item absorption, doors, walls, water, detours, immutable action origins,
+spawn silence, and one-time hearing. Tests compare random small fields with an
+independent repeated-relaxation oracle and check loudness and absorption
+monotonicity. Existing melee, ranged, and digging fixtures also check sound capture.
+
+Terminal sound tests check additive bold over ordinary styles and hit glyphs,
+red `!` markers at other actors' audible unseen origins without terrain
+disclosure, display visibility, simultaneous sources, exact phase boundaries,
+and rapid-input coalescing.
+Waves use four 100ms onset phases lasting 200ms each. Time-bucket unions retain
+all active sources without a source-count cap. Rounding the start down to a
+100ms boundary shortens playback by less than 100ms. Markers last 400–500ms.
+The player's own emissions animate waves but never get red `!` markers,
+including earlier charge footsteps behind the player's current position.
+Rendering never propagates sound or changes hearing.
+
+Run the non-gating workload probe with:
+
+```sh
+cargo test --release sound_workload_measurement -- --ignored --nocapture
+```
+
+The probe prints elapsed time and deterministic counts of floods, settled cells,
+and examined edges for open disks and a crowded room. CI asserts operation bounds,
+not elapsed-time thresholds. Level 9 reaches at most 271 cells and the supported
+level-16 cap reaches at most 817, regardless of distant map size.
+
 ## Commands and failure evidence
 
 ```sh
@@ -24,8 +54,8 @@ sandbox, including artifacts outside the source or game working directory.
 Nix prints the retained build directory; artifact paths under `/build` refer to
 locations inside that directory. Use `--keep-failed` for direct Nix test runs
 too; default Nix cleanup removes those diagnostics. Remove retained failed build
-trees by hand. These checks promise no automatic artifact export or retrieval
-from remote builders.
+trees by hand. These checks do not export artifacts or retrieve them from remote
+builders.
 
 See [PROPERTIES.md](PROPERTIES.md) for property shrinking, source-embedded replay,
 writable diagnostics and snapshot review. Generator sweeps provide bounded
